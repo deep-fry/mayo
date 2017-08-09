@@ -1,8 +1,6 @@
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from model_slim.preprocessing import inception_preprocessing
-
 from mayo.util import memoize
 
 
@@ -40,11 +38,31 @@ class Train(object):
         Optimizer = getattr(tf.train, params.pop('type'))
         return Optimizer(self.learning_rate, **params)
 
+    @memoize
+    def preprocess(self):
+        raise NotImplementedError
+
+    @memoize
+    def tower_loss(self, images_splits, labels_splits, scope):
+        raise NotImplementedError
+
     def train(self):
         with self.net.graph.as_default(), tf.device('/cpu:0'):
             self._train()
 
     def _train(self):
+        num_gpus = self.config.num_gpus
+        images, labels = self.preprocess()
+        split = lambda t: tf.split(
+            axis=0, num_or_size_splits=num_gpus, value=t)
+        images_splits = split(images)
+        labels_splits = split(labels)
+        iterator = enumerate(zip(images_splits, labels_splits))
+        for i, images_split, label_split in iterator:
+            device_context = tf.device('/gpu:{}'.format(i))
+            name_scope_context = tf.name_scope('tower_{}'.format(i))
+            with device_context, name_scope_context as scope:
+                loss = self.tower_loss(images_split, label_split, scope)
 
     @memoize
     def train_op(self):

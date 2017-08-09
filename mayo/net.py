@@ -12,7 +12,11 @@ class BaseNet(object):
         with self.graph.as_default():
             input_layer = self.input()
             with tf.variable_scope(self.config['name'], values=[input_layer]):
-                self._instantiate(input_layer)
+                # force all Variables to reside on the CPU
+                cpu_context = slim.arg_scope(
+                    [slim.model_variable, slim.variable], device='/cpu:0')
+                with cpu_context:
+                    self._instantiate(input_layer)
 
     def input_variable(self):
         """

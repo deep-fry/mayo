@@ -1,4 +1,5 @@
 import functools
+from importlib.util import spec_from_file_location, module_from_spec
 
 
 def memoize(func):
@@ -15,3 +16,14 @@ def memoize(func):
             setattr(self, name, result)
             return result
     return wrapped
+
+
+@functools.lru_cache(maxsize=None)
+def import_from_path(name, path):
+    """
+    Import module from path
+    """
+    spec = spec_from_file_location(name, path)
+    module = module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
