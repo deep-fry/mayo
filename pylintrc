@@ -31,7 +31,7 @@ enable=
 # --enable=similarities". If you want to run only the classes checker, but have
 # no Warning level messages displayed, use"--disable=all --enable=classes
 # --disable=W"
-disable=not-context-manager,missing-docstring,no-self-use,abstract-method
+disable=not-context-manager,missing-docstring,no-self-use,abstract-method,too-many-locals
 
 # Set the cache size for astng objects.
 cache-size=500

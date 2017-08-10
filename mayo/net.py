@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 import tensorflow as tf
 from tensorflow.contrib import slim
 
@@ -5,22 +7,28 @@ from mayo.util import import_from_dot_path
 
 
 class BaseNet(object):
-    def __init__(self, config, inputs=None, labels=None, batch_size=None):
+    def __init__(
+            self, config, inputs=None, labels=None,
+            batch_size=None, graph=None, reuse=None):
         super().__init__()
-        self.graph = tf.Graph()
+        self.graph = graph or tf.Graph()
+        self.reuse = reuse
         self.sess = tf.Session(graph=self.graph)
         self.config = config
         self.batch_size = batch_size or config.dataset.batch_size
         self.end_points = {'inputs': inputs, 'labels': labels}
         self.instantiate()
 
-    def instantiate(self):
+    @contextmanager
+    def context(self):
         graph_ctx = self.graph.as_default()
-        scope_ctx = tf.variable_scope(self.config['name'])
+        var_ctx = tf.variable_scope(self.config['name'], reuse=self.reuse)
+        with graph_ctx, var_ctx as scope:
+            yield scope
+
+    def instantiate(self):
         # force all Variables to reside on the CPU
-        cpu_ctx = slim.arg_scope(
-            [slim.model_variable, slim.variable], device='/cpu:0')
-        with graph_ctx, scope_ctx, cpu_ctx:
+        with self.context():
             self._instantiate()
 
     def _instantiation_params(self, params):
