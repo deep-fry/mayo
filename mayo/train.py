@@ -1,14 +1,14 @@
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import memoize
+from mayo.net import Net
+from mayo.util import memoize, import_from_dot_path
 
 
 class Train(object):
-    def __init__(self, config, net):
+    def __init__(self, config):
         super().__init__()
         self.config = config
-        self.net = net
 
     @property
     @memoize
@@ -21,13 +21,15 @@ class Train(object):
     @property
     @memoize
     def learning_rate(self):
-        rate = self.config.train.initial_learning_rate
+        dataset_params = self.config.dataset
+        learn_params = self.config.train.learning_rate
+        rate = learn_params.initial_learning_rate
         step = self.global_step
-        batches_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        batches_per_epoch /= self.config.dataset.batch_size
+        batches_per_epoch = dataset_params.num_examples_per_epoch.train
+        batches_per_epoch /= dataset_params.batch_size
         decay_steps = int(
-            batches_per_epoch * self.config.train.num_epochs_per_decay)
-        decay_factor = self.config.train.learning_rate_decay_factor
+            batches_per_epoch * learn_params.num_epochs_per_decay)
+        decay_factor = learn_params.learning_rate_decay_factor
         return tf.train.exponential_decay(
             rate, step, decay_steps, decay_factor, staircase=True)
 
@@ -35,16 +37,16 @@ class Train(object):
     @memoize
     def optimizer(self):
         params = self.config.train.optimizer
-        Optimizer = getattr(tf.train, params.pop('type'))
-        return Optimizer(self.learning_rate, **params)
+        optimizer_class = import_from_dot_path(params.pop('type'))
+        return optimizer_class(self.learning_rate, **params)
 
     @memoize
     def preprocess(self):
         raise NotImplementedError
 
-    @memoize
-    def tower_loss(self, images_splits, labels_splits, scope):
-        raise NotImplementedError
+    def tower_loss(self, images, labels, scope):
+        net = Net(self.config, images, labels, batch_size)
+        batch_size = images.get_shape().as_list()[0]
 
     def train(self):
         with self.net.graph.as_default(), tf.device('/cpu:0'):

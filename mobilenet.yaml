@@ -1,0 +1,70 @@
+name: mobilenet_v1
+dataset:
+    name: mnist
+    num_classes: &num_fc_outputs 10
+    num_examples_per_epoch: {train: 58001, validation: 1000, test: 9001}
+    batch_size: 256
+    height: 28
+    width: 28
+    channels: 1
+train:
+    num_preprocess_threads: 1
+    num_gpus: 4
+    learning_rate:
+        num_epochs_per_decay: 30.0
+        initial_learning_rate: 0.1
+        learning_rate_decay_factor: 0.16
+    optimizer:
+        type: tensorflow.train.RMSPropOptimizer
+        decay: 0.9
+        momentum: 0.9
+        epsilon: 1.0
+logits: logits
+hyper:
+    - &conv
+      type: convolution
+      kernel_size: [3, 3]
+      padding: same
+      normalizer_fn:
+          type: tensorflow.contrib.slim.batch_norm
+          center: true
+          scale: true
+          decay: 0.9997
+          epsilon: 0.001
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
+      weights_regularizer:
+          type: tensorflow.contrib.layers.l2_regularizer
+          scale: 0.00004
+    - &dsconv
+      <<: *conv
+      type: depthwise_separable_convolution
+      depth_multiplier: 1
+    - &pool
+      type: average_pool
+      kernel_size: [7, 7]
+      stride: 2
+      padding: valid
+    - &dropout {type: dropout, keep_prob: 0.999}
+    - &fc
+      type: convolution
+      kernel_size: [1, 1]
+      num_outputs: *num_fc_outputs
+      activation_fn: null
+      normalizer_fn: null
+net:
+    - {name: conv0, <<: *conv, stride: 2, num_outputs: 32}
+    - {name: conv1, <<: *dsconv, stride: 1, num_outputs: 64}
+    - {name: conv2, <<: *dsconv, stride: 2, num_outputs: 128}
+    - {name: conv3, <<: *dsconv, stride: 1, num_outputs: 128}
+    - {name: conv4, <<: *dsconv, stride: 2, num_outputs: 256}
+    - {name: conv5, <<: *dsconv, stride: 1, num_outputs: 256}
+    - {name: conv6, <<: *dsconv, stride: 2, num_outputs: 512}
+    - {name: conv7, <<: *dsconv, stride: 1, num_outputs: 512}
+    - {name: conv8, <<: *dsconv, stride: 2, num_outputs: 1024}
+    - {name: conv9, <<: *dsconv, stride: 1, num_outputs: 1024}
+    - {name: pool, <<: *pool}
+    - {name: dropout, <<: *dropout}
+    - {name: fc, <<: *fc}
+    - {name: logits, type: squeeze, axis: [1, 2]}

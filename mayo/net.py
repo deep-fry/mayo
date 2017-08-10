@@ -1,63 +1,77 @@
 import tensorflow as tf
 from tensorflow.contrib import slim
 
+from mayo.util import import_from_dot_path
+
 
 class BaseNet(object):
-    def __init__(self, config):
+    def __init__(self, config, inputs=None, labels=None, batch_size=None):
         super().__init__()
         self.graph = tf.Graph()
         self.sess = tf.Session(graph=self.graph)
         self.config = config
-        self.end_points = {}
-        with self.graph.as_default():
-            input_layer = self.input()
-            with tf.variable_scope(self.config['name'], values=[input_layer]):
-                # force all Variables to reside on the CPU
-                cpu_context = slim.arg_scope(
-                    [slim.model_variable, slim.variable], device='/cpu:0')
-                with cpu_context:
-                    self._instantiate(input_layer)
+        self.batch_size = batch_size or config.dataset.batch_size
+        self.end_points = {'inputs': inputs, 'labels': labels}
+        self.instantiate()
 
-    def input_variable(self):
-        """
-        This method defines a variable supplying input data.
-        TODO: replace the implementation later to do without a placeholder.
-        """
-        shape = (self.config.dataset.batch_size, ) + self.config.input_shape
-        return tf.placeholder(tf.float32, shape=shape, name='input')
+    def instantiate(self):
+        graph_ctx = self.graph.as_default()
+        scope_ctx = tf.variable_scope(self.config['name'])
+        # force all Variables to reside on the CPU
+        cpu_ctx = slim.arg_scope(
+            [slim.model_variable, slim.variable], device='/cpu:0')
+        with graph_ctx, scope_ctx, cpu_ctx:
+            self._instantiate()
 
-    def label_variable(self):
-        """
-        This method defines a variable supplying labels.
-        TODO: replace the implementation later to do without a placeholder.
-        """
-        shape = (self.config.dataset.batch_size, self.num_classes)
-        return tf.placeholder(tf.int32, shape=shape, name='labels')
+    def _instantiation_params(self, params):
+        def create(params, key):
+            try:
+                p = params[key]
+            except KeyError:
+                return
+            cls = import_from_dot_path(p.pop('type'))
+            params[key] = cls(**p)
 
-    def input(self):
-        input_layer = self.input_variable()
-        self.end_points['input'] = input_layer
-        return input_layer
+        # layer configs
+        params = dict(params)
+        layer_name = params.pop('name')
+        layer_type = params.pop('type')
+        # set up parameters
+        params['scope'] = layer_name
+        # batch norm
+        norm_params = params.pop('normalizer_fn', None)
+        if norm_params:
+            norm_type = norm_params.pop('type')
+            params['normalizer_fn'] = import_from_dot_path(norm_type)
+        # weight initializer
+        create(params, 'weights_initializer')
+        create(params, 'weights_regularizer')
+        return layer_name, layer_type, params, norm_params
 
-    def _instantiate(self, input_layer):
-        net = input_layer
-        for layer in self.config.net:
-            # layer configs
-            layer_name = layer['name']
-            layer_type = layer['type']
-            # set up parameters
-            params = layer.setdefault('params', {})
-            params['scope'] = layer_name
-            for key, value in self.config.default.get(layer_type, {}).items():
-                params.setdefault(key, value)
-            if params.pop('batch_norm', False):
-                params['normalizer_fn'] = slim.batch_norm
-            # instantiation function
-            # invokes method by its name to instantiate a layer
+    def _instantiate(self):
+        net = self.end_points['inputs']
+        if net is None:
+            # if we don't have an input, we initialize the net with
+            # a placeholder input
+            shape = (self.config.dataset.batch_size,) + self.config.input_shape
+            net = tf.placeholder(tf.float32, shape=shape, name='input')
+        for params in self.config.net:
+            layer_name, layer_type, params, norm_params = \
+                self._instantiation_params(params)
+            # get method by its name to instantiate a layer
             func_name = 'instantiate_' + layer_type
             inst_func = getattr(self, func_name, self.generic_instantiate)
-            net = inst_func(net, params)
-            # end points
+            # we do not have direct access to normalizer instantiation,
+            # so arg_scope must be used
+            if norm_params:
+                norm_scope = slim.arg_scope(
+                    [params['normalizer_fn']], **norm_params)
+            else:
+                norm_scope = slim.arg_scope([])
+            # instantiation
+            with norm_scope:
+                net = inst_func(net, params)
+            # save end points
             self.end_points[layer_name] = net
             if layer_name == self.config.logits:
                 self.end_points['logits'] = net
@@ -67,16 +81,22 @@ class BaseNet(object):
             'Instantiation method for layer named "{}" is not implemented.'
             .format(params['scope']))
 
-    def loss_op(self):
+    def loss(self):
         try:
             return self.end_points['loss']
         except KeyError:
             pass
-        labels = self.label_variable()
-        self.end_points['labels'] = labels
-        labels = slim.one_hot_encoding(labels, self.num_classes)
-        loss = tf.losses.softmax_cross_entropy(
-            logits=self.end_points['logits'], onehot_labels=labels)
+        labels = self.end_points['labels']
+        if not labels:
+            raise ValueError(
+                'Unable to get the loss operator without "labels".')
+        with tf.name_scope('loss'):
+            labels = slim.one_hot_encoding(
+                labels, self.config.dataset.num_classes)
+            loss = tf.losses.softmax_cross_entropy(
+                logits=self.end_points['logits'], onehot_labels=labels)
+            loss = tf.reduce_mean(loss)
+            tf.add_to_collection('losses', loss)
         self.end_points['loss'] = loss
         return loss
 
