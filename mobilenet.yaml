@@ -3,13 +3,15 @@ dataset:
     name: mnist
     num_classes: &num_fc_outputs 10
     num_examples_per_epoch: {train: 58001, validation: 1000, test: 9001}
-    batch_size: 256
     height: 28
     width: 28
     channels: 1
 train:
-    num_preprocess_threads: 1
+    max_steps: 10000000
+    batch_size: 256
+    num_preprocess_threads: 4
     num_gpus: 4
+    moving_average_decay: 0.9999
     learning_rate:
         num_epochs_per_decay: 30.0
         initial_learning_rate: 0.1

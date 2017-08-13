@@ -24,6 +24,9 @@ def import_from_path(name, path):
     Import module from path
     """
     spec = spec_from_file_location(name, path)
+    if spec is None:
+        raise ImportError(
+            'Unable to find module "{}" in path "{}".'.format(name, path))
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

@@ -9,6 +9,24 @@ from mayo.net import Net
 from mayo.util import memoize, import_from_dot_path
 
 
+def _average_gradients(tower_grads):
+    average_grads = []
+    for grad_and_vars in zip(*tower_grads):
+        grads = []
+        for g, _ in grad_and_vars:
+            # add 0 dimension to the gradients to represent the tower
+            g = tf.expand_dims(g, 0)
+            grads.append(g)
+        # average over the 'tower' dimension.
+        grad = tf.concat(axis=0, values=grads)
+        grad = tf.reduce_mean(grad, 0)
+        # simply return the first tower's pointer to the Variable
+        v = grad_and_vars[0][1]
+        grad_and_var = (grad, v)
+        average_grads.append(grad_and_var)
+    return average_grads
+
+
 class Train(object):
     def __init__(self, config):
         super().__init__()
@@ -59,7 +77,11 @@ class Train(object):
             axis=0, num_or_size_splits=self.config.train.num_gpus, value=t)
         return split(images), split(labels)
 
-    def _preprocess(self):
+    @memoize
+    def dataset(self):
+        dataset = Imagenet
+
+    def _preprocess(self, dataset):
         raise NotImplementedError
 
     def tower_loss(self, images, labels, reuse):
@@ -121,7 +143,7 @@ class Train(object):
             # gradients from all towers
             grads = self.optimizer.compute_gradients(self._loss)
             tower_grads.append(grads)
-        self._gradients = self.average_gradients(tower_grads)
+        self._gradients = _average_gradients(tower_grads)
 
     def _setup_train_operation(self):
         app_grad_op = self.optimizer.apply_gradients(
@@ -136,8 +158,7 @@ class Train(object):
     def _init_session(self):
         # build an initialization operation to run below
         init = tf.global_variables_initializer()
-        config = tf.ConfigProto(
-            allow_soft_placement=True, log_device_placement=False)
+        config = tf.ConfigProto(allow_soft_placement=True)
         self._session = tf.Session(config=config)
         self._session.run(init)
 
@@ -166,21 +187,3 @@ class Train(object):
         info += '({:.1f} imgs/sec; {:.3f} sec/batch)'.format(
             imgs_per_sec, duration)
         print(info)
-
-    @staticmethod
-    def average_gradients(tower_grads):
-        average_grads = []
-        for grad_and_vars in zip(*tower_grads):
-            grads = []
-            for g, _ in grad_and_vars:
-                # add 0 dimension to the gradients to represent the tower
-                g = tf.expand_dims(g, 0)
-                grads.append(g)
-            # average over the 'tower' dimension.
-            grad = tf.concat(axis=0, values=grads)
-            grad = tf.reduce_mean(grad, 0)
-            # simply return the first tower's pointer to the Variable
-            v = grad_and_vars[0][1]
-            grad_and_var = (grad, v)
-            average_grads.append(grad_and_var)
-        return average_grads
