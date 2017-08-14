@@ -1,8 +1,12 @@
 name: mobilenet_v1
+mode: train
 dataset:
-    name: mnist
-    num_classes: &num_fc_outputs 10
-    num_examples_per_epoch: {train: 58001, validation: 1000, test: 9001}
+    name: imagenet
+    num_classes: &num_fc_outputs 1000
+    num_examples_per_epoch:
+        train: 58001
+        validation: 1000
+        test: 9001
     height: 28
     width: 28
     channels: 1

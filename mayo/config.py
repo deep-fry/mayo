@@ -26,15 +26,15 @@ class _DotDict(dict):
 
     def __getitem__(self, key):
         obj, key = self._dot_path(key)
-        return super(obj.__class__, obj).__getitem__(obj, key)
+        return super(_DotDict, obj).__getitem__(key)
 
     def __setitem__(self, key, value):
         obj, key = self._dot_path(key)
-        return super(obj.__class__, obj).__setitem__(obj, key, value)
+        return super(_DotDict, obj).__setitem__(key, value)
 
     def __delitem__(self, key):
         obj, key = self._dot_path(key)
-        return super(obj.__class__, obj).__delitem__(obj, key)
+        return super(_DotDict, obj).__delitem__(key)
 
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -48,17 +48,16 @@ class Config(_DotDict):
                 yaml = file.read()
         super().__init__(yamllib.load(yaml))
 
-    @property
     def input_shape(self):
         params = self.dataset
         return (params.height, params.width, params.channels)
 
-    def data_files(self, subset=None):
-        subset = subset or self.config.dataset.subset
+    def data_files(self, mode=None):
+        mode = mode or self.config.mode
         path = self.config.dataset.data_dir
-        pattern = os.path.join(path, '{}-*'.format(subset))
+        pattern = os.path.join(path, '{}-*'.format(mode))
         data_files = tf.gfile.Glob(pattern)
         if not data_files:
-            msg = 'No files found for dataset {} with subset {} at {}'
-            raise FileNotFoundError(msg.format(self.config.name, subset, path))
+            msg = 'No files found for dataset {} with mode {} at {}'
+            raise FileNotFoundError(msg.format(self.config.name, mode, path))
         return data_files

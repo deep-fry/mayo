@@ -7,6 +7,7 @@ from tensorflow.contrib import slim
 
 from mayo.net import Net
 from mayo.util import memoize, import_from_dot_path
+from mayo.preprocess import Preprocess
 
 
 def _average_gradients(tower_grads):
@@ -72,17 +73,10 @@ class Train(object):
 
     @memoize
     def preprocess(self):
-        images, labels = self._preprocess()
+        images, labels = Preprocess(self.config).inputs()
         split = lambda t: tf.split(
             axis=0, num_or_size_splits=self.config.train.num_gpus, value=t)
         return split(images), split(labels)
-
-    @memoize
-    def dataset(self):
-        dataset = Imagenet
-
-    def _preprocess(self, dataset):
-        raise NotImplementedError
 
     def tower_loss(self, images, labels, reuse):
         batch_size = images.get_shape().as_list()[0]
@@ -90,29 +84,6 @@ class Train(object):
             self.config, images, labels, batch_size,
             graph=self._graph, reuse=reuse)
         return self._net.loss()
-
-    def train(self):
-        with self._graph.as_default(), tf.device('/cpu:0'):
-            self._setup_gradients()
-            self._setup_train_operation()
-            self._init_session()
-            if tf.gfile.Exists(self._checkpoint_path):
-                self._load_checkpoint()
-            tf.train.start_queue_runners(sess=self._session)
-            self._net.save_graph()
-            # train iterations
-            config = self.config.train
-            for step in range(config.max_steps):
-                self._step_time = time.time()
-                _, loss_val = self._session.run([self._train_op, self._loss])
-                if np.isnan(loss_val):
-                    raise ValueError('Model diverged with loss = NaN')
-                if step % 10 == 0:
-                    self._update_progress(step, loss_val)
-                if step % 100 == 0:
-                    self._save_summary(step)
-                if step % 5000 == 0 or (step + 1) == config.max_steps:
-                    self._save_checkpoint(step)
 
     def _setup_gradients(self):
         config = self.config.train
@@ -172,13 +143,6 @@ class Train(object):
         print('Pre-trained model restored from {}'.format(
             self._checkpoint_path))
 
-    def _save_checkpoint(self, step):
-        saver = tf.train.Saver(tf.global_variables())
-        saver.save(self._session, self._checkpoint_path, global_step=step)
-
-    def _save_summary(self, step):
-        raise NotImplementedError
-
     def _update_progress(self, step, loss_val):
         duration = time.time() - self._step_time
         imgs_per_sec = self.config.train.batch_size / float(duration)
@@ -187,3 +151,33 @@ class Train(object):
         info += '({:.1f} imgs/sec; {:.3f} sec/batch)'.format(
             imgs_per_sec, duration)
         print(info)
+
+    def _save_summary(self, step):
+        pass
+
+    def _save_checkpoint(self, step):
+        saver = tf.train.Saver(tf.global_variables())
+        saver.save(self._session, self._checkpoint_path, global_step=step)
+
+    def train(self):
+        with self._graph.as_default(), tf.device('/cpu:0'):
+            self._setup_gradients()
+            self._setup_train_operation()
+            self._init_session()
+            if tf.gfile.Exists(self._checkpoint_path):
+                self._load_checkpoint()
+            tf.train.start_queue_runners(sess=self._session)
+            self._net.save_graph()
+            # train iterations
+            config = self.config.train
+            for step in range(config.max_steps):
+                self._step_time = time.time()
+                _, loss_val = self._session.run([self._train_op, self._loss])
+                if np.isnan(loss_val):
+                    raise ValueError('Model diverged with loss = NaN')
+                if step % 10 == 0:
+                    self._update_progress(step, loss_val)
+                if step % 100 == 0:
+                    self._save_summary(step)
+                if step % 5000 == 0 or (step + 1) == config.max_steps:
+                    self._save_checkpoint(step)

@@ -12,7 +12,7 @@ def memoize(func):
         try:
             return getattr(self, name)
         except AttributeError:
-            result = func(*args, **kwargs)
+            result = func(self, *args, **kwargs)
             setattr(self, name, result)
             return result
     return wrapped
