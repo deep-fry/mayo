@@ -1,0 +1,54 @@
+use_pdb: true
+name: lenet5 
+mode: train
+dataset:
+    path: datasets/mnist/mnist.yaml
+    num_classes: &num_fc_outputs 10
+train:
+    max_steps: 10000000
+    batch_size: 256
+    num_preprocess_threads: 4
+    num_gpus: 4
+    moving_average_decay: 0.9999
+    learning_rate:
+        num_epochs_per_decay: 30.0
+        initial_learning_rate: 0.1
+        learning_rate_decay_factor: 0.16
+    optimizer:
+        type: tensorflow.train.RMSPropOptimizer
+        decay: 0.9
+        momentum: 0.9
+        epsilon: 1.0
+logits: logits
+hyper:
+    - &conv
+      type: convolution
+      kernel_size: [5, 5]
+      padding: valid
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
+    - &fc
+      type: fullyconnected
+      num_outputs: 512
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
+    - &flatten
+      type: flatten
+    - &pool
+      type: average_pool
+      kernel_size: [2, 2]
+      stride: 2
+      padding: valid
+    - &dropout {type: dropout, keep_prob: 0.999}
+
+net:
+    - {name: conv0, <<: *conv, stride: 1, num_outputs: 32}
+    - {name: pool0, <<: *pool}
+    - {name: conv1, <<: *conv, stride: 1, num_outputs: 64}
+    - {name: pool1, <<: *pool}
+    - {name: flatten, <<: *flatten}
+    - {name: dropout, <<: *dropout}
+    - {name: fc1, <<: *fc}
+    - {name: logits, <<: *fc, num_outputs: *num_fc_outputs, activation_fn: null}

@@ -148,3 +148,9 @@ class Net(BaseNet):
 
     def instantiate_softmax(self, net, params):
         return slim.softmax(net, **params)
+
+    def instantiate_fullyconnected(self, net, params):
+        return slim.fully_connected(net, **params)
+
+    def instantiate_flatten(self, net, params):
+        return slim.flatten(net, **params)
