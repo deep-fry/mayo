@@ -10,11 +10,94 @@ class Preprocess(object):
         super().__init__()
         self.config = config
 
+    @staticmethod
+    def _decode_jpeg(image_buffer, channels):
+        with tf.name_scope(values=[image_buffer], name='decode_jpeg'):
+            i = tf.image.decode_jpeg(image_buffer, channels=channels)
+            return tf.image.convert_image_dtype(i, dtype=tf.float32)
+
+    def _distort_bbox(self, i, bbox, tid):
+        height, width, channels = self.config.image_shape()
+        # distort bbox
+        distort_bbox_func = tf.image.sample_distorted_bounding_box
+        bbox_begin, bbox_size, _ = distort_bbox_func(
+            tf.shape(i), bounding_boxes=bbox, min_object_covered=0.1,
+            aspect_ratio_range=[0.75, 1.33], area_range=[0.05, 1.0],
+            max_attempts=100, use_image_if_no_bounding_boxes=True)
+        # distorted image
+        i = tf.slice(i, bbox_begin, bbox_size)
+        i = tf.image.resize_images(i, [height, width], method=(tid % 4))
+        i.set_shape([height, width, channels])
+        return i
+
+    @staticmethod
+    def _distort_color(i, tid):
+        brightness = lambda i: \
+            tf.image.random_brightness(i, max_delta=32.0 / 255.0)
+        saturation = lambda i: \
+            tf.image.random_saturation(i, lower=0.5, upper=1.5)
+        hue = lambda i: \
+            tf.image.random_hue(i, max_delta=0.2)
+        contrast = lambda i: \
+            tf.image.random_contrast(i, lower=0.5, upper=1.5)
+        # check if grayscale or color
+        channels = i.shape[2]
+        if channels == 1:
+            # unable to distort saturation and hue for image
+            has_color = False
+        elif channels == 3:
+            has_color = True
+        else:
+            raise ValueError(
+                'Expects the number of channels of an image to be '
+                'either 1 or 3.')
+        if not has_color:
+            order = [brightness, contrast]
+        elif tid % 2 == 0:
+            order = [brightness, saturation, hue, contrast]
+        else:
+            order = [brightness, contrast, saturation, hue]
+        for func in order:
+            i = func(i)
+        return tf.clip_by_value(i, 0.0, 1.0)
+
+    def _eval(self, i):
+        height, width, _ = self.config.image_shape()
+        with tf.name_scope(values=[i], name='preprocess_eval'):
+            i = tf.image.central_crop(i, central_fraction=0.875)
+            i = tf.expand_dims(i, 0)
+            shape = [height, width]
+            i = tf.image.resize_bilinear(i, shape, align_corners=False)
+            return tf.squeeze(i, [0])
+
+    def _distort(self, i, bbox, tid=0):
+        params = self.config.dataset.preprocess
+        with tf.name_scope(values=[i, bbox], name='preprocess_train'):
+            if params.distort:
+                i = self._distort_bbox(i, bbox, tid)
+            else:
+                # otherwise ensure image is the correct size
+                i = self._eval(i)
+            if params.flip:
+                i = tf.image.random_flip_left_right(i)
+            if params.color:
+                i = self._distort_color(i, tid)
+            return i
+
+    def _preprocess(self, image_buffer, bbox, mode, tid):
+        channels = self.config.image_shape()[-1]
+        image = self._decode_jpeg(image_buffer, channels)
+        if mode == 'train':
+            image = self._distort(image, bbox, tid)
+        else:
+            image = self._eval(image)
+        return tf.multiply(tf.subtract(image, 0.5), 2.0)
+
     def _filename_queue(self, mode):
         """
         Queue for file names to read from
         """
-        files = self.config.datafiles(mode)
+        files = self.config.data_files(mode)
         if mode == 'train':
             shuffle = True
             capacity = 16
@@ -90,75 +173,13 @@ class Preprocess(object):
         # tensorflow imposes an ordering of (y, x) just to make life difficult
         bbox = tf.concat(axis=0, values=[ymin, xmin, ymax, xmax])
         # force the variable number of bounding boxes into the shape
-        # [1, num_boxes, coords].
+        # [1, num_boxes, coords]
         bbox = tf.expand_dims(bbox, 0)
         bbox = tf.transpose(bbox, [0, 2, 1])
 
         encoded = features['image/encoded']
         text = features['image/class/text']
         return encoded, label, bbox, text
-
-    @staticmethod
-    def _decode_jpeg(image_buffer):
-        with tf.name_scope(values=[image_buffer], name='decode_jpeg'):
-            i = tf.image.decode_jpeg(image_buffer, channels=3)
-            return tf.image.conver_image_dtype(i, dtype=tf.float32)
-
-    def _distort_color(self, i, tid):
-        brightness = lambda i: \
-            tf.image.random_brightness(i, max_delta=32.0 / 255.0)
-        saturation = lambda i: \
-            tf.image.random_saturation(i, lower=0.5, upper=1.5)
-        hue = lambda i: \
-            tf.image.random_hue(i, max_delta=0.2)
-        contrast = lambda i: \
-            tf.image.random_contrast(i, lower=0.5, upper=1.5)
-        if tid % 2 == 0:
-            order = [brightness, saturation, hue, contrast]
-        else:
-            order = [brightness, contrast, saturation, hue]
-        with tf.name_scope(values=[i], name='distort_color'):
-            for func in order:
-                i = func(i)
-            i = tf.clip_by_value(i, 0.0, 1.0)
-            return i
-
-    def _distort(self, i, bbox, tid=0):
-        height = self.config.dataset.height
-        width = self.config.dataset.width
-        channels = self.config.dataset.channels
-        with tf.name_scope(values=[i, bbox], name='distort_image'):
-            # distort bbox
-            distort_bbox_func = tf.image.sample_distorted_bounding_box
-            bbox_begin, bbox_size, distort_bbox = distort_bbox_func(
-                tf.shape(i), bounding_boxes=bbox, min_object_covered=0.1,
-                aspect_ratio_range=[0.75, 1.33], area_range=[0.05, 1.0],
-                max_attempts=100, use_image_if_no_bounding_boxes=True)
-            # distorted image
-            i = tf.slice(i, bbox_begin, bbox_size)
-            i = tf.image.resize_images(
-                i, [height, width], method=(tid % 4))
-            i.set_shape([height, width, channels])
-            i = tf.image.random_flip_left_right(i)
-            i = self._distort_color(i, tid)
-            return i
-
-    def _eval(self, i):
-        with tf.name_scope(values=[i], name='eval_image'):
-            i = tf.image.central_crop(i, central_fraction=0.875)
-            i = tf.expand_dims(i, 0)
-            shape = [self.config.dataset.height, self.config.dataset.width]
-            i = tf.image.resize_bilinear(i, shape, align_corners=False)
-            i = tf.squeeze(i, [0])
-            return i
-
-    def _preprocess(self, image_buffer, bbox, mode, tid):
-        image = self._decode_jpeg(image_buffer)
-        if mode == 'train':
-            image = self._distort(image, bbox, tid)
-        else:
-            image = self._eval(image)
-        return tf.multiply(tf.subtract(image, 0.5), 2.0)
 
     def _unserialize(self, serialized, mode):
         num_threads = self.config.train.num_preprocess_threads
@@ -174,7 +195,7 @@ class Preprocess(object):
         images, labels = tf.train.batch_join(
             images_labels, batch_size=batch_size, capacity=capacity)
         images = tf.cast(images, tf.float32)
-        shape = (batch_size, ) + self.config.input_shape()
+        shape = (batch_size, ) + self.config.image_shape()
         images = tf.reshape(images, shape=shape)
         return images, tf.reshape(labels, [batch_size])
 

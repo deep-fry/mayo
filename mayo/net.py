@@ -37,6 +37,7 @@ class BaseNet(object):
                 p = params[key]
             except KeyError:
                 return
+            p = dict(p)
             cls = import_from_dot_path(p.pop('type'))
             params[key] = cls(**p)
 
@@ -49,6 +50,7 @@ class BaseNet(object):
         # batch norm
         norm_params = params.pop('normalizer_fn', None)
         if norm_params:
+            norm_params = dict(norm_params)
             norm_type = norm_params.pop('type')
             params['normalizer_fn'] = import_from_dot_path(norm_type)
         # weight initializer
@@ -95,9 +97,10 @@ class BaseNet(object):
         except KeyError:
             pass
         labels = self.end_points['labels']
-        if not labels:
+        if labels is None:
             raise ValueError(
-                'Unable to get the loss operator without "labels".')
+                'Unable to get the loss operator without initializing '
+                'Net with "labels".')
         with tf.name_scope('loss'):
             labels = slim.one_hot_encoding(
                 labels, self.config.dataset.num_classes)
@@ -121,15 +124,19 @@ class Net(BaseNet):
         return slim.separable_conv2d(net, **params)
 
     @staticmethod
-    def _reduced_kernel_size_for_small_input(tensor, kernel):
+    def _reduce_kernel_size_for_small_input(tensor, kernel, stride=1):
         shape = tensor.get_shape().as_list()
         if shape[1] is None or shape[2] is None:
-            return kernel
-        return [min(shape[1], kernel[0]), min(shape[2], kernel[1])]
+            return kernel, stride
+        kernel = [min(shape[1], kernel[0]), min(shape[2], kernel[1])]
+        stride = min(stride, kernel[0], kernel[1])
+        return kernel, stride
 
     def instantiate_average_pool(self, net, params):
-        params['kernel_size'] = self._reduced_kernel_size_for_small_input(
-            net, params['kernel_size'])
+        kernel, stride = self._reduce_kernel_size_for_small_input(
+            net, params['kernel_size'], params['stride'])
+        params['kernel_size'] = kernel
+        params['stride'] = stride
         return slim.avg_pool2d(net, **params)
 
     def instantiate_dropout(self, net, params):

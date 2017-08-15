@@ -47,17 +47,36 @@ class Config(_DotDict):
             with open(path, 'r') as file:
                 yaml = file.read()
         super().__init__(yamllib.load(yaml))
+        self._setup_excepthook()
+        self._init_dataset()
 
-    def input_shape(self):
-        params = self.dataset
+    def _init_dataset(self):
+        dataset_path = self.dataset.path
+        dataset_dir, _ = os.path.split(dataset_path)
+        with open(dataset_path, 'r') as file:
+            self.dataset = _DotDict(yamllib.load(file))
+        # change relative path to our working directory
+        for mode, path in self.dataset.path.items():
+            self.dataset.path[mode] = os.path.join(dataset_dir, path)
+
+    def image_shape(self):
+        params = self.dataset.shape
         return (params.height, params.width, params.channels)
 
     def data_files(self, mode=None):
-        mode = mode or self.config.mode
-        path = self.config.dataset.data_dir
-        pattern = os.path.join(path, '{}-*'.format(mode))
-        data_files = tf.gfile.Glob(pattern)
-        if not data_files:
+        mode = mode or self.mode
+        try:
+            path = self.dataset.path[mode]
+        except KeyError:
+            raise KeyError('Mode {} not recognized.'.format(mode))
+        files = tf.gfile.Glob(path)
+        if not files:
             msg = 'No files found for dataset {} with mode {} at {}'
             raise FileNotFoundError(msg.format(self.config.name, mode, path))
-        return data_files
+        return files
+
+    def _setup_excepthook(self):
+        import sys
+        from IPython.core import ultratb
+        use_pdb = self.get('use_pdb', False)
+        sys.excepthook = ultratb.FormattedTB(call_pdb=use_pdb)

@@ -1,6 +1,8 @@
+import os
 import time
 from datetime import datetime
 
+import yaml
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -33,13 +35,6 @@ class Train(object):
         super().__init__()
         self.config = config
         self._graph = tf.Graph()
-        self._gradients = None
-        self._batch_norm_updates = None
-        self._train_op = None
-        self._session = None
-        self._net = None
-        self._loss = None
-        self._step_time = None
 
     @property
     @memoize
@@ -52,12 +47,11 @@ class Train(object):
     @property
     @memoize
     def learning_rate(self):
-        dataset_params = self.config.dataset
         learn_params = self.config.train.learning_rate
         rate = learn_params.initial_learning_rate
         step = self.global_step
-        batches_per_epoch = dataset_params.num_examples_per_epoch.train
-        batches_per_epoch /= dataset_params.batch_size
+        batches_per_epoch = self.config.dataset.num_examples_per_epoch.train
+        batches_per_epoch /= self.config.train.batch_size
         decay_steps = int(
             batches_per_epoch * learn_params.num_epochs_per_decay)
         decay_factor = learn_params.learning_rate_decay_factor
@@ -96,11 +90,10 @@ class Train(object):
         iterator = enumerate(zip(images_splits, labels_splits))
         tower_grads = []
         reuse = None
-        for i, images_split, label_split in iterator:
+        for i, (images_split, label_split) in iterator:
             # loss with the proper nested contexts
-            device_context = tf.device('/gpu:{}'.format(i))
-            name_scope_context = tf.name_scope('tower_{}'.format(i))
-            with device_context, name_scope_context:
+            name = 'tower_{}'.format(i)
+            with tf.device('/gpu:{}'.format(i)), tf.name_scope(name):
                 cpu_ctx = slim.arg_scope(
                     [slim.model_variable, slim.variable], device='/cpu:0')
                 with cpu_ctx:
@@ -109,12 +102,19 @@ class Train(object):
                         images_split, label_split, reuse)
             reuse = True
             # batch norm updates from the final tower
-            self._batch_norm_updates = tf.get_collection(
-                tf.GraphKeys.UPDATE_OPS, name_scope_context)
+            with self._net.graph.as_default():
+                # summaries from the final tower
+                summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
+                self._batch_norm_updates = tf.get_collection(
+                    tf.GraphKeys.UPDATE_OPS, name)
             # gradients from all towers
             grads = self.optimizer.compute_gradients(self._loss)
             tower_grads.append(grads)
         self._gradients = _average_gradients(tower_grads)
+        # summaries
+        summaries.append(
+            tf.summary.scalar('learning_rate', self.learning_rate))
+        self._summary_op = tf.summary.merge(summaries)
 
     def _setup_train_operation(self):
         app_grad_op = self.optimizer.apply_gradients(
@@ -135,13 +135,22 @@ class Train(object):
 
     @property
     def _checkpoint_path(self):
-        return self.config.name + '_' + self.config.dataset.name + '.ckpt'
+        path = os.path.join(
+            'checkpoints', self.config.name, self.config.dataset.name)
+        # ensure directory exists
+        os.makedirs(path, exist_ok=True)
+        path = os.path.join(path, 'checkpoint')
+        return path
 
     def _load_checkpoint(self):
-        restorer = tf.train.Saver(tf.trainable_variables())
-        restorer.restore(self._session, self._checkpoint_path)
-        print('Pre-trained model restored from {}'.format(
-            self._checkpoint_path))
+        print('Loading checkpoint...')
+        with open(self._checkpoint_path, 'r') as f:
+            manifest = yaml.load(f)
+        cp_dir, _ = os.path.split(self._checkpoint_path)
+        path = os.path.join(cp_dir, manifest['model_checkpoint_path'])
+        restorer = tf.train.Saver(tf.global_variables())
+        restorer.restore(self._session, path)
+        print('Pre-trained model restored from {}'.format(path))
 
     def _update_progress(self, step, loss_val):
         duration = time.time() - self._step_time
@@ -152,32 +161,50 @@ class Train(object):
             imgs_per_sec, duration)
         print(info)
 
+    @property
+    @memoize
+    def _summary_writer(self):
+        return tf.summary.FileWriter('summaries/', graph=self._graph)
+
     def _save_summary(self, step):
-        pass
+        print('Saving summaries...')
+        summary = self._session.run(self._summary_op)
+        self._summary_writer.add_summary(summary, step)
 
     def _save_checkpoint(self, step):
+        print('Saving checkpoint...')
         saver = tf.train.Saver(tf.global_variables())
         saver.save(self._session, self._checkpoint_path, global_step=step)
 
+    def _train(self):
+        print('Instantiating...')
+        self._setup_gradients()
+        self._setup_train_operation()
+        self._init_session()
+        if tf.gfile.Exists(self._checkpoint_path):
+            self._load_checkpoint()
+        tf.train.start_queue_runners(sess=self._session)
+        self._net.save_graph()
+        print('Training start')
+        # train iterations
+        config = self.config.train
+        for step in range(config.max_steps):
+            self._step = step
+            self._step_time = time.time()
+            _, loss_val = self._session.run([self._train_op, self._loss])
+            if np.isnan(loss_val):
+                raise ValueError('Model diverged with loss = NaN')
+            if step % 10 == 0:
+                self._update_progress(step, loss_val)
+            if step % 100 == 0:
+                self._save_summary(step)
+            if step % 5000 == 0 or (step + 1) == config.max_steps:
+                self._save_checkpoint(step)
+
     def train(self):
         with self._graph.as_default(), tf.device('/cpu:0'):
-            self._setup_gradients()
-            self._setup_train_operation()
-            self._init_session()
-            if tf.gfile.Exists(self._checkpoint_path):
-                self._load_checkpoint()
-            tf.train.start_queue_runners(sess=self._session)
-            self._net.save_graph()
-            # train iterations
-            config = self.config.train
-            for step in range(config.max_steps):
-                self._step_time = time.time()
-                _, loss_val = self._session.run([self._train_op, self._loss])
-                if np.isnan(loss_val):
-                    raise ValueError('Model diverged with loss = NaN')
-                if step % 10 == 0:
-                    self._update_progress(step, loss_val)
-                if step % 100 == 0:
-                    self._save_summary(step)
-                if step % 5000 == 0 or (step + 1) == config.max_steps:
-                    self._save_checkpoint(step)
+            try:
+                self._train()
+            except KeyboardInterrupt:
+                print('Stopped')
+                self._save_checkpoint(self._step)

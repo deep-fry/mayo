@@ -1,0 +1,18 @@
+name: mnist
+path:
+    train: train.tfrecord
+    test: &test test.tfrecord
+    validation: *test
+num_classes: 10
+num_examples_per_epoch:
+    train: 58001
+    validation: 1000
+    test: 9001
+preprocess:
+    distort: false
+    flip: false
+    color: false
+shape:
+    height: 28
+    width: 28
+    channels: 1

@@ -1,2 +1,4 @@
+checkpoints/
+summaries/
 __pycache__
 .DS_Store
