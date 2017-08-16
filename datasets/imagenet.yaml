@@ -1,8 +1,8 @@
 name: imagenet
 path:
     train: imagenet/train-*
-    validation: imagenet/validation-*
-    test: null
+    validation: &validation imagenet/validation-*
+    test: *validation
 num_classes: 1000
 num_examples_per_epoch:
     train: 1281167
