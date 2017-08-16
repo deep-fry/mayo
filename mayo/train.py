@@ -1,7 +1,6 @@
 import re
 import os
 import time
-from datetime import datetime
 
 import yaml
 import numpy as np
@@ -165,8 +164,7 @@ class Train(object):
     def _update_progress(self, step, loss_val):
         duration = time.time() - self._step_time
         imgs_per_sec = self.config.train.batch_size / float(duration)
-        now = datetime.now()
-        info = '{}: step {}, loss = {:.2f} '.format(now, step, loss_val)
+        info = 'step {}, loss = {:.3f} '.format(step, loss_val)
         info += '({:.1f} imgs/sec; {:.3f} sec/batch)'.format(
             imgs_per_sec, duration)
         print(info)
@@ -209,7 +207,8 @@ class Train(object):
                 if step % 5000 == 0 or step == config.max_steps:
                     self._save_checkpoint(step)
         except KeyboardInterrupt:
-            print('Stopped')
+            print('Stopped, saving checkpoint in 3 seconds.')
+            time.sleep(3)
             self._save_checkpoint(step)
 
     def train(self):
