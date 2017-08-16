@@ -1,7 +1,7 @@
 name: mnist
 path:
-    train: train.tfrecord
-    test: &test test.tfrecord
+    train: mnist/train.tfrecord
+    test: &test mnist/test.tfrecord
     validation: *test
 num_classes: 10
 num_examples_per_epoch:

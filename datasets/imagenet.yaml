@@ -1,0 +1,18 @@
+name: imagenet
+path:
+    train: imagenet/train-*
+    validation: imagenet/validation-*
+    test: null
+num_classes: 1000
+num_examples_per_epoch:
+    train: 1281167
+    validation: 50000
+    test: null
+preprocess:
+    distort: true
+    flip: true
+    color: true
+shape:
+    height: 28
+    width: 28
+    channels: 1
