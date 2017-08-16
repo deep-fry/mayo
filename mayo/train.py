@@ -1,3 +1,4 @@
+import re
 import os
 import time
 from datetime import datetime
@@ -31,6 +32,8 @@ def _average_gradients(tower_grads):
 
 
 class Train(object):
+    _checkpoint_basename = 'checkpoint'
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -135,22 +138,29 @@ class Train(object):
 
     @property
     def _checkpoint_path(self):
-        path = os.path.join(
+        directory = os.path.join(
             'checkpoints', self.config.name, self.config.dataset.name)
         # ensure directory exists
-        os.makedirs(path, exist_ok=True)
-        path = os.path.join(path, 'checkpoint')
-        return path
+        os.makedirs(directory, exist_ok=True)
+        return os.path.join(directory, self._checkpoint_basename)
 
     def _load_checkpoint(self):
         print('Loading checkpoint...')
         with open(self._checkpoint_path, 'r') as f:
             manifest = yaml.load(f)
-        cp_dir, _ = os.path.split(self._checkpoint_path)
-        path = os.path.join(cp_dir, manifest['model_checkpoint_path'])
+        cp_name = manifest['model_checkpoint_path']
+        cp_dir = os.path.dirname(self._checkpoint_path)
+        path = os.path.join(cp_dir, cp_name)
         restorer = tf.train.Saver(tf.global_variables())
         restorer.restore(self._session, path)
         print('Pre-trained model restored from {}'.format(path))
+        step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
+        return int(step[0])
+
+    def _save_checkpoint(self, step):
+        print('Saving checkpoint...')
+        saver = tf.train.Saver(tf.global_variables())
+        saver.save(self._session, self._checkpoint_path, global_step=step)
 
     def _update_progress(self, step, loss_val):
         duration = time.time() - self._step_time
@@ -171,40 +181,37 @@ class Train(object):
         summary = self._session.run(self._summary_op)
         self._summary_writer.add_summary(summary, step)
 
-    def _save_checkpoint(self, step):
-        print('Saving checkpoint...')
-        saver = tf.train.Saver(tf.global_variables())
-        saver.save(self._session, self._checkpoint_path, global_step=step)
-
     def _train(self):
         print('Instantiating...')
         self._setup_gradients()
         self._setup_train_operation()
         self._init_session()
         if tf.gfile.Exists(self._checkpoint_path):
-            self._load_checkpoint()
+            step = self._load_checkpoint()
+        else:
+            step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
         print('Training start')
         # train iterations
         config = self.config.train
-        for step in range(config.max_steps):
-            self._step = step
-            self._step_time = time.time()
-            _, loss_val = self._session.run([self._train_op, self._loss])
-            if np.isnan(loss_val):
-                raise ValueError('Model diverged with loss = NaN')
-            if step % 10 == 0:
-                self._update_progress(step, loss_val)
-            if step % 100 == 0:
-                self._save_summary(step)
-            if step % 5000 == 0 or (step + 1) == config.max_steps:
-                self._save_checkpoint(step)
+        try:
+            while step < config.max_steps:
+                self._step_time = time.time()
+                _, loss_val = self._session.run([self._train_op, self._loss])
+                if np.isnan(loss_val):
+                    raise ValueError('Model diverged with loss = NaN')
+                if step % 10 == 0:
+                    self._update_progress(step, loss_val)
+                if step % 100 == 0:
+                    self._save_summary(step)
+                step += 1
+                if step % 5000 == 0 or step == config.max_steps:
+                    self._save_checkpoint(step)
+        except KeyboardInterrupt:
+            print('Stopped')
+            self._save_checkpoint(step)
 
     def train(self):
         with self._graph.as_default(), tf.device('/cpu:0'):
-            try:
-                self._train()
-            except KeyboardInterrupt:
-                print('Stopped')
-                self._save_checkpoint(self._step)
+            self._train()

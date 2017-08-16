@@ -79,17 +79,20 @@ class BaseNet(object):
             else:
                 norm_scope = slim.arg_scope([])
             # instantiation
-            with norm_scope:
-                net = inst_func(net, params)
+            try:
+                with norm_scope:
+                    net = inst_func(net, params)
+            except NotImplementedError:
+                raise NotImplementedError(
+                    'Instantiation method for layer named "{}" with type "{}" '
+                    'is not implemented.'.format(params['scope'], layer_type))
             # save end points
             self.end_points[layer_name] = net
             if layer_name == self.config.logits:
                 self.end_points['logits'] = net
 
     def generic_instantiate(self, net, params):
-        raise NotImplementedError(
-            'Instantiation method for layer named "{}" is not implemented.'
-            .format(params['scope']))
+        raise NotImplementedError
 
     def loss(self):
         try:
@@ -149,7 +152,7 @@ class Net(BaseNet):
     def instantiate_softmax(self, net, params):
         return slim.softmax(net, **params)
 
-    def instantiate_fullyconnected(self, net, params):
+    def instantiate_fully_connected(self, net, params):
         return slim.fully_connected(net, **params)
 
     def instantiate_flatten(self, net, params):

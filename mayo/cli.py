@@ -1,3 +1,5 @@
+import os
+
 from docopt import docopt
 
 import mayo
@@ -11,14 +13,20 @@ usage = """
 {__author__}
 
 Usage:
-    {__executable__} train <yaml>
+    {__executable__} train <net-yaml> <dataset-yaml> [--train=<train-yaml>]
     {__executable__} (-h | --help)
 """.format(**vars(mayo))
 
 
+_mayo_root = os.path.dirname(mayo.__file__)
+DEFAULT_TRAIN_YAML = os.path.join(_mayo_root, 'train.yaml')
+
+
 def train(args):
-    yaml_file = args['<yaml>']
-    config = Config(path=yaml_file)
+    train_yaml = args['--train'] or DEFAULT_TRAIN_YAML
+    config = Config(
+        net=args['<net-yaml>'], dataset=args['<dataset-yaml>'],
+        train=train_yaml)
     train = Train(config)
     return train.train()
 

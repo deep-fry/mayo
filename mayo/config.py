@@ -1,7 +1,7 @@
 import os
 
 import tensorflow as tf
-import yaml as yamllib
+import yaml
 
 
 class _DotDict(dict):
@@ -42,22 +42,31 @@ class _DotDict(dict):
 
 
 class Config(_DotDict):
-    def __init__(self, yaml=None, path=None):
-        if path:
-            with open(path, 'r') as file:
-                yaml = file.read()
-        super().__init__(yamllib.load(yaml))
+    def __init__(self, net, dataset=None, train=None):
+        with open(net, 'r') as file:
+            net_yaml = file.read()
+        super().__init__(yaml.load(net_yaml))
         self._setup_excepthook()
-        self._init_dataset()
+        self._init_dataset(dataset)
+        self._init_train(train)
 
-    def _init_dataset(self):
-        dataset_path = self.dataset.path
-        dataset_dir, _ = os.path.split(dataset_path)
-        with open(dataset_path, 'r') as file:
-            self.dataset = _DotDict(yamllib.load(file))
+    def _init_sub_config(self, name, path):
+        with open(path, 'r') as file:
+            self[name] = _DotDict(yaml.load(file))
+
+    def _init_dataset(self, path):
+        self._init_sub_config('dataset', path)
+        root = os.path.dirname(path)
         # change relative path to our working directory
         for mode, path in self.dataset.path.items():
-            self.dataset.path[mode] = os.path.join(dataset_dir, path)
+            self.dataset.path[mode] = os.path.join(root, path)
+
+    def _init_train(self, path):
+        if path is not None:
+            self.mode = 'train'
+            self._init_sub_config('train', path)
+        else:
+            self.mode = 'validation'
 
     def image_shape(self):
         params = self.dataset.shape

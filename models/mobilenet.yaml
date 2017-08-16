@@ -1,24 +1,5 @@
-use_pdb: true
 name: mobilenet_v1
-mode: train
-dataset:
-    path: datasets/mnist/mnist.yaml
-    num_classes: &num_fc_outputs 10
-train:
-    max_steps: 10000000
-    batch_size: 256
-    num_preprocess_threads: 4
-    num_gpus: 4
-    moving_average_decay: 0.9999
-    learning_rate:
-        num_epochs_per_decay: 30.0
-        initial_learning_rate: 0.1
-        learning_rate_decay_factor: 0.16
-    optimizer:
-        type: tensorflow.train.RMSPropOptimizer
-        decay: 0.9
-        momentum: 0.9
-        epsilon: 1.0
+output: fc
 logits: logits
 hyper:
     - &conv
