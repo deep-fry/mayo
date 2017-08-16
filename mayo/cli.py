@@ -5,6 +5,7 @@ from docopt import docopt
 import mayo
 from mayo.config import Config
 from mayo.train import Train
+from mayo.evaluate import Evaluate
 
 
 usage = """
@@ -27,14 +28,19 @@ def train(args):
     config = Config(
         net=args['<net-yaml>'], dataset=args['<dataset-yaml>'],
         train=train_yaml)
-    train = Train(config)
-    return train.train()
+    return Train(config).train()
+
+
+def validate(args):
+    config = Config(net=args['<net-yaml>'], dataset=args['<dataset-yaml>'])
+    return Evaluate(config).evaluate()
 
 
 def main():
     args = docopt(usage, version=mayo.__version__)
     commands = {
         'train': train,
+        'validate': validate,
     }
     for name, func in commands.items():
         if not args[name]:

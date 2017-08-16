@@ -1,5 +1,7 @@
 import tensorflow as tf
 
+from mayo.util import memoize
+
 
 class Preprocess(object):
     images_per_shard = 1024
@@ -199,8 +201,21 @@ class Preprocess(object):
         images = tf.reshape(images, shape=shape)
         return images, tf.reshape(labels, [batch_size])
 
-    def inputs(self, mode=None):
-        mode = mode or self.config.mode
+    def inputs(self, mode):
         with tf.name_scope('batch_processing'):
             serialized = self._serialized_inputs(mode)
             return self._unserialize(serialized, mode)
+
+    def split_inputs(self, mode):
+        images, labels = self.inputs(mode)
+        split = lambda t: tf.split(
+            axis=0, num_or_size_splits=self.config.train.num_gpus, value=t)
+        return split(images), split(labels)
+
+    @memoize
+    def preprocess_train(self):
+        return self.split_inputs('train')
+
+    @memoize
+    def preprocess_validate(self):
+        return self.split_inputs('validate')

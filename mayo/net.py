@@ -8,21 +8,23 @@ from mayo.util import import_from_dot_path
 
 class BaseNet(object):
     def __init__(
-            self, config, inputs=None, labels=None,
+            self, config, images=None, labels=None,
             batch_size=None, graph=None, reuse=None):
         super().__init__()
         self.graph = graph or tf.Graph()
-        self.reuse = reuse
-        self.sess = tf.Session(graph=self.graph)
         self.config = config
-        self.batch_size = batch_size or config.dataset.batch_size
-        self.end_points = {'inputs': inputs, 'labels': labels}
+        if images is not None:
+            self.batch_size = images.get_shape().as_list()[0]
+        else:
+            self.batch_size = config.dataset.batch_size
+        self._reuse = reuse
+        self.end_points = {'images': images, 'labels': labels}
         self.instantiate()
 
     @contextmanager
     def context(self):
         graph_ctx = self.graph.as_default()
-        var_ctx = tf.variable_scope(self.config['name'], reuse=self.reuse)
+        var_ctx = tf.variable_scope(self.config['name'], reuse=self._reuse)
         with graph_ctx, var_ctx as scope:
             yield scope
 
@@ -59,11 +61,12 @@ class BaseNet(object):
         return layer_name, layer_type, params, norm_params
 
     def _instantiate(self):
-        net = self.end_points['inputs']
+        net = self.end_points['images']
         if net is None:
             # if we don't have an input, we initialize the net with
             # a placeholder input
-            shape = (self.config.dataset.batch_size,) + self.config.input_shape
+            shape = (self.config.dataset.batch_size, )
+            shape += self.config.input_shape
             net = tf.placeholder(tf.float32, shape=shape, name='input')
         for params in self.config.net:
             layer_name, layer_type, params, norm_params = \

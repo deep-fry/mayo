@@ -10,6 +10,7 @@ from tensorflow.contrib import slim
 from mayo.net import Net
 from mayo.util import memoize, import_from_dot_path
 from mayo.preprocess import Preprocess
+from mayo.checkpoint import CheckpointHandler
 
 
 def _average_gradients(tower_grads):
@@ -31,12 +32,11 @@ def _average_gradients(tower_grads):
 
 
 class Train(object):
-    _checkpoint_basename = 'checkpoint'
-
     def __init__(self, config):
         super().__init__()
         self.config = config
         self._graph = tf.Graph()
+        self._preprocessor = Preprocess(self.config)
 
     @property
     @memoize
@@ -67,18 +67,9 @@ class Train(object):
         optimizer_class = import_from_dot_path(params.pop('type'))
         return optimizer_class(self.learning_rate, **params)
 
-    @memoize
-    def preprocess(self):
-        images, labels = Preprocess(self.config).inputs()
-        split = lambda t: tf.split(
-            axis=0, num_or_size_splits=self.config.train.num_gpus, value=t)
-        return split(images), split(labels)
-
     def tower_loss(self, images, labels, reuse):
-        batch_size = images.get_shape().as_list()[0]
         self._net = Net(
-            self.config, images, labels, batch_size,
-            graph=self._graph, reuse=reuse)
+            self.config, images, labels, graph=self._graph, reuse=reuse)
         return self._net.loss()
 
     def _setup_gradients(self):
@@ -87,7 +78,7 @@ class Train(object):
         if config.batch_size % config.num_gpus != 0:
             raise ValueError('Batch size must be divisible by number of GPUs')
         # initialize images and labels
-        images_splits, labels_splits = self.preprocess()
+        images_splits, labels_splits = self._preprocessor.preprocess_train()
         # for each gpu
         iterator = enumerate(zip(images_splits, labels_splits))
         tower_grads = []
@@ -104,7 +95,7 @@ class Train(object):
                         images_split, label_split, reuse)
             reuse = True
             # batch norm updates from the final tower
-            with self._net.graph.as_default():
+            with self._graph.as_default():
                 # summaries from the final tower
                 summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
                 self._batch_norm_updates = tf.get_collection(
@@ -135,32 +126,6 @@ class Train(object):
         self._session = tf.Session(config=config)
         self._session.run(init)
 
-    @property
-    def _checkpoint_path(self):
-        directory = os.path.join(
-            'checkpoints', self.config.name, self.config.dataset.name)
-        # ensure directory exists
-        os.makedirs(directory, exist_ok=True)
-        return os.path.join(directory, self._checkpoint_basename)
-
-    def _load_checkpoint(self):
-        print('Loading checkpoint...')
-        with open(self._checkpoint_path, 'r') as f:
-            manifest = yaml.load(f)
-        cp_name = manifest['model_checkpoint_path']
-        cp_dir = os.path.dirname(self._checkpoint_path)
-        path = os.path.join(cp_dir, cp_name)
-        restorer = tf.train.Saver(tf.global_variables())
-        restorer.restore(self._session, path)
-        print('Pre-trained model restored from {}'.format(path))
-        step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
-        return int(step[0])
-
-    def _save_checkpoint(self, step):
-        print('Saving checkpoint...')
-        saver = tf.train.Saver(tf.global_variables())
-        saver.save(self._session, self._checkpoint_path, global_step=step)
-
     def _update_progress(self, step, loss_val):
         duration = time.time() - self._step_time
         imgs_per_sec = self.config.train.batch_size / float(duration)
@@ -184,10 +149,9 @@ class Train(object):
         self._setup_gradients()
         self._setup_train_operation()
         self._init_session()
-        if tf.gfile.Exists(self._checkpoint_path):
-            step = self._load_checkpoint()
-        else:
-            step = 0
+        checkpoint = CheckpointHandler(
+            self._session, self.config.name, self.config.dataset.name)
+        step = checkpoint.load()
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
         print('Training start')
@@ -205,11 +169,11 @@ class Train(object):
                     self._save_summary(step)
                 step += 1
                 if step % 5000 == 0 or step == config.max_steps:
-                    self._save_checkpoint(step)
+                    checkpoint.save(step)
         except KeyboardInterrupt:
             print('Stopped, saving checkpoint in 3 seconds.')
             time.sleep(3)
-            self._save_checkpoint(step)
+            checkpoint.save(step)
 
     def train(self):
         with self._graph.as_default(), tf.device('/cpu:0'):

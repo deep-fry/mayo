@@ -9,16 +9,17 @@ class _DotDict(dict):
         super().__init__(data)
 
     def wrap(self):
-        for k, v in self.items():
-            self[k] = self._wrap(v)
+        return self._wrap(self)
 
     def _wrap(self, obj):
-        if isinstance(obj, (tuple, list, set, frozenset)):
-            return obj.__class__([self._wrap(v) for v in obj])
         if isinstance(obj, dict):
             for k, v in obj.items():
                 obj[k] = self._wrap(v)
-            return _DotDict(obj)
+            if type(obj) is dict:
+                return _DotDict(obj)
+            return obj
+        if isinstance(obj, (tuple, list, set, frozenset)):
+            return obj.__class__([self._wrap(v) for v in obj])
         if isinstance(obj, str) and obj[0] == '$':
             # replace '$<key>' by the value of self['<key>']
             return self[obj[1:]]
@@ -69,13 +70,16 @@ class Config(_DotDict):
         paths = self['dataset']['path']
         for mode, path in paths.items():
             paths[mode] = os.path.join(root, path)
+        # add an unlabelled class to num_classes
+        self['dataset']['num_classes'] += 1
 
     def _init_train(self, path):
+        mode = 'validation'
+        if 'train' in self:
+            mode = 'train'
         if path is not None:
             mode = 'train'
             self._init_sub_config('train', path)
-        else:
-            mode = 'validation'
         self['mode'] = mode
 
     def image_shape(self):
@@ -97,5 +101,5 @@ class Config(_DotDict):
     def _setup_excepthook(self):
         import sys
         from IPython.core import ultratb
-        use_pdb = self.get('use_pdb', False)
+        use_pdb = self.get('use_pdb', True)
         sys.excepthook = ultratb.FormattedTB(call_pdb=use_pdb)
