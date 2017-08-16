@@ -6,16 +6,23 @@ import yaml
 
 class _DotDict(dict):
     def __init__(self, data):
-        super().__init__({})
-        for key, value in data.items():
-            self[key] = self._wrap(value)
+        super().__init__(data)
 
-    def _wrap(self, value):
-        if isinstance(value, (tuple, list, set, frozenset)):
-            return value.__class__([self._wrap(v) for v in value])
-        if isinstance(value, dict):
-            return _DotDict(value)
-        return value
+    def wrap(self):
+        for k, v in self.items():
+            self[k] = self._wrap(v)
+
+    def _wrap(self, obj):
+        if isinstance(obj, (tuple, list, set, frozenset)):
+            return obj.__class__([self._wrap(v) for v in obj])
+        if isinstance(obj, dict):
+            for k, v in obj.items():
+                obj[k] = self._wrap(v)
+            return _DotDict(obj)
+        if isinstance(obj, str) and obj[0] == '$':
+            # replace '$<key>' by the value of self['<key>']
+            return self[obj[1:]]
+        return obj
 
     def _dot_path(self, dot_path_key):
         dictionary = self
@@ -49,6 +56,7 @@ class Config(_DotDict):
         self._setup_excepthook()
         self._init_dataset(dataset)
         self._init_train(train)
+        self.wrap()
 
     def _init_sub_config(self, name, path):
         with open(path, 'r') as file:
@@ -58,15 +66,17 @@ class Config(_DotDict):
         self._init_sub_config('dataset', path)
         root = os.path.dirname(path)
         # change relative path to our working directory
-        for mode, path in self.dataset.path.items():
-            self.dataset.path[mode] = os.path.join(root, path)
+        paths = self['dataset']['path']
+        for mode, path in paths.items():
+            paths[mode] = os.path.join(root, path)
 
     def _init_train(self, path):
         if path is not None:
-            self.mode = 'train'
+            mode = 'train'
             self._init_sub_config('train', path)
         else:
-            self.mode = 'validation'
+            mode = 'validation'
+        self['mode'] = mode
 
     def image_shape(self):
         params = self.dataset.shape

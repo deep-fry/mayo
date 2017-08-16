@@ -1,12 +1,10 @@
 name: lenet5
-dataset:
-    path: datasets/mnist/mnist.yaml
-    num_classes: &num_fc_outputs 10
 logits: logits
 hyper:
     - &conv
       type: convolution
       kernel_size: [5, 5]
+      stride: 1
       padding: valid
       weights_initializer:
           type: tensorflow.truncated_normal_initializer
@@ -23,12 +21,12 @@ hyper:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
 net:
-    - {name: conv0, <<: *conv, stride: 1, num_outputs: 32}
+    - {name: conv0, <<: *conv, num_outputs: 32}
     - {name: pool0, <<: *pool}
-    - {name: conv1, <<: *conv, stride: 1, num_outputs: 64}
+    - {name: conv1, <<: *conv, num_outputs: 64}
     - {name: pool1, <<: *pool}
     - {name: flatten, type: flatten}
     - {name: dropout, <<: *dropout}
     - {name: fc1, <<: *fc, num_outputs: 512}
-    - {name: logits, <<: *fc, num_outputs: *num_fc_outputs,
+    - {name: logits, <<: *fc, num_outputs: $dataset.num_classes,
        activation_fn: null}
