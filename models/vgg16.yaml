@@ -28,7 +28,7 @@ net:
     - {name: conv1_2, <<: *conv, num_outputs: 64}
     - {name: pool1, <<: *pool}
     - {name: conv2_1, <<: *conv, num_outputs: 128}
-    - {name: conv2_1, <<: *conv, num_outputs: 128}
+    - {name: conv2_2, <<: *conv, num_outputs: 128}
     - {name: pool2, <<: *pool}
     - {name: conv3_1, <<: *conv, num_outputs: 256}
     - {name: conv3_2, <<: *conv, num_outputs: 256}
