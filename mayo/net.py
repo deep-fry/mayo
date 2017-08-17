@@ -160,3 +160,6 @@ class Net(BaseNet):
 
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
+
+    def instantiate_max_pool(self, net, params):
+        return slim.max_pool2d(net, **params)

@@ -10,7 +10,7 @@ hyper:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
     - &pool
-      type: average_pool
+      type: max_pool
       kernel_size: [2, 2]
       stride: 2
       padding: valid
