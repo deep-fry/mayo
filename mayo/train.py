@@ -88,7 +88,7 @@ class Train(object):
             name = 'tower_{}'.format(i)
             with tf.device('/gpu:{}'.format(i)), tf.name_scope(name):
                 cpu_ctx = slim.arg_scope(
-                    [slim.model_variable], device='/cpu:0')
+                    [slim.model_variable, slim.variable], device='/cpu:0')
                 with cpu_ctx:
                     # loss from the final tower
                     self._loss = self.tower_loss(
