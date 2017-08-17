@@ -9,13 +9,9 @@ hyper:
       weights_initializer:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
-      weights_regularizer:
-          type: tensorflow.contrib.layers.l2_regularizer
-          scale: 0.00004
     - &pool
       type: max_pool
       kernel_size: [2, 2]
-      stride: 2
       padding: valid
     - &dropout {type: dropout, keep_prob: 0.5}
     - &fc
