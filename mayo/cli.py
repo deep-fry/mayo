@@ -43,6 +43,6 @@ def main():
         'validate': validate,
     }
     for name, func in commands.items():
-        if not args[name]:
+        if not args.get(name, None):
             continue
         return func(args)

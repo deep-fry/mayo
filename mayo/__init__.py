@@ -14,7 +14,7 @@ __doc__ = """
 {__author__}
 """.format(**locals())
 
-os.environ['TF_CPP_MIN_LOG_LEVEL']='2'
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
 
 
 from mayo.config import Config
