@@ -1,0 +1,51 @@
+name: vgg16
+logits: logits
+hyper:
+    - &conv
+      type: convolution
+      kernel_size: [3, 3]
+      stride: 1
+      padding: same
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
+      weights_regularizer:
+          type: tensorflow.contrib.layers.l2_regularizer
+          scale: 0.00004
+    - &pool
+      type: max_pool
+      kernel_size: [2, 2]
+      stride: 2
+      padding: valid
+    - &dropout {type: dropout, keep_prob: 0.5}
+    - &fc
+      type: fully_connected
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
+net:
+    - {name: conv1_1, <<: *conv, num_outputs: 64}
+    - {name: conv1_2, <<: *conv, num_outputs: 64}
+    - {name: pool1, <<: *pool}
+    - {name: conv2_1, <<: *conv, num_outputs: 128}
+    - {name: conv2_1, <<: *conv, num_outputs: 128}
+    - {name: pool2, <<: *pool}
+    - {name: conv3_1, <<: *conv, num_outputs: 256}
+    - {name: conv3_2, <<: *conv, num_outputs: 256}
+    - {name: conv3_3, <<: *conv, num_outputs: 256}
+    - {name: pool3, <<: *pool}
+    - {name: conv4_1, <<: *conv, num_outputs: 512}
+    - {name: conv4_2, <<: *conv, num_outputs: 512}
+    - {name: conv4_3, <<: *conv, num_outputs: 512}
+    - {name: pool4, <<: *pool}
+    - {name: conv5_1, <<: *conv, num_outputs: 512}
+    - {name: conv5_2, <<: *conv, num_outputs: 512}
+    - {name: conv5_3, <<: *conv, num_outputs: 512}
+    - {name: pool5, <<: *pool}
+    - {name: flatten, type: flatten}
+    - {name: fc6, <<: *fc, num_outputs: 4096}
+    - {name: dropout, <<: *dropout}
+    - {name: fc7, <<: *fc, num_outputs: 4096}
+    - {name: dropout, <<: *dropout}
+    - {name: logits, <<: *fc, num_outputs: $dataset.num_classes,
+       activation_fn: null}
