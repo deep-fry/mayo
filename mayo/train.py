@@ -76,7 +76,8 @@ class Train(object):
         config = self.config.train
         # ensure batch size is divisible by number of gpus
         if config.batch_size % config.num_gpus != 0:
-            raise ValueError('Batch size must be divisible by number of GPUs')
+            raise ValueError(
+                'Batch size must be divisible by number of devices')
         # initialize images and labels
         images_splits, labels_splits = self._preprocessor.preprocess_train()
         # for each gpu
@@ -87,12 +88,9 @@ class Train(object):
             # loss with the proper nested contexts
             name = 'tower_{}'.format(i)
             with tf.device('/gpu:{}'.format(i)), tf.name_scope(name):
-                cpu_ctx = slim.arg_scope(
-                    [slim.model_variable], device='/cpu:0')
-                with cpu_ctx:
-                    # loss from the final tower
-                    self._loss = self.tower_loss(
-                        images_split, label_split, reuse)
+                # loss from the final tower
+                self._loss = self.tower_loss(
+                    images_split, label_split, reuse)
                 reuse = True
                 # batch norm updates from the final tower
                 with self._graph.as_default():
@@ -129,7 +127,7 @@ class Train(object):
     def _update_progress(self, step, loss_val):
         duration = time.time() - self._step_time
         imgs_per_sec = self.config.train.batch_size / float(duration)
-        info = 'step {}, loss = {:.3f} '.format(step, loss_val)
+        info = 'step {}, loss = {:.3e} '.format(step, loss_val)
         info += '({:.1f} imgs/sec; {:.3f} sec/batch)'.format(
             imgs_per_sec, duration)
         print(info)
