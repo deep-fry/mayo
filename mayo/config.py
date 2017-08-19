@@ -8,11 +8,6 @@ class _DotDict(dict):
     def __init__(self, data):
         super().__init__(data)
 
-    def wrap(self):
-        self._wrap(self)
-        self._link(self)
-        return self
-
     def _recursive_apply(self, obj, func_map):
         def apply(o):
             for t, func in func_map.items():
@@ -48,6 +43,10 @@ class _DotDict(dict):
             dictionary = dictionary[key]
         return dictionary, final_key
 
+    def to_yaml(self):
+        self_dict = self._recursive_apply(self, {dict: lambda o: dict(o)})
+        return yaml.dump(self_dict)
+
     def __getitem__(self, key):
         obj, key = self._dot_path(key)
         return super(_DotDict, obj).__getitem__(key)
@@ -66,7 +65,7 @@ class _DotDict(dict):
 
 
 class Config(_DotDict):
-    def __init__(self, yaml_files):
+    def __init__(self, yaml_files, overrides=None):
         dictionary = {}
         mode = 'validation'
         for path in yaml_files:
@@ -80,7 +79,23 @@ class Config(_DotDict):
         dictionary['mode'] = mode
         super().__init__(dictionary)
         self._setup_excepthook()
-        self.wrap()
+        self._wrap(self)
+        self._link(self)
+        self._init_overrides(overrides)
+
+    def _init_overrides(self, overrides):
+        if not overrides:
+            return
+        for override in overrides.split(';'):
+            k, v = (o.strip() for o in override.split('='))
+            try:
+                v = int(v)
+            except ValueError:
+                try:
+                    v = float(v)
+                except ValueError:
+                    pass
+            self[k] = v
 
     @staticmethod
     def _init_dataset(path, d):
@@ -115,11 +130,10 @@ class Config(_DotDict):
     def _excepthook(self, etype, evalue, etb):
         if isinstance(etype, KeyboardInterrupt):
             return
-        return self._pdb_excepthook(etype, evalue, etb)
+        from IPython.core import ultratb
+        use_pdb = self.get('use_pdb', True)
+        return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):
         import sys
-        from IPython.core import ultratb
-        use_pdb = self.get('use_pdb', True)
-        self._pdb_excepthook = ultratb.FormattedTB(call_pdb=use_pdb)
         sys.excepthook = self._excepthook

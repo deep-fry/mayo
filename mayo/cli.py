@@ -14,6 +14,7 @@ _DOC = """
 _USAGE = """
 Usage:
     {__executable__} train <yaml>...
+    {__executable__} export <yaml>... [--overrides=<overrides>]
     {__executable__} (-h | --help)
 """
 
@@ -33,27 +34,30 @@ def usage():
     return doc() + _USAGE.format(**meta())
 
 
-def train(args):
+def _config(args):
     from mayo.config import Config
+    return Config(args['<yaml>'], overrides=args['--overrides'])
+
+
+def train(args):
     from mayo.train import Train
-    config = Config(args['<yaml>'])
-    return Train(config).train()
+    return Train(_config(args)).train()
 
 
 def validate(args):
-    from mayo.config import Config
     from mayo.evaluate import Evaluate
-    config = Config(args['<yaml>'])
-    return Evaluate(config).evaluate()
+    return Evaluate(_config(args)).evaluate()
+
+
+def export(args):
+    print(_config(args).to_yaml())
 
 
 def main():
     args = docopt(usage(), version=meta()['__version__'])
-    commands = {
-        'train': train,
-        'validate': validate,
-    }
-    for name, func in commands.items():
-        if not args.get(name, None):
+    commands = [train, validate, export]
+    for func in commands:
+        if not args.get(func.__name__, None):
             continue
         return func(args)
+    raise NotImplementedError('Command not found')
