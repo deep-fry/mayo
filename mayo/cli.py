@@ -39,8 +39,12 @@ def usage():
 
 
 def _config(args):
-    from mayo.config import Config
-    return Config(args['<yaml>'], overrides=args['--overrides'])
+    from importlib.util import spec_from_file_location, module_from_spec
+    path = os.path.join(__root__, 'config.py')
+    spec = spec_from_file_location('mayo.config', path)
+    mod = module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod.Config(args['<yaml>'], overrides=args['--overrides'])
 
 
 def train(args):
