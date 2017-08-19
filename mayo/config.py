@@ -17,18 +17,16 @@ class _DotDict(dict):
         super().__init__(data)
 
     def _recursive_apply(self, obj, func_map):
-        def apply(o):
-            for t, func in func_map.items():
-                if isinstance(o, t):
-                    return func(o)
-            return o
         if isinstance(obj, dict):
             for k, v in obj.items():
                 obj[k] = self._recursive_apply(v, func_map)
         elif isinstance(obj, (tuple, list, set, frozenset)):
             obj = obj.__class__(
                 [self._recursive_apply(v, func_map) for v in obj])
-        return apply(obj)
+        for cls, func in func_map.items():
+            if isinstance(obj, cls):
+                return func(obj)
+        return obj
 
     def _wrap(self, obj):
         def func(obj):

@@ -124,7 +124,7 @@ class Train(object):
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
         loss = sum(losses) / len(losses)
-        info = 'step {}, average loss = {:.3e} '.format(step, loss)
+        info = 'step {}, average loss = {:.3} '.format(step, loss)
         if duration != 0:
             num_steps = step - getattr(self, '_prev_step', step)
             imgs_per_sec = num_steps * self.config.train.batch_size

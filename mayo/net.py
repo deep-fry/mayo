@@ -131,20 +131,24 @@ class Net(BaseNet):
         return slim.separable_conv2d(net, **params)
 
     @staticmethod
-    def _reduce_kernel_size_for_small_input(tensor, kernel, stride=1):
+    def _reduce_kernel_size_for_small_input(params, tensor):
         shape = tensor.get_shape().as_list()
         if shape[1] is None or shape[2] is None:
-            return kernel, stride
-        kernel = [min(shape[1], kernel[0]), min(shape[2], kernel[1])]
-        stride = min(stride, kernel[0], kernel[1])
-        return kernel, stride
+            return
+        kernel = params['kernel_size']
+        stride = params.get('stride', 1)
+        params['kernel_size'] = [
+            min(shape[1], kernel[0]), min(shape[2], kernel[1])]
+        # tensorflow complains when stride > kernel size
+        params['stride'] = min(stride, kernel[0], kernel[1])
 
     def instantiate_average_pool(self, net, params):
-        kernel, stride = self._reduce_kernel_size_for_small_input(
-            net, params['kernel_size'], params['stride'])
-        params['kernel_size'] = kernel
-        params['stride'] = stride
+        self._reduce_kernel_size_for_small_input(params, net)
         return slim.avg_pool2d(net, **params)
+
+    def instantiate_max_pool(self, net, params):
+        self._reduce_kernel_size_for_small_input(params, net)
+        return slim.max_pool2d(net, **params)
 
     def instantiate_dropout(self, net, params):
         return slim.dropout(net, **params)
@@ -161,6 +165,3 @@ class Net(BaseNet):
 
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
-
-    def instantiate_max_pool(self, net, params):
-        return slim.max_pool2d(net, **params)
