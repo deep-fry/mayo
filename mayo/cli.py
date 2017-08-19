@@ -13,7 +13,7 @@ _DOC = """
 """
 _USAGE = """
 Usage:
-    {__executable__} train <net-yaml> <dataset-yaml> [--train=<train-yaml>]
+    {__executable__} train <yaml>...
     {__executable__} (-h | --help)
 """
 
@@ -36,20 +36,14 @@ def usage():
 def train(args):
     from mayo.config import Config
     from mayo.train import Train
-
-    default_train_yaml = os.path.join(__root__, 'train.yaml')
-    train_yaml = args['--train'] or default_train_yaml
-    config = Config(
-        net=args['<net-yaml>'], dataset=args['<dataset-yaml>'],
-        train=train_yaml)
+    config = Config(args['<yaml>'])
     return Train(config).train()
 
 
 def validate(args):
     from mayo.config import Config
     from mayo.evaluate import Evaluate
-
-    config = Config(net=args['<net-yaml>'], dataset=args['<dataset-yaml>'])
+    config = Config(args['<yaml>'])
     return Evaluate(config).evaluate()
 
 
