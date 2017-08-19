@@ -13,8 +13,13 @@ _DOC = """
 """
 _USAGE = """
 Usage:
-    {__executable__} train <net-yaml> <dataset-yaml> [--train=<train-yaml>]
+    {__executable__} train <yaml>... [options]
+    {__executable__} export <yaml>... [options]
     {__executable__} (-h | --help)
+
+Options:
+    --overrides=<overrides>     Specify hyper-parameters to override.
+                                Example: --overrides="a.b = c; d = e"
 """
 
 
@@ -33,33 +38,30 @@ def usage():
     return doc() + _USAGE.format(**meta())
 
 
-def train(args):
+def _config(args):
     from mayo.config import Config
-    from mayo.train import Train
+    return Config(args['<yaml>'], overrides=args['--overrides'])
 
-    default_train_yaml = os.path.join(__root__, 'train.yaml')
-    train_yaml = args['--train'] or default_train_yaml
-    config = Config(
-        net=args['<net-yaml>'], dataset=args['<dataset-yaml>'],
-        train=train_yaml)
-    return Train(config).train()
+
+def train(args):
+    from mayo.train import Train
+    return Train(_config(args)).train()
 
 
 def validate(args):
-    from mayo.config import Config
     from mayo.evaluate import Evaluate
+    return Evaluate(_config(args)).evaluate()
 
-    config = Config(net=args['<net-yaml>'], dataset=args['<dataset-yaml>'])
-    return Evaluate(config).evaluate()
+
+def export(args):
+    print(_config(args).to_yaml())
 
 
 def main():
     args = docopt(usage(), version=meta()['__version__'])
-    commands = {
-        'train': train,
-        'validate': validate,
-    }
-    for name, func in commands.items():
-        if not args.get(name, None):
+    commands = [train, validate, export]
+    for func in commands:
+        if not args.get(func.__name__, None):
             continue
         return func(args)
+    raise NotImplementedError('Command not found')
