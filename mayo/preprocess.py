@@ -208,8 +208,8 @@ class Preprocess(object):
 
     def split_inputs(self, mode):
         images, labels = self.inputs(mode)
-        split = lambda t: tf.split(
-            axis=0, num_or_size_splits=self.config.train.num_gpus, value=t)
+        num = self.config.train.num_gpus
+        split = lambda t: tf.split(axis=0, num_or_size_splits=num, value=t)
         return split(images), split(labels)
 
     @memoize

@@ -25,7 +25,8 @@ class BaseNet(object):
     def context(self):
         graph_ctx = self.graph.as_default()
         var_ctx = tf.variable_scope(self.config['name'], reuse=self._reuse)
-        with graph_ctx, var_ctx as scope:
+        cpu_ctx = slim.arg_scope([slim.model_variable], device='/cpu:0')
+        with graph_ctx, var_ctx, cpu_ctx as scope:
             yield scope
 
     def instantiate(self):
