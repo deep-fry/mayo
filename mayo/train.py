@@ -1,11 +1,7 @@
-import re
-import os
 import time
 
-import yaml
 import numpy as np
 import tensorflow as tf
-from tensorflow.contrib import slim
 
 from mayo.net import Net
 from mayo.util import memoize, import_from_dot_path
@@ -124,13 +120,19 @@ class Train(object):
         self._session = tf.Session(config=config)
         self._session.run(init)
 
-    def _update_progress(self, step, loss_val):
-        duration = time.time() - self._step_time
-        imgs_per_sec = self.config.train.batch_size / float(duration)
-        info = 'step {}, loss = {:.3e} '.format(step, loss_val)
-        info += '({:.1f} imgs/sec; {:.3f} sec/batch)'.format(
-            imgs_per_sec, duration)
+    def _update_progress(self, step, losses):
+        now = time.time()
+        duration = now - getattr(self, '_prev_time', now)
+        loss = sum(losses) / len(losses)
+        info = 'step {}, average loss = {:.3e} '.format(step, loss)
+        if duration != 0:
+            num_steps = step - getattr(self, '_prev_step', step)
+            imgs_per_sec = num_steps * self.config.train.batch_size
+            imgs_per_sec /= float(duration)
+            info += '({:.1f} imgs/sec)'.format(imgs_per_sec)
         print(info)
+        self._prev_time = now
+        self._prev_step = step
 
     @property
     @memoize
@@ -155,15 +157,17 @@ class Train(object):
         print('Training start')
         # train iterations
         config = self.config.train
+        losses = []
         try:
             while step < config.max_steps:
-                self._step_time = time.time()
-                _, loss_val = self._session.run([self._train_op, self._loss])
-                if np.isnan(loss_val):
-                    raise ValueError('Model diverged with loss = NaN')
+                _, loss = self._session.run([self._train_op, self._loss])
+                if np.isnan(loss):
+                    raise ValueError('model diverged with a nan-valued loss')
+                losses.append(loss)
                 if step % 10 == 0:
-                    self._update_progress(step, loss_val)
-                if step % 100 == 0:
+                    self._update_progress(step, losses)
+                    losses = []
+                if step % 1000 == 0:
                     self._save_summary(step)
                 step += 1
                 if step % 5000 == 0 or step == config.max_steps:

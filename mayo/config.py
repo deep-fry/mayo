@@ -1,6 +1,6 @@
 import os
+import glob
 
-import tensorflow as tf
 import yaml
 
 
@@ -8,22 +8,33 @@ class _DotDict(dict):
     def __init__(self, data):
         super().__init__(data)
 
-    def wrap(self):
-        return self._wrap(self)
-
-    def _wrap(self, obj):
+    def _recursive_apply(self, obj, func_map):
+        def apply(o):
+            for t, func in func_map.items():
+                if isinstance(o, t):
+                    return func(o)
+            return o
         if isinstance(obj, dict):
             for k, v in obj.items():
-                obj[k] = self._wrap(v)
+                obj[k] = self._recursive_apply(v, func_map)
+        elif isinstance(obj, (tuple, list, set, frozenset)):
+            obj = obj.__class__(
+                [self._recursive_apply(v, func_map) for v in obj])
+        return apply(obj)
+
+    def _wrap(self, obj):
+        def func(obj):
             if type(obj) is dict:
                 return _DotDict(obj)
             return obj
-        if isinstance(obj, (tuple, list, set, frozenset)):
-            return obj.__class__([self._wrap(v) for v in obj])
-        if isinstance(obj, str) and obj[0] == '$':
-            # replace '$<key>' by the value of self['<key>']
-            return self[obj[1:]]
-        return obj
+        return self._recursive_apply(obj, {dict: func})
+
+    def _link(self, obj):
+        def func(obj):
+            if obj[0] == '$':
+                return self[obj[1:]]
+            return obj
+        return self._recursive_apply(obj, {str: func})
 
     def _dot_path(self, dot_path_key):
         dictionary = self
@@ -31,6 +42,10 @@ class _DotDict(dict):
         for key in dot_path:
             dictionary = dictionary[key]
         return dictionary, final_key
+
+    def to_yaml(self):
+        self_dict = self._recursive_apply(self, {dict: lambda o: dict(o)})
+        return yaml.dump(self_dict)
 
     def __getitem__(self, key):
         obj, key = self._dot_path(key)
@@ -50,37 +65,51 @@ class _DotDict(dict):
 
 
 class Config(_DotDict):
-    def __init__(self, net, dataset=None, train=None):
-        with open(net, 'r') as file:
-            net_yaml = file.read()
-        super().__init__(yaml.load(net_yaml))
+    def __init__(self, yaml_files, overrides=None):
+        dictionary = {}
+        mode = 'validation'
+        for path in yaml_files:
+            with open(path, 'r') as file:
+                d = yaml.load(file.read())
+                if 'dataset' in d:
+                    self._init_dataset(path, d)
+                if 'train' in d:
+                    mode = 'train'
+                dictionary.update(d)
+        dictionary['mode'] = mode
+        super().__init__(dictionary)
         self._setup_excepthook()
-        self._init_dataset(dataset)
-        self._init_train(train)
-        self.wrap()
+        self._wrap(self)
+        self._link(self)
+        self._init_overrides(overrides)
 
-    def _init_sub_config(self, name, path):
-        with open(path, 'r') as file:
-            self[name] = _DotDict(yaml.load(file))
+    def _init_overrides(self, overrides):
+        if not overrides:
+            return
+        for override in overrides.split(';'):
+            k, v = (o.strip() for o in override.split('='))
+            try:
+                v = int(v)
+            except ValueError:
+                try:
+                    v = float(v)
+                except ValueError:
+                    pass
+            self[k] = v
 
-    def _init_dataset(self, path):
-        self._init_sub_config('dataset', path)
+    @staticmethod
+    def _init_dataset(path, d):
         root = os.path.dirname(path)
         # change relative path to our working directory
-        paths = self['dataset']['path']
+        paths = d['dataset']['path']
         for mode, path in paths.items():
             paths[mode] = os.path.join(root, path)
         # add an unlabelled class to num_classes
-        self['dataset']['num_classes'] += 1
+        d['dataset']['num_classes'] += 1
 
-    def _init_train(self, path):
-        mode = 'validation'
-        if 'train' in self:
-            mode = 'train'
-        if path is not None:
-            mode = 'train'
-            self._init_sub_config('train', path)
-        self['mode'] = mode
+    def save(self, path):
+        with open(path, 'w') as file:
+            yaml.dump(self, file)
 
     def image_shape(self):
         params = self.dataset.shape
@@ -92,14 +121,19 @@ class Config(_DotDict):
             path = self.dataset.path[mode]
         except KeyError:
             raise KeyError('Mode {} not recognized.'.format(mode))
-        files = tf.gfile.Glob(path)
+        files = glob.glob(path)
         if not files:
             msg = 'No files found for dataset {} with mode {} at {}'
             raise FileNotFoundError(msg.format(self.config.name, mode, path))
         return files
 
-    def _setup_excepthook(self):
-        import sys
+    def _excepthook(self, etype, evalue, etb):
+        if isinstance(etype, KeyboardInterrupt):
+            return
         from IPython.core import ultratb
         use_pdb = self.get('use_pdb', True)
-        sys.excepthook = ultratb.FormattedTB(call_pdb=use_pdb)
+        return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
+
+    def _setup_excepthook(self):
+        import sys
+        sys.excepthook = self._excepthook
