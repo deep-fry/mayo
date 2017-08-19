@@ -13,9 +13,13 @@ _DOC = """
 """
 _USAGE = """
 Usage:
-    {__executable__} train <yaml>...
-    {__executable__} export <yaml>... [--overrides=<overrides>]
+    {__executable__} train <yaml>... [options]
+    {__executable__} export <yaml>... [options]
     {__executable__} (-h | --help)
+
+Options:
+    --overrides=<overrides>     Specify hyper-parameters to override.
+                                Example: --overrides="a.b = c; d = e"
 """
 
 
