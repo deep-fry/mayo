@@ -1,4 +1,5 @@
 import time
+import sys
 
 import numpy as np
 import tensorflow as tf
@@ -74,6 +75,7 @@ class Train(object):
         if config.batch_size % config.num_gpus != 0:
             raise ValueError(
                 'Batch size must be divisible by number of devices')
+
         # initialize images and labels
         images_splits, labels_splits = self._preprocessor.preprocess_train()
         # for each gpu
@@ -103,15 +105,52 @@ class Train(object):
             tf.summary.scalar('learning_rate', self.learning_rate))
         self._summary_op = tf.summary.merge(summaries)
 
+
+    def change_vars(self):
+        model_params = tf.trainable_variables()
+        ops = []
+        for v in model_params:
+            ops.append(tf.assign(v, self.fixed_point_quantize(v, 2, 4)))
+            # v = self.fixed_point_quantize(v, 2, 8)
+        return ops
+
+    def fixed_point_quantize(self, x, n, f):
+        '''
+        1 bit sign, n bit int and f bit frac
+        ref:
+        https://github.com/tensorflow/tensorflow/blob/r1.3/tensorflow/python/ops/array_grad.py
+        '''
+        G = tf.get_default_graph()
+
+        # shift left f bits
+        x = x * (2**f)
+        # quantize
+        with G.gradient_override_map({"Round":"Identity"}):
+            x = tf.round(x)
+        # shift right f bits
+        x = tf.div(x, 2 ** f)
+        # with G.gradient_override_map({"FloorDiv":"CUSTOM_FLOOR"}):
+        #     x = tf.floordiv(x, 2 ** f)
+
+        # cap int
+        int_max = 2 ** n
+        x = tf.clip_by_value(x, -int_max, int_max)
+        # x = x * 0
+        return x
+
     def _setup_train_operation(self):
-        app_grad_op = self.optimizer.apply_gradients(
-            self._gradients, global_step=self.global_step)
-        var_avgs = tf.train.ExponentialMovingAverage(
-            self.config.train.moving_average_decay, self.global_step)
-        var_avgs_op = var_avgs.apply(
-            tf.trainable_variables() + tf.moving_average_variables())
-        bn_op = tf.group(*self._batch_norm_updates)
-        self._train_op = tf.group(app_grad_op, var_avgs_op, bn_op)
+        ops = self.change_vars()
+        with tf.control_dependencies(ops):
+            app_grad_op = self.optimizer.apply_gradients(
+                self._gradients, global_step=self.global_step)
+            app_grad_op = self.optimizer.apply_gradients(
+                self._gradients, global_step=self.global_step)
+            var_avgs = tf.train.ExponentialMovingAverage(
+                self.config.train.moving_average_decay, self.global_step)
+            var_avgs_op = var_avgs.apply(
+                tf.trainable_variables() + tf.moving_average_variables())
+            bn_op = tf.group(*self._batch_norm_updates)
+            self._train_op = tf.group(app_grad_op, var_avgs_op, bn_op)
 
     def _init_session(self):
         # build an initialization operation to run below
@@ -164,7 +203,11 @@ class Train(object):
                 if np.isnan(loss):
                     raise ValueError('model diverged with a nan-valued loss')
                 losses.append(loss)
-                if step % 10 == 0:
+                if step % 100 == 0:
+                    # print(tf.trainable_variables()[0], tf.trainable_variables()[1])
+                    print(tf.trainable_variables()[0].eval(session = self._session))
+                    print(tf.trainable_variables()[1].eval(session = self._session))
+                    # sys.exit()
                     self._update_progress(step, losses)
                     losses = []
                 if step % 1000 == 0:
