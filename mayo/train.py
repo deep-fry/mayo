@@ -1,4 +1,5 @@
 import time
+import math
 
 import numpy as np
 import tensorflow as tf
@@ -46,13 +47,13 @@ class Train(object):
     @memoize
     def learning_rate(self):
         learn_params = self.config.train.learning_rate
-        rate = learn_params.initial_learning_rate
+        rate = learn_params.initial
         step = self.global_step
         batches_per_epoch = self.config.dataset.num_examples_per_epoch.train
         batches_per_epoch /= self.config.train.batch_size
         decay_steps = int(
             batches_per_epoch * learn_params.num_epochs_per_decay)
-        decay_factor = learn_params.learning_rate_decay_factor
+        decay_factor = learn_params.decay_factor
         return tf.train.exponential_decay(
             rate, step, decay_steps, decay_factor, staircase=True)
 
@@ -120,13 +121,16 @@ class Train(object):
         self._session = tf.Session(config=config)
         self._session.run(init)
 
+    def _to_epoch(self, step):
+        epoch = step * self.config.train.batch_size
+        return epoch / float(self.config.dataset.num_examples_per_epoch.train)
+
     def _update_progress(self, step, losses):
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
+        epoch = self._to_epoch(step)
         loss = sum(losses) / len(losses)
-        epoch = step * self.config.train.batch_size
-        epoch /= float(self.config.dataset.num_examples_per_epoch.train)
-        info = 'epoch {:.5}, average loss = {:.3} '.format(epoch, loss)
+        info = 'epoch {:.5}, average loss = {:.4} '.format(epoch, loss)
         if duration != 0:
             num_steps = step - getattr(self, '_prev_step', step)
             imgs_per_sec = num_steps * self.config.train.batch_size
@@ -154,26 +158,34 @@ class Train(object):
         checkpoint = CheckpointHandler(
             self._session, self.config.name, self.config.dataset.name)
         step = checkpoint.load()
+        curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
         print('Training start')
         # train iterations
         config = self.config.train
         losses = []
+        prev_epoch = math.floor(self._to_epoch(step))
         try:
             while step < config.max_steps:
                 _, loss = self._session.run([self._train_op, self._loss])
                 if np.isnan(loss):
                     raise ValueError('model diverged with a nan-valued loss')
                 losses.append(loss)
-                if step % 100 == 0 or (step < 100 and step % 10 == 0):
+                is_starting = curr_step < 100 and curr_step % 10 == 0
+                if curr_step % 100 == 0 or is_starting:
                     self._update_progress(step, losses)
                     losses = []
-                if step % 1000 == 0:
+                if curr_step % 1000 == 0:
                     self._save_summary(step)
-                step += 1
-                if step % 5000 == 0 or step == config.max_steps:
+                curr_step += 1
+                if curr_step % 5000 == 0 or curr_step == config.max_steps:
                     checkpoint.save(step)
+                epoch = math.floor(self._to_epoch(step))
+                if epoch > prev_epoch:
+                    prev_epoch = epoch
+                    self.eval(self._net, checkpoint)
+                step += 1
         except KeyboardInterrupt:
             print('Stopped, saving checkpoint in 3 seconds.')
         try:
@@ -185,3 +197,6 @@ class Train(object):
     def train(self):
         with self._graph.as_default(), tf.device('/cpu:0'):
             self._train()
+
+    def eval(self, net, checkpoint):
+        ...
