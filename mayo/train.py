@@ -46,16 +46,14 @@ class Train(object):
     @property
     @memoize
     def learning_rate(self):
-        learn_params = self.config.train.learning_rate
-        rate = learn_params.initial
-        step = self.global_step
-        batches_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        batches_per_epoch /= self.config.train.batch_size
-        decay_steps = int(
-            batches_per_epoch * learn_params.num_epochs_per_decay)
-        decay_factor = learn_params.decay_factor
+        params = self.config.train.learning_rate
+        steps_per_epoch = self.config.dataset.num_examples_per_epoch.train
+        # 1 step == 1 batch
+        steps_per_epoch /= self.config.train.batch_size
+        decay_steps = int(steps_per_epoch * params.num_epochs_per_decay)
         return tf.train.exponential_decay(
-            rate, step, decay_steps, decay_factor, staircase=True)
+            params.initial, self.global_step, decay_steps,
+            params.decay_factor, staircase=True)
 
     @property
     @memoize
@@ -100,8 +98,9 @@ class Train(object):
                 tower_grads.append(grads)
         self._gradients = _average_gradients(tower_grads)
         # summaries
-        summaries.append(
-            tf.summary.scalar('learning_rate', self.learning_rate))
+        summaries += [
+            tf.summary.scalar('learning_rate', self.learning_rate),
+            tf.summary.scalar('loss', self._loss)]
         self._summary_op = tf.summary.merge(summaries)
 
     def _setup_train_operation(self):
