@@ -176,8 +176,11 @@ class Train(object):
                     checkpoint.save(step)
         except KeyboardInterrupt:
             print('Stopped, saving checkpoint in 3 seconds.')
+        try:
             time.sleep(3)
-            checkpoint.save(step)
+        except KeyboardInterrupt:
+            return
+        checkpoint.save(step)
 
     def train(self):
         with self._graph.as_default(), tf.device('/cpu:0'):
