@@ -124,7 +124,9 @@ class Train(object):
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
         loss = sum(losses) / len(losses)
-        info = 'step {}, average loss = {:.3} '.format(step, loss)
+        epoch = step * self.config.train.batch_size
+        epoch /= float(self.config.dataset.num_examples_per_epoch.train)
+        info = 'epoch {:.5}, average loss = {:.3} '.format(epoch, loss)
         if duration != 0:
             num_steps = step - getattr(self, '_prev_step', step)
             imgs_per_sec = num_steps * self.config.train.batch_size
@@ -164,7 +166,7 @@ class Train(object):
                 if np.isnan(loss):
                     raise ValueError('model diverged with a nan-valued loss')
                 losses.append(loss)
-                if step % 10 == 0:
+                if step % 100 == 0 or (step < 100 and step % 10 == 0):
                     self._update_progress(step, losses)
                     losses = []
                 if step % 1000 == 0:
