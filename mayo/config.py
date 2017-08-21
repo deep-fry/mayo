@@ -5,11 +5,13 @@ import glob
 import yaml
 
 
-def _dot_path(dictionary, dot_path_key):
+def _dot_path(keyable, dot_path_key):
     *dot_path, final_key = dot_path_key.split('.')
     for key in dot_path:
-        dictionary = dictionary[key]
-    return dictionary, final_key
+        if isinstance(keyable, (tuple, list)):
+            key = int(key)
+        keyable = keyable[key]
+    return keyable, final_key
 
 
 class _DotDict(dict):
@@ -63,7 +65,6 @@ class Config(_DotDict):
     def __init__(self, yaml_files, overrides=None):
         unified = {}
         dictionary = {}
-        mode = 'validation'
         for path in yaml_files:
             with open(path, 'r') as file:
                 d = yaml.load(file.read())
@@ -72,33 +73,23 @@ class Config(_DotDict):
                 unified['dataset']['path'].setdefault(
                     'root', os.path.dirname(path))
                 self._init_dataset(path, d)
-            if 'train' in d:
-                mode = 'train'
             dictionary.update(d)
-        dictionary['mode'] = mode
+        self._override(unified, overrides)
+        self.unified = unified
         super().__init__(dictionary)
         self._setup_excepthook()
-        self._init_overrides(dictionary, overrides)
+        self._override(dictionary, overrides)
         self._wrap(self)
         self._link(self)
-        self._init_overrides(unified, overrides)
-        self.unified = unified
 
     @staticmethod
-    def _init_overrides(dictionary, overrides):
+    def _override(dictionary, overrides):
         if not overrides:
             return
         for override in overrides.split(';'):
             k, v = (o.strip() for o in override.split('='))
-            try:
-                v = int(v)
-            except ValueError:
-                try:
-                    v = float(v)
-                except ValueError:
-                    pass
             sub_dictionary, k = _dot_path(dictionary, k)
-            sub_dictionary[k] = v
+            sub_dictionary[k] = yaml.load(v)
 
     @staticmethod
     def _init_dataset(path, d):
@@ -118,14 +109,13 @@ class Config(_DotDict):
             file = open(file, 'w')
         unified = self._recursive_apply(
             self.unified, {dict: lambda o: dict(o)})
-        return yaml.dump(unified, file)
+        return yaml.safe_dump(unified, file, width=80, indent=4)
 
     def image_shape(self):
         params = self.dataset.shape
         return (params.height, params.width, params.channels)
 
-    def data_files(self, mode=None):
-        mode = mode or self.mode
+    def data_files(self, mode):
         try:
             path = self.dataset.path[mode]
         except KeyError:
