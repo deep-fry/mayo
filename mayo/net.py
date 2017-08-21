@@ -150,18 +150,18 @@ class Net(BaseNet):
         self._reduce_kernel_size_for_small_input(params, net)
         return slim.max_pool2d(net, **params)
 
+    def instantiate_fully_connected(self, net, params):
+        return slim.fully_connected(net, **params)
+
+    def instantiate_softmax(self, net, params):
+        return slim.softmax(net, **params)
+
     def instantiate_dropout(self, net, params):
         return slim.dropout(net, **params)
 
     def instantiate_squeeze(self, net, params):
         params['name'] = params.pop('scope')
         return tf.squeeze(net, **params)
-
-    def instantiate_softmax(self, net, params):
-        return slim.softmax(net, **params)
-
-    def instantiate_fully_connected(self, net, params):
-        return slim.fully_connected(net, **params)
 
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
