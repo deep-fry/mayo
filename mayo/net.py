@@ -1,6 +1,8 @@
 from contextlib import contextmanager
 
 import tensorflow as tf
+import sys
+import pickle
 from tensorflow.contrib import slim
 
 from mayo.util import import_from_dot_path
@@ -34,6 +36,10 @@ class BaseNet(object):
         with self.context():
             self._instantiate()
 
+    def load_pickle(self, file_name='./assets/lenet5.pkl'):
+        with open(file_name, 'rb') as f:
+            self.init_params = pickle.load(f)
+
     def _instantiation_params(self, params):
         def create(params, key):
             try:
@@ -43,6 +49,21 @@ class BaseNet(object):
             p = dict(p)
             cls = import_from_dot_path(p.pop('type'))
             params[key] = cls(**p)
+        def create_initializer(params, key, name):
+            try:
+                p = params[key]
+            except KeyError:
+                return
+            p = dict(p)
+            if p['type'] == 'tensorflow.constant_initializer':
+                for key in self.init_params.keys():
+                    if name in key:
+                        p['value']=self.init_params[key]
+                        break
+            print(p)
+            cls = import_from_dot_path(p.pop('type'))
+            params[key] = cls(**p)
+
 
         # layer configs
         params = dict(params)
@@ -57,12 +78,14 @@ class BaseNet(object):
             norm_type = norm_params.pop('type')
             params['normalizer_fn'] = import_from_dot_path(norm_type)
         # weight initializer
-        create(params, 'weights_initializer')
+        create_initializer(params, 'weights_initializer', layer_name)
+        # create(params, 'weights_initializer')
         create(params, 'weights_regularizer')
         return layer_name, layer_type, params, norm_params
 
     def _instantiate(self):
         net = self.end_points['images']
+        self.load_pickle('./assets/lenet5.pkl')
         if net is None:
             # if we don't have an input, we initialize the net with
             # a placeholder input
@@ -82,6 +105,7 @@ class BaseNet(object):
                     [params['normalizer_fn']], **norm_params)
             else:
                 norm_scope = slim.arg_scope([])
+            print(params)
             # instantiation
             try:
                 with norm_scope:

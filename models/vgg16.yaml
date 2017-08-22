@@ -7,7 +7,7 @@ hyper:
       stride: 1
       padding: same
       weights_initializer:
-          type: tensorflow.truncated_normal_initializer
+          type: tensorflow.constant_initializer
           stddev: 0.09
       weights_regularizer:
           type: tensorflow.contrib.layers.l2_regularizer
