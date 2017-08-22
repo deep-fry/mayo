@@ -183,7 +183,7 @@ class Train(object):
                 epoch = math.floor(self._to_epoch(step))
                 if epoch > prev_epoch:
                     prev_epoch = epoch
-                    self.eval(self._net, checkpoint)
+                    self.eval()
                 step += 1
         except KeyboardInterrupt:
             print('Stopped, saving checkpoint in 3 seconds.')
@@ -197,5 +197,5 @@ class Train(object):
         with self._graph.as_default(), tf.device('/cpu:0'):
             self._train()
 
-    def eval(self, net, checkpoint):
+    def eval(self):
         ...

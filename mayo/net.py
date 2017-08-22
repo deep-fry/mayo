@@ -98,6 +98,9 @@ class BaseNet(object):
     def generic_instantiate(self, net, params):
         raise NotImplementedError
 
+    def logits(self):
+        return self.end_points['logits']
+
     def loss(self):
         try:
             return self.end_points['loss']
