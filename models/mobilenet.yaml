@@ -38,32 +38,19 @@ hyper:
 net:
     - {name: conv0, <<: *conv, stride: 2,
        num_outputs: !arith 'max(int(32 * $(dm)), 8)'}
-    - {name: conv1, <<: *dsconv, stride: 1,
-       num_outputs: !arith 'max(int(64 * $(dm)), 8)'}
-    - {name: conv2, <<: *dsconv, stride: 2,
-       num_outputs: !arith 'max(int(128 * $(dm)), 8)'}
-    - {name: conv3, <<: *dsconv, stride: 1,
-       num_outputs: !arith 'max(int(128 * $(dm)), 8)'}
-    - {name: conv4, <<: *dsconv, stride: 2,
-       num_outputs: !arith 'max(int(256 * $(dm)), 8)'}
-    - {name: conv5, <<: *dsconv, stride: 1,
-       num_outputs: !arith 'max(int(256 * $(dm)), 8)'}
-    - {name: conv6, <<: *dsconv, stride: 2,
-       num_outputs: !arith 'max(int(512 * $(dm)), 8)'}
-    - {name: conv7, <<: *dsconv, stride: 1,
-       num_outputs: !arith 'max(int(512 * $(dm)), 8)'}
-    - {name: conv8, <<: *dsconv, stride: 2,
-       num_outputs: !arith 'max(int(512 * $(dm)), 8)'}
-    - {name: conv9, <<: *dsconv, stride: 1,
-       num_outputs: !arith 'max(int(512 * $(dm)), 8)'}
-    - {name: conv10, <<: *dsconv, stride: 2,
-       num_outputs: !arith 'max(int(512 * $(dm)), 8)'}
-    - {name: conv11, <<: *dsconv, stride: 1,
-       num_outputs: !arith 'max(int(512 * $(dm)), 8)'}
-    - {name: conv12, <<: *dsconv, stride: 2,
-       num_outputs: !arith 'max(int(1024 * $(dm)), 8)'}
-    - {name: conv13, <<: *dsconv, stride: 1,
-       num_outputs: !arith 'max(int(1024 * $(dm)), 8)'}
+    - {name: conv1, <<: *dsconv, stride: 1, num_outputs: 64}
+    - {name: conv2, <<: *dsconv, stride: 2, num_outputs: 128}
+    - {name: conv3, <<: *dsconv, stride: 1, num_outputs: 128}
+    - {name: conv4, <<: *dsconv, stride: 2, num_outputs: 256}
+    - {name: conv5, <<: *dsconv, stride: 1, num_outputs: 256}
+    - {name: conv6, <<: *dsconv, stride: 2, num_outputs: 512}
+    - {name: conv7, <<: *dsconv, stride: 1, num_outputs: 512}
+    - {name: conv8, <<: *dsconv, stride: 2, num_outputs: 512}
+    - {name: conv9, <<: *dsconv, stride: 1, num_outputs: 512}
+    - {name: conv10, <<: *dsconv, stride: 2, num_outputs: 512}
+    - {name: conv11, <<: *dsconv, stride: 1, num_outputs: 512}
+    - {name: conv12, <<: *dsconv, stride: 2, num_outputs: 1024}
+    - {name: conv13, <<: *dsconv, stride: 1, num_outputs: 1024}
     - {name: pool, <<: *pool}
     - {name: dropout, <<: *dropout}
     - {name: fc, <<: *fc}
