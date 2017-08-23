@@ -8,8 +8,8 @@ from mayo.util import import_from_dot_path
 
 class BaseNet(object):
     def __init__(
-            self, config, images, labels,
-            is_training=None, graph=None, reuse=None):
+            self, config, images, labels, is_training,
+            graph=None, reuse=None):
         super().__init__()
         self.graph = graph or tf.Graph()
         self.config = config
@@ -29,7 +29,7 @@ class BaseNet(object):
     def _add_end_point(self, key, layer):
         if key in self.end_points:
             raise KeyError(
-                'layer named "{}" already exists in end_points.'.format(layer))
+                'layer {!r} already exists in end_points.'.format(layer))
         self.end_points[key] = layer
 
     def _instantiation_params(self, params):
