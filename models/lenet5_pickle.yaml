@@ -1,0 +1,39 @@
+name: &net lenet5
+logits: logits
+hyper:
+    - &initializer
+      path: models/lenet5_pickle.pkl
+      net: *net
+      _inherit: [name]
+    - &pickle
+      weights_initializer:
+          <<: *initializer
+          type: external/pickle_initializer.py:weights
+      biases_initializer:
+          <<: *initializer
+          type: external/pickle_initializer.py:biases
+    - &conv
+      <<: *pickle
+      type: convolution
+      kernel_size: [5, 5]
+      stride: 1
+      padding: valid
+    - &pool
+      type: max_pool
+      kernel_size: [2, 2]
+      stride: 2
+      padding: valid
+    - &dropout {type: dropout, keep_prob: 0.999}
+    - &fc
+      <<: *pickle
+      type: fully_connected
+net:
+    - {name: conv0, <<: *conv, num_outputs: 32}
+    - {name: pool0, <<: *pool}
+    - {name: conv1, <<: *conv, num_outputs: 64}
+    - {name: pool1, <<: *pool}
+    - {name: flatten, type: flatten}
+    - {name: dropout, <<: *dropout}
+    - {name: fc1, <<: *fc, num_outputs: 512}
+    - {name: logits, <<: *fc, num_outputs: $dataset.num_classes + 1,
+       activation_fn: null}
