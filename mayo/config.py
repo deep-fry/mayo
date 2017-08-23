@@ -32,9 +32,13 @@ class ArithTag(object):
     def _eval(self, n):
         if isinstance(n, ast.Num):
             return n.n
+        if isinstance(n, ast.Call):
+            op = __builtins__[n.func.id]
+            args = (self._eval(a) for a in n.args)
+            return op(*args)
         if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
             raise TypeError('Unrecognized operator node {}'.format(n))
-        op = self._eval_expr_map.get(type(n.op))
+        op = self._eval_expr_map[type(n.op)]
         if isinstance(n, ast.UnaryOp):
             return op(self._eval(n.operand))
         return op(self._eval(n.left), self._eval(n.right))
@@ -145,13 +149,13 @@ class Config(_DotDict):
             if 'dataset' in d:
                 self._init_dataset(path, unified, d)
             _dict_merge(dictionary, d)
+        self._override(dictionary, overrides)
+        self._link(dictionary)
+        self._wrap(dictionary)
+        super().__init__(dictionary)
         self._override(unified, overrides)
         self._link(unified, unified)
         self.unified = unified
-        super().__init__(dictionary)
-        self._override(dictionary, overrides)
-        self._wrap(self)
-        self._link(self)
 
     @staticmethod
     def _init_dataset(path, u, d):
@@ -183,9 +187,7 @@ class Config(_DotDict):
     def to_yaml(self, file=None):
         if file is not None:
             file = open(file, 'w')
-        unified = self._recursive_apply(
-            self.unified, {dict: lambda o: dict(o)})
-        return yaml.dump(unified, file, width=80, indent=4)
+        return yaml.dump(self.unified, file, width=80, indent=4)
 
     def image_shape(self):
         params = self.dataset.shape
@@ -206,7 +208,7 @@ class Config(_DotDict):
         if isinstance(etype, KeyboardInterrupt):
             return
         from IPython.core import ultratb
-        use_pdb = self.get('use_pdb', True)
+        use_pdb = self.system.use_pdb
         return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):
