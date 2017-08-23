@@ -85,7 +85,7 @@ class BaseNet(object):
                     'is not implemented.'.format(params['scope'], layer_type))
             # save end points
             self._add_end_point(layer_name, net)
-            if layer_name == self.config.logits:
+            if layer_name != 'logits' and layer_name == self.config.logits:
                 self._add_end_point('logits', net)
 
     def instantiate(self):
