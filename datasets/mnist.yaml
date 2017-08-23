@@ -4,11 +4,11 @@ dataset:
     path:
         train: mnist/train.tfrecord
         test: &test mnist/test.tfrecord
-        validation: *test
+        validate: *test
     num_classes: 10
     num_examples_per_epoch:
         train: 58001
-        validation: 1000
+        validate: 1000
         test: 9001
     preprocess:
         distort: false

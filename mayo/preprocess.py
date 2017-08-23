@@ -114,7 +114,7 @@ class Preprocess(object):
         Queue for serialized image data
         """
         min_images_in_queue = self.images_per_shard * self.queue_memory_factor
-        batch_size = self.config.train.batch_size
+        batch_size = self.config.system.batch_size
         if mode == 'train':
             # shuffling
             return tf.RandomShuffleQueue(
@@ -184,7 +184,7 @@ class Preprocess(object):
         return encoded, label, bbox, text
 
     def _unserialize(self, serialized, mode):
-        num_threads = self.config.train.num_preprocess_threads
+        num_threads = self.config.system.num_preprocess_threads
         if num_threads % 4:
             raise ValueError('Expect number of threads to be a multiple of 4.')
         images_labels = []
@@ -192,7 +192,7 @@ class Preprocess(object):
             image_buffer, label, bbox, _ = self._parse_proto(serialized)
             image = self._preprocess(image_buffer, bbox, mode, tid)
             images_labels.append((image, label))
-        batch_size = self.config.train.batch_size
+        batch_size = self.config.system.batch_size
         capacity = 2 * num_threads * batch_size
         images, labels = tf.train.batch_join(
             images_labels, batch_size=batch_size, capacity=capacity)
@@ -208,7 +208,7 @@ class Preprocess(object):
 
     def split_inputs(self, mode):
         images, labels = self.inputs(mode)
-        num = self.config.train.num_gpus
+        num = self.config.system.num_gpus
         split = lambda t: tf.split(axis=0, num_or_size_splits=num, value=t)
         return split(images), split(labels)
 

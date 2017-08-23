@@ -4,12 +4,12 @@ dataset:
     path:
         train: imagenet/train-*
         test: &vpath imagenet/validation-*
-        validation: *vpath
+        validate: *vpath
     num_classes: 1000
     num_examples_per_epoch:
         train: 1281167
         test: null
-        validation: 50000
+        validate: 50000
     preprocess:
         distort: true
         flip: true

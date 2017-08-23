@@ -102,11 +102,11 @@ class _DotDict(dict):
             return obj
         return self._recursive_apply(obj, {dict: wrap})
 
-    def _link(self, obj, base=None):
+    def _link(self, obj):
         def link_str(string):
             keys = re.findall(r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)', string)
             for k in keys:
-                d, fk = _dot_path(base or self, k)
+                d, fk = _dot_path(obj, k)
                 string = string.replace('$({})'.format(k), str(d[fk]))
             return string
 
@@ -154,7 +154,7 @@ class Config(_DotDict):
         self._wrap(dictionary)
         super().__init__(dictionary)
         self._override(unified, overrides)
-        self._link(unified, unified)
+        self._link(unified)
         self.unified = unified
 
     @staticmethod

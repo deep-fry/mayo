@@ -49,7 +49,7 @@ class Train(object):
         params = self.config.train.learning_rate
         steps_per_epoch = self.config.dataset.num_examples_per_epoch.train
         # 1 step == 1 batch
-        steps_per_epoch /= self.config.train.batch_size
+        steps_per_epoch /= self.config.system.batch_size
         decay_steps = int(steps_per_epoch * params.num_epochs_per_decay)
         return tf.train.exponential_decay(
             params.initial, self.global_step, decay_steps,
@@ -68,7 +68,7 @@ class Train(object):
         return self._net.loss()
 
     def _setup_gradients(self):
-        config = self.config.train
+        config = self.config.system
         # ensure batch size is divisible by number of gpus
         if config.batch_size % config.num_gpus != 0:
             raise ValueError(
@@ -121,7 +121,7 @@ class Train(object):
         self._session.run(init)
 
     def _to_epoch(self, step):
-        epoch = step * self.config.train.batch_size
+        epoch = step * self.config.system.batch_size
         return epoch / float(self.config.dataset.num_examples_per_epoch.train)
 
     def _update_progress(self, step, losses):
@@ -132,7 +132,7 @@ class Train(object):
         info = 'epoch {:.5}, average loss = {:.4} '.format(epoch, loss)
         if duration != 0:
             num_steps = step - getattr(self, '_prev_step', step)
-            imgs_per_sec = num_steps * self.config.train.batch_size
+            imgs_per_sec = num_steps * self.config.system.batch_size
             imgs_per_sec /= float(duration)
             info += '({:.1f} imgs/sec)'.format(imgs_per_sec)
         print(info)
@@ -162,11 +162,11 @@ class Train(object):
         self._net.save_graph()
         print('Training start')
         # train iterations
-        config = self.config.train
         losses = []
         prev_epoch = math.floor(self._to_epoch(step))
+        max_steps = self.config.system.max_steps
         try:
-            while step < config.max_steps:
+            while step < max_steps:
                 _, loss = self._session.run([self._train_op, self._loss])
                 if np.isnan(loss):
                     raise ValueError('model diverged with a nan-valued loss')
@@ -178,7 +178,7 @@ class Train(object):
                 if curr_step % 1000 == 0:
                     self._save_summary(step)
                 curr_step += 1
-                if curr_step % 5000 == 0 or curr_step == config.max_steps:
+                if curr_step % 5000 == 0 or curr_step == max_steps:
                     checkpoint.save(step)
                 epoch = math.floor(self._to_epoch(step))
                 if epoch > prev_epoch:

@@ -50,4 +50,4 @@ def import_from_string(string):
         mod = import_from_file(path)
     else:
         mod = None
-    return import_from_dot_path(dot_path, mod)
+    return import_from_dot_path(string, mod)
