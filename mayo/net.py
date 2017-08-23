@@ -88,7 +88,7 @@ class BaseNet(object):
                     'is not implemented.'.format(params['scope'], layer_type))
             # save end points
             self._add_end_point(layer_name, net)
-            if layer_name == self.config.logits:
+            if layer_name != 'logits' and layer_name == self.config.logits:
                 self._add_end_point('logits', net)
 
     def instantiate(self):
@@ -105,11 +105,11 @@ class BaseNet(object):
         except KeyError:
             pass
         labels = self.end_points['labels']
+        logits = self.end_points['logits']
         with tf.name_scope('loss'):
-            labels = slim.one_hot_encoding(
-                labels, self.config.dataset.num_classes)
+            labels = slim.one_hot_encoding(labels, logits.shape[1])
             loss = tf.losses.softmax_cross_entropy(
-                logits=self.end_points['logits'], onehot_labels=labels)
+                logits=logits, onehot_labels=labels)
             loss = tf.reduce_mean(loss)
             tf.add_to_collection('losses', loss)
         self._add_end_point('loss', loss)

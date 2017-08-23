@@ -32,7 +32,10 @@ def _eval_expr(expr):
         if isinstance(n, ast.UnaryOp):
             return op(e(n.operand))
         return op(e(n.left), e(n.right))
-    tree = ast.parse(expr, mode='eval').body
+    try:
+        tree = ast.parse(expr, mode='eval').body
+    except SyntaxError:
+        return expr
     try:
         return e(tree)
     except TypeError:
