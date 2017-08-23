@@ -1,3 +1,4 @@
+---
 name: mobilenet_v1
 logits: logits
 hyper:
@@ -30,7 +31,7 @@ hyper:
     - &fc
       type: convolution
       kernel_size: [1, 1]
-      num_outputs: $dataset.num_classes
+      num_outputs: $dataset.num_classes + 1
       activation_fn: null
       normalizer_fn: null
 net:

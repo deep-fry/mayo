@@ -10,15 +10,12 @@ from mayo.util import import_from_dot_path
 
 class BaseNet(object):
     def __init__(
-            self, config, images=None, labels=None,
-            batch_size=None, graph=None, reuse=None):
+            self, config, images, labels,
+            is_training=None, graph=None, reuse=None):
         super().__init__()
         self.graph = graph or tf.Graph()
         self.config = config
-        if images is not None:
-            self.batch_size = images.get_shape().as_list()[0]
-        else:
-            self.batch_size = config.dataset.batch_size
+        self.is_training = is_training
         self._reuse = reuse
         self.end_points = {'images': images, 'labels': labels}
         self.instantiate()
@@ -31,10 +28,11 @@ class BaseNet(object):
         with graph_ctx, var_ctx, cpu_ctx as scope:
             yield scope
 
-    def instantiate(self):
-        # force all Variables to reside on the CPU
-        with self.context():
-            self._instantiate()
+    def _add_end_point(self, key, layer):
+        if key in self.end_points:
+            raise KeyError(
+                'layer named "{}" already exists in end_points.'.format(layer))
+        self.end_points[key] = layer
 
     def load_pickle(self, file_name='./assets/lenet5.pkl'):
         with open(file_name, 'rb') as f:
@@ -77,6 +75,7 @@ class BaseNet(object):
             norm_params = dict(norm_params)
             norm_type = norm_params.pop('type')
             params['normalizer_fn'] = import_from_dot_path(norm_type)
+            params['is_training'] = self.is_training
         # weight initializer
         create_initializer(params, 'weights_initializer', layer_name)
         # create(params, 'weights_initializer')
@@ -86,12 +85,6 @@ class BaseNet(object):
     def _instantiate(self):
         net = self.end_points['images']
         self.load_pickle('./assets/lenet5.pkl')
-        if net is None:
-            # if we don't have an input, we initialize the net with
-            # a placeholder input
-            shape = (self.config.dataset.batch_size, )
-            shape += self.config.input_shape
-            net = tf.placeholder(tf.float32, shape=shape, name='input')
         for params in self.config.net:
             layer_name, layer_type, params, norm_params = \
                 self._instantiation_params(params)
@@ -115,9 +108,14 @@ class BaseNet(object):
                     'Instantiation method for layer named "{}" with type "{}" '
                     'is not implemented.'.format(params['scope'], layer_type))
             # save end points
-            self.end_points[layer_name] = net
+            self._add_end_point(layer_name, net)
             if layer_name == self.config.logits:
-                self.end_points['logits'] = net
+                self._add_end_point('logits', net)
+
+    def instantiate(self):
+        # force all Variables to reside on the CPU
+        with self.context():
+            self._instantiate()
 
     def generic_instantiate(self, net, params):
         raise NotImplementedError
@@ -128,10 +126,6 @@ class BaseNet(object):
         except KeyError:
             pass
         labels = self.end_points['labels']
-        if labels is None:
-            raise ValueError(
-                'Unable to get the loss operator without initializing '
-                'Net with "labels".')
         with tf.name_scope('loss'):
             labels = slim.one_hot_encoding(
                 labels, self.config.dataset.num_classes)
@@ -139,7 +133,7 @@ class BaseNet(object):
                 logits=self.end_points['logits'], onehot_labels=labels)
             loss = tf.reduce_mean(loss)
             tf.add_to_collection('losses', loss)
-        self.end_points['loss'] = loss
+        self._add_end_point('loss', loss)
         return loss
 
     def save_graph(self):
@@ -155,36 +149,38 @@ class Net(BaseNet):
         return slim.separable_conv2d(net, **params)
 
     @staticmethod
-    def _reduce_kernel_size_for_small_input(tensor, kernel, stride=1):
+    def _reduce_kernel_size_for_small_input(params, tensor):
         shape = tensor.get_shape().as_list()
         if shape[1] is None or shape[2] is None:
-            return kernel, stride
-        kernel = [min(shape[1], kernel[0]), min(shape[2], kernel[1])]
-        stride = min(stride, kernel[0], kernel[1])
-        return kernel, stride
+            return
+        kernel = params['kernel_size']
+        stride = params.get('stride', 1)
+        params['kernel_size'] = [
+            min(shape[1], kernel[0]), min(shape[2], kernel[1])]
+        # tensorflow complains when stride > kernel size
+        params['stride'] = min(stride, kernel[0], kernel[1])
 
     def instantiate_average_pool(self, net, params):
-        kernel, stride = self._reduce_kernel_size_for_small_input(
-            net, params['kernel_size'], params['stride'])
-        params['kernel_size'] = kernel
-        params['stride'] = stride
+        self._reduce_kernel_size_for_small_input(params, net)
         return slim.avg_pool2d(net, **params)
 
+    def instantiate_max_pool(self, net, params):
+        self._reduce_kernel_size_for_small_input(params, net)
+        return slim.max_pool2d(net, **params)
+
+    def instantiate_fully_connected(self, net, params):
+        return slim.fully_connected(net, **params)
+
+    def instantiate_softmax(self, net, params):
+        return slim.softmax(net, **params)
+
     def instantiate_dropout(self, net, params):
+        params['is_training'] = self.is_training
         return slim.dropout(net, **params)
 
     def instantiate_squeeze(self, net, params):
         params['name'] = params.pop('scope')
         return tf.squeeze(net, **params)
 
-    def instantiate_softmax(self, net, params):
-        return slim.softmax(net, **params)
-
-    def instantiate_fully_connected(self, net, params):
-        return slim.fully_connected(net, **params)
-
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
-
-    def instantiate_max_pool(self, net, params):
-        return slim.max_pool2d(net, **params)

@@ -30,7 +30,7 @@ class CheckpointHandler(object):
     def load(self):
         if not tf.gfile.Exists(self._checkpoint_path):
             return 0
-        print('Loading checkpoint...')
+        print('Loading latest checkpoint...')
         with open(self._checkpoint_path, 'r') as f:
             manifest = yaml.load(f)
         cp_name = manifest['model_checkpoint_path']
@@ -43,6 +43,6 @@ class CheckpointHandler(object):
         return int(step[0])
 
     def save(self, step):
-        print('Saving checkpoint...')
+        print('Saving checkpoint at step {}...'.format(step))
         saver = tf.train.Saver(self._variables())
         saver.save(self._session, self._checkpoint_path, global_step=step)

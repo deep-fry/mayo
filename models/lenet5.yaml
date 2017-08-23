@@ -26,5 +26,5 @@ net:
     - {name: flatten, type: flatten}
     - {name: dropout, <<: *dropout}
     - {name: fc1, <<: *fc, num_outputs: 512}
-    - {name: logits, <<: *fc, num_outputs: $dataset.num_classes,
+    - {name: logits, <<: *fc, num_outputs: $dataset.num_classes + 1,
        activation_fn: null}
