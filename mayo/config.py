@@ -1,8 +1,63 @@
+import re
 import os
+import ast
 import copy
 import glob
+import operator
+import collections
 
 import yaml
+
+
+class ArithTag(object):
+    tag = '!arith'
+    _eval_expr_map = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.BitXor: operator.xor,
+        ast.USub: operator.neg,
+    }
+
+    def __init__(self, expr):
+        super().__init__()
+        self.expr = expr
+
+    def value(self):
+        tree = ast.parse(self.expr, mode='eval').body
+        return self._eval(tree)
+
+    def _eval(self, n):
+        if isinstance(n, ast.Num):
+            return n.n
+        if isinstance(n, ast.Call):
+            op = __builtins__[n.func.id]
+            args = (self._eval(a) for a in n.args)
+            return op(*args)
+        if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
+            raise TypeError('Unrecognized operator node {}'.format(n))
+        op = self._eval_expr_map[type(n.op)]
+        if isinstance(n, ast.UnaryOp):
+            return op(self._eval(n.operand))
+        return op(self._eval(n.left), self._eval(n.right))
+
+    @staticmethod
+    def constructor(loader, node):
+        expr = loader.construct_scalar(node)
+        return ArithTag(expr)
+
+    @classmethod
+    def representer(cls, dumper, data):
+        return dumper.represent_scalar(cls.tag, data.expr)
+
+    def __repr__(self):
+        return repr("{} '{}'".format(self.tag, self.expr))
+
+
+yaml.add_constructor(ArithTag.tag, ArithTag.constructor)
+yaml.add_representer(ArithTag, ArithTag.representer)
 
 
 def _dot_path(keyable, dot_path_key):
@@ -12,6 +67,16 @@ def _dot_path(keyable, dot_path_key):
             key = int(key)
         keyable = keyable[key]
     return keyable, final_key
+
+
+def _dict_merge(d, md):
+    for k, v in md.items():
+        can_merge = k in d and isinstance(d[k], dict)
+        can_merge = can_merge and isinstance(md[k], collections.Mapping)
+        if can_merge:
+            _dict_merge(d[k], md[k])
+        else:
+            d[k] = md[k]
 
 
 class _DotDict(dict):
@@ -31,18 +96,28 @@ class _DotDict(dict):
         return obj
 
     def _wrap(self, obj):
-        def func(obj):
+        def wrap(obj):
             if type(obj) is dict:
                 return _DotDict(obj)
             return obj
-        return self._recursive_apply(obj, {dict: func})
+        return self._recursive_apply(obj, {dict: wrap})
 
-    def _link(self, obj):
-        def func(obj):
-            if obj[0] == '$':
-                return self[obj[1:]]
-            return obj
-        return self._recursive_apply(obj, {str: func})
+    def _link(self, obj, base=None):
+        def link_str(string):
+            keys = re.findall(r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)', string)
+            for k in keys:
+                d, fk = _dot_path(base or self, k)
+                string = string.replace('$({})'.format(k), str(d[fk]))
+            return string
+
+        def link_arith(arith):
+            try:
+                return ArithTag(link_str(arith.expr)).value()
+            except KeyError:
+                return arith
+
+        link_map = {str: link_str, ArithTag: link_arith}
+        return self._recursive_apply(obj, link_map)
 
     def __getitem__(self, key):
         obj, key = _dot_path(self, key)
@@ -63,24 +138,42 @@ class _DotDict(dict):
 
 class Config(_DotDict):
     def __init__(self, yaml_files, overrides=None):
+        self._setup_excepthook()
         unified = {}
         dictionary = {}
+        self._init_system_config(unified, dictionary)
         for path in yaml_files:
             with open(path, 'r') as file:
-                d = yaml.load(file.read())
-            unified.update(copy.deepcopy(d))
+                d = yaml.load(file)
+            _dict_merge(unified, copy.deepcopy(d))
             if 'dataset' in d:
-                unified['dataset']['path'].setdefault(
-                    'root', os.path.dirname(path))
-                self._init_dataset(path, d)
-            dictionary.update(d)
-        self._override(unified, overrides)
-        self.unified = unified
-        super().__init__(dictionary)
-        self._setup_excepthook()
+                self._init_dataset(path, unified, d)
+            _dict_merge(dictionary, d)
         self._override(dictionary, overrides)
-        self._wrap(self)
-        self._link(self)
+        self._link(dictionary)
+        self._wrap(dictionary)
+        super().__init__(dictionary)
+        self._override(unified, overrides)
+        self._link(unified, unified)
+        self.unified = unified
+
+    @staticmethod
+    def _init_dataset(path, u, d):
+        root = os.path.dirname(path)
+        u['dataset']['path'].setdefault('root', root)
+        d = d['dataset']
+        root = d['path'].pop('root', root)
+        # change relative path to our working directory
+        for mode, path in d['path'].items():
+            d['path'][mode] = os.path.join(root, path)
+
+    def _init_system_config(self, unified, dictionary):
+        root = os.path.dirname(__file__)
+        system_yaml = os.path.join(root, 'system.yaml')
+        with open(system_yaml, 'r') as file:
+            system = yaml.load(file)
+        _dict_merge(unified, system)
+        _dict_merge(dictionary, system)
 
     @staticmethod
     def _override(dictionary, overrides):
@@ -91,25 +184,10 @@ class Config(_DotDict):
             sub_dictionary, k = _dot_path(dictionary, k)
             sub_dictionary[k] = yaml.load(v)
 
-    @staticmethod
-    def _init_dataset(path, d):
-        d = d['dataset']
-        try:
-            root = d['path'].pop('root')
-        except KeyError:
-            root = os.path.dirname(path)
-        # change relative path to our working directory
-        for mode, path in d['path'].items():
-            d['path'][mode] = os.path.join(root, path)
-        # add an unlabelled class to num_classes
-        d['num_classes'] += 1
-
     def to_yaml(self, file=None):
         if file is not None:
             file = open(file, 'w')
-        unified = self._recursive_apply(
-            self.unified, {dict: lambda o: dict(o)})
-        return yaml.safe_dump(unified, file, width=80, indent=4)
+        return yaml.dump(self.unified, file, width=80, indent=4)
 
     def image_shape(self):
         params = self.dataset.shape
@@ -130,7 +208,7 @@ class Config(_DotDict):
         if isinstance(etype, KeyboardInterrupt):
             return
         from IPython.core import ultratb
-        use_pdb = self.get('use_pdb', True)
+        use_pdb = self.system.use_pdb
         return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):

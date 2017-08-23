@@ -64,7 +64,7 @@ class Train(object):
 
     def tower_loss(self, images, labels, reuse):
         self._net = Net(
-            self.config, images, labels, graph=self._graph, reuse=reuse)
+            self.config, images, labels, True, graph=self._graph, reuse=reuse)
         return self._net.loss()
 
     def _setup_gradients(self):

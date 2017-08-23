@@ -1,0 +1,7 @@
+---
+system:
+    use_pdb: true
+    num_gpus: 4
+    num_preprocess_threads: 4
+    batch_size: 64
+    max_steps: 10000000

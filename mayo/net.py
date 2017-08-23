@@ -3,20 +3,17 @@ from contextlib import contextmanager
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import import_from_dot_path
+from mayo.util import import_from_string
 
 
 class BaseNet(object):
     def __init__(
-            self, config, images=None, labels=None,
-            batch_size=None, graph=None, reuse=None):
+            self, config, images, labels, is_training,
+            graph=None, reuse=None):
         super().__init__()
         self.graph = graph or tf.Graph()
         self.config = config
-        if images is not None:
-            self.batch_size = images.get_shape().as_list()[0]
-        else:
-            self.batch_size = config.dataset.batch_size
+        self.is_training = is_training
         self._reuse = reuse
         self.end_points = {'images': images, 'labels': labels}
         self.instantiate()
@@ -29,10 +26,11 @@ class BaseNet(object):
         with graph_ctx, var_ctx, cpu_ctx as scope:
             yield scope
 
-    def instantiate(self):
-        # force all Variables to reside on the CPU
-        with self.context():
-            self._instantiate()
+    def _add_end_point(self, key, layer):
+        if key in self.end_points:
+            raise KeyError(
+                'layer {!r} already exists in end_points.'.format(layer))
+        self.end_points[key] = layer
 
     def _instantiation_params(self, params):
         def create(params, key):
@@ -41,34 +39,32 @@ class BaseNet(object):
             except KeyError:
                 return
             p = dict(p)
-            cls = import_from_dot_path(p.pop('type'))
+            cls = import_from_string(p.pop('type'))
+            for k in p.pop('_inherit', []):
+                p[k] = params[k]
             params[key] = cls(**p)
 
-        # layer configs
         params = dict(params)
-        layer_name = params.pop('name')
-        layer_type = params.pop('type')
-        # set up parameters
-        params['scope'] = layer_name
         # batch norm
         norm_params = params.pop('normalizer_fn', None)
         if norm_params:
             norm_params = dict(norm_params)
             norm_type = norm_params.pop('type')
-            params['normalizer_fn'] = import_from_dot_path(norm_type)
-        # weight initializer
-        create(params, 'weights_initializer')
+            params['normalizer_fn'] = import_from_string(norm_type)
+            params['is_training'] = self.is_training
+        # weight and bias hyperparams
         create(params, 'weights_regularizer')
+        create(params, 'weights_initializer')
+        create(params, 'biases_initializer')
+        # layer configs
+        layer_name = params.pop('name')
+        layer_type = params.pop('type')
+        # set up parameters
+        params['scope'] = layer_name
         return layer_name, layer_type, params, norm_params
 
     def _instantiate(self):
         net = self.end_points['images']
-        if net is None:
-            # if we don't have an input, we initialize the net with
-            # a placeholder input
-            shape = (self.config.dataset.batch_size, )
-            shape += self.config.input_shape
-            net = tf.placeholder(tf.float32, shape=shape, name='input')
         for params in self.config.net:
             layer_name, layer_type, params, norm_params = \
                 self._instantiation_params(params)
@@ -91,9 +87,14 @@ class BaseNet(object):
                     'Instantiation method for layer named "{}" with type "{}" '
                     'is not implemented.'.format(params['scope'], layer_type))
             # save end points
-            self.end_points[layer_name] = net
-            if layer_name == self.config.logits:
-                self.end_points['logits'] = net
+            self._add_end_point(layer_name, net)
+            if layer_name != 'logits' and layer_name == self.config.logits:
+                self._add_end_point('logits', net)
+
+    def instantiate(self):
+        # force all Variables to reside on the CPU
+        with self.context():
+            self._instantiate()
 
     def generic_instantiate(self, net, params):
         raise NotImplementedError
@@ -107,18 +108,14 @@ class BaseNet(object):
         except KeyError:
             pass
         labels = self.end_points['labels']
-        if labels is None:
-            raise ValueError(
-                'Unable to get the loss operator without initializing '
-                'Net with "labels".')
+        logits = self.end_points['logits']
         with tf.name_scope('loss'):
-            labels = slim.one_hot_encoding(
-                labels, self.config.dataset.num_classes)
+            labels = slim.one_hot_encoding(labels, logits.shape[1])
             loss = tf.losses.softmax_cross_entropy(
-                logits=self.end_points['logits'], onehot_labels=labels)
+                logits=logits, onehot_labels=labels)
             loss = tf.reduce_mean(loss)
             tf.add_to_collection('losses', loss)
-        self.end_points['loss'] = loss
+        self._add_end_point('loss', loss)
         return loss
 
     def save_graph(self):
@@ -160,6 +157,7 @@ class Net(BaseNet):
         return slim.softmax(net, **params)
 
     def instantiate_dropout(self, net, params):
+        params['is_training'] = self.is_training
         return slim.dropout(net, **params)
 
     def instantiate_squeeze(self, net, params):
