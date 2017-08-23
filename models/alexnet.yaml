@@ -1,0 +1,50 @@
+---
+name: alexnet
+logits: logits
+hyper:
+    - &initializer
+      type: tensorflow.truncated_normal_initializer
+      stddev: 0.09
+    - &conv1
+      type: convolution
+      kernel_size: [11, 11]
+      stride: 4
+      padding: valid
+      weights_initializer: *initializer
+    - &conv2
+      type: convolution
+      kernel_size: [5, 5]
+      stride: 1
+      padding: valid
+      weights_initializer: *initializer
+    - &conv3
+      type: convolution
+      kernel_size: [3, 3]
+      stride: 1
+      padding: valid
+      weights_initializer: *initializer
+    - &pool
+      type: max_pool
+      kernel_size: [3, 3]
+      stride: 2
+      padding: valid
+    - &dropout {type: dropout, keep_prob: 0.999}
+    - &fc
+      type: fully_connected
+      weights_initializer: *initializer
+net:
+    - {name: conv0, <<: *conv1, num_outputs: 64}
+    - {name: pool0, <<: *pool}
+    - {name: conv1, <<: *conv2, num_outputs: 192}
+    - {name: pool1, <<: *pool}
+    - {name: conv2, <<: *conv3, num_outputs: 384}
+    - {name: conv3, <<: *conv3, num_outputs: 384}
+    - {name: conv4, <<: *conv3, num_outputs: 256}
+    - {name: pool2, <<: *pool}
+    - {name: flatten, type: flatten}
+    - {name: fc1, <<: *fc, num_outputs: 4096}
+    - {name: dropou1, <<: *dropout}
+    - {name: fc2, <<: *fc, num_outputs: 4096}
+    - {name: dropou2, <<: *dropout}
+    - {name: logits, <<: *fc, activation_fn: null,
+       num_outputs: !arith $(dataset.num_classes) + 1}
