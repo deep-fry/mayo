@@ -18,7 +18,7 @@ class Evaluate(object):
 
     def logits(self, images, labels, reuse):
         self._net = Net(
-            self.config, images, labels, True, graph=self._graph, reuse=reuse)
+            self.config, images, labels, False, graph=self._graph, reuse=reuse)
         return self._net.logits()
 
     def _update_progress(self, step, top1, top5, num_iterations):
