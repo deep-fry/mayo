@@ -15,15 +15,7 @@ def _params(path):
     return params
 
 
-def _initializer(path, net, name, base):
+def initializer(path, net, name, base):
     name = '{}/{}/{}'.format(net, name, base)
     params = _params(path)
     return tf.constant_initializer(params[name])
-
-
-def weights(path, net, name):
-    return _initializer(path, net, name, 'weights')
-
-
-def biases(path, net, name):
-    return _initializer(path, net, name, 'biases')

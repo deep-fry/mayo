@@ -1,17 +1,15 @@
+---
 name: &net lenet5
 logits: logits
 hyper:
     - &initializer
+      type: external/pickle_initializer.py:initializer
       path: models/lenet5_pickle.pkl
       net: *net
       _inherit: [name]
     - &pickle
-      weights_initializer:
-          <<: *initializer
-          type: external/pickle_initializer.py:weights
-      biases_initializer:
-          <<: *initializer
-          type: external/pickle_initializer.py:biases
+      weights_initializer: {<<: *initializer, base: weights}
+      biases_initializer: {<<: *initializer, base: biases}
     - &conv
       <<: *pickle
       type: convolution

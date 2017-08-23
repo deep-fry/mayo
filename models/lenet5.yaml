@@ -1,3 +1,4 @@
+---
 name: lenet5
 logits: logits
 hyper:
