@@ -9,37 +9,51 @@ import collections
 import yaml
 
 
-_eval_expr_map = {
-    ast.Add: operator.add,
-    ast.Sub: operator.sub,
-    ast.Mult: operator.mul,
-    ast.Div: operator.truediv,
-    ast.Pow: operator.pow,
-    ast.BitXor: operator.xor,
-    ast.USub: operator.neg,
-}
+class ArithTag(object):
+    tag = '!arith'
+    _eval_expr_map = {
+        ast.Add: operator.add,
+        ast.Sub: operator.sub,
+        ast.Mult: operator.mul,
+        ast.Div: operator.truediv,
+        ast.Pow: operator.pow,
+        ast.BitXor: operator.xor,
+        ast.USub: operator.neg,
+    }
 
+    def __init__(self, expr):
+        super().__init__()
+        self.expr = expr
 
-def _eval_expr(expr):
-    def e(n):
+    def value(self):
+        tree = ast.parse(self.expr, mode='eval').body
+        return self._eval(tree)
+
+    def _eval(self, n):
         if isinstance(n, ast.Num):
             return n.n
-        if isinstance(n, ast.Name):
-            return n.id
         if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
             raise TypeError('Unrecognized operator node {}'.format(n))
-        op = _eval_expr_map.get(type(n.op))
+        op = self._eval_expr_map.get(type(n.op))
         if isinstance(n, ast.UnaryOp):
-            return op(e(n.operand))
-        return op(e(n.left), e(n.right))
-    try:
-        tree = ast.parse(expr, mode='eval').body
-    except SyntaxError:
-        return expr
-    try:
-        return e(tree)
-    except TypeError:
-        return expr
+            return op(self._eval(n.operand))
+        return op(self._eval(n.left), self._eval(n.right))
+
+    @staticmethod
+    def constructor(loader, node):
+        expr = loader.construct_scalar(node)
+        return ArithTag(expr)
+
+    @classmethod
+    def representer(cls, dumper, data):
+        return dumper.represent_scalar(cls.tag, data.expr)
+
+    def __repr__(self):
+        return repr("{} '{}'".format(self.tag, self.expr))
+
+
+yaml.add_constructor(ArithTag.tag, ArithTag.constructor)
+yaml.add_representer(ArithTag, ArithTag.representer)
 
 
 def _dot_path(keyable, dot_path_key):
@@ -84,13 +98,22 @@ class _DotDict(dict):
             return obj
         return self._recursive_apply(obj, {dict: wrap})
 
-    def _link(self, obj):
-        def link(string):
-            keys = re.findall(r'\$([_a-zA-Z][_a-zA-Z0-9\.]+)', string)
+    def _link(self, obj, base=None):
+        def link_str(string):
+            keys = re.findall(r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)', string)
             for k in keys:
-                string = string.replace('$' + k, str(self[k]))
-            return _eval_expr(string)
-        return self._recursive_apply(obj, {str: link})
+                d, fk = _dot_path(base or self, k)
+                string = string.replace('$({})'.format(k), str(d[fk]))
+            return string
+
+        def link_arith(arith):
+            try:
+                return ArithTag(link_str(arith.expr)).value()
+            except KeyError:
+                return arith
+
+        link_map = {str: link_str, ArithTag: link_arith}
+        return self._recursive_apply(obj, link_map)
 
     def __getitem__(self, key):
         obj, key = _dot_path(self, key)
@@ -111,6 +134,7 @@ class _DotDict(dict):
 
 class Config(_DotDict):
     def __init__(self, yaml_files, overrides=None):
+        self._setup_excepthook()
         unified = {}
         dictionary = {}
         self._init_system_config(unified, dictionary)
@@ -122,9 +146,9 @@ class Config(_DotDict):
                 self._init_dataset(path, unified, d)
             _dict_merge(dictionary, d)
         self._override(unified, overrides)
+        self._link(unified, unified)
         self.unified = unified
         super().__init__(dictionary)
-        self._setup_excepthook()
         self._override(dictionary, overrides)
         self._wrap(self)
         self._link(self)
@@ -161,7 +185,7 @@ class Config(_DotDict):
             file = open(file, 'w')
         unified = self._recursive_apply(
             self.unified, {dict: lambda o: dict(o)})
-        return yaml.safe_dump(unified, file, width=80, indent=4)
+        return yaml.dump(unified, file, width=80, indent=4)
 
     def image_shape(self):
         params = self.dataset.shape

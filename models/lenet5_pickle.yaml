@@ -5,8 +5,8 @@ hyper:
     - &pickle_initializer
       weights_initializer: &weights_initializer
           type: external/pickle_initializer.py:initializer
-          path: models/lenet5_pickle.pkl
-          net: lenet5
+          path: models/$(name)_pickle.pkl
+          net: $(name)
           base: weights
           _inherit: [name]
       biases_initializer: {<<: *weights_initializer, base: biases}
@@ -33,5 +33,5 @@ net:
     - {name: flatten, type: flatten}
     - {name: dropout, <<: *dropout}
     - {name: fc1, <<: *fc, num_outputs: 512}
-    - {name: logits, <<: *fc, num_outputs: $dataset.num_classes + 1,
-       activation_fn: null}
+    - {name: logits, <<: *fc, activation_fn: null,
+       num_outputs: !arith $(dataset.num_classes) + 1}
