@@ -3,7 +3,7 @@ from contextlib import contextmanager
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import import_from_dot_path
+from mayo.util import import_from_string
 
 
 class BaseNet(object):
@@ -39,25 +39,28 @@ class BaseNet(object):
             except KeyError:
                 return
             p = dict(p)
-            cls = import_from_dot_path(p.pop('type'))
+            cls = import_from_string(p.pop('type'))
+            for k in p.pop('_inherit', []):
+                p[k] = params[k]
             params[key] = cls(**p)
 
-        # layer configs
         params = dict(params)
-        layer_name = params.pop('name')
-        layer_type = params.pop('type')
-        # set up parameters
-        params['scope'] = layer_name
         # batch norm
         norm_params = params.pop('normalizer_fn', None)
         if norm_params:
             norm_params = dict(norm_params)
             norm_type = norm_params.pop('type')
-            params['normalizer_fn'] = import_from_dot_path(norm_type)
+            params['normalizer_fn'] = import_from_string(norm_type)
             params['is_training'] = self.is_training
-        # weight initializer
-        create(params, 'weights_initializer')
+        # weight and bias hyperparams
         create(params, 'weights_regularizer')
+        create(params, 'weights_initializer')
+        create(params, 'biases_initializer')
+        # layer configs
+        layer_name = params.pop('name')
+        layer_type = params.pop('type')
+        # set up parameters
+        params['scope'] = layer_name
         return layer_name, layer_type, params, norm_params
 
     def _instantiate(self):
