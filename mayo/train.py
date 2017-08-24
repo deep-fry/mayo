@@ -67,6 +67,8 @@ class Train(object):
     def tower_loss(self, images, labels, reuse):
         self._net = Net(
             self.config, images, labels, graph=self._graph, reuse=reuse)
+        #test ops
+        print(self._net.test_list)
         return self._net.loss()
 
     def _setup_gradients(self):
@@ -105,52 +107,17 @@ class Train(object):
             tf.summary.scalar('learning_rate', self.learning_rate))
         self._summary_op = tf.summary.merge(summaries)
 
-
-    def change_vars(self):
-        model_params = tf.trainable_variables()
-        ops = []
-        for v in model_params:
-            ops.append(tf.assign(v, self.fixed_point_quantize(v, 2, 4)))
-            # v = self.fixed_point_quantize(v, 2, 8)
-        return ops
-
-    def fixed_point_quantize(self, x, n, f):
-        '''
-        1 bit sign, n bit int and f bit frac
-        ref:
-        https://github.com/tensorflow/tensorflow/blob/r1.3/tensorflow/python/ops/array_grad.py
-        '''
-        G = tf.get_default_graph()
-
-        # shift left f bits
-        x = x * (2**f)
-        # quantize
-        with G.gradient_override_map({"Round":"Identity"}):
-            x = tf.round(x)
-        # shift right f bits
-        x = tf.div(x, 2 ** f)
-        # with G.gradient_override_map({"FloorDiv":"CUSTOM_FLOOR"}):
-        #     x = tf.floordiv(x, 2 ** f)
-
-        # cap int
-        int_max = 2 ** n
-        x = tf.clip_by_value(x, -int_max, int_max)
-        # x = x * 0
-        return x
-
     def _setup_train_operation(self):
-        ops = self.change_vars()
-        with tf.control_dependencies(ops):
-            app_grad_op = self.optimizer.apply_gradients(
-                self._gradients, global_step=self.global_step)
-            app_grad_op = self.optimizer.apply_gradients(
-                self._gradients, global_step=self.global_step)
-            var_avgs = tf.train.ExponentialMovingAverage(
-                self.config.train.moving_average_decay, self.global_step)
-            var_avgs_op = var_avgs.apply(
-                tf.trainable_variables() + tf.moving_average_variables())
-            bn_op = tf.group(*self._batch_norm_updates)
-            self._train_op = tf.group(app_grad_op, var_avgs_op, bn_op)
+        app_grad_op = self.optimizer.apply_gradients(
+            self._gradients, global_step=self.global_step)
+        app_grad_op = self.optimizer.apply_gradients(
+            self._gradients, global_step=self.global_step)
+        var_avgs = tf.train.ExponentialMovingAverage(
+            self.config.train.moving_average_decay, self.global_step)
+        var_avgs_op = var_avgs.apply(
+            tf.trainable_variables() + tf.moving_average_variables())
+        bn_op = tf.group(*self._batch_norm_updates)
+        self._train_op = tf.group(app_grad_op, var_avgs_op, bn_op)
 
     def _init_session(self):
         # build an initialization operation to run below
@@ -199,15 +166,18 @@ class Train(object):
         losses = []
         try:
             while step < config.max_steps:
-                _, loss = self._session.run([self._train_op, self._loss])
+                #test fixed-point quantization
+                _, loss, test_val = self._session.run([self._train_op, self._loss, self._net.test_list[0]])
                 if np.isnan(loss):
                     raise ValueError('model diverged with a nan-valued loss')
                 losses.append(loss)
                 if step % 100 == 0:
                     # print(tf.trainable_variables()[0], tf.trainable_variables()[1])
-                    print(tf.trainable_variables()[0].eval(session = self._session))
-                    print(tf.trainable_variables()[1].eval(session = self._session))
-                    # sys.exit()
+                    # print(tf.trainable_variables()[0].eval(session = self._session))
+                    # print(tf.trainable_variables()[1].eval(session = self._session))
+                    # print one value to prove quantization is working
+                    print(test_val)
+                    sys.exit()
                     self._update_progress(step, losses)
                     losses = []
                 if step % 1000 == 0:

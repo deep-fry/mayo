@@ -16,6 +16,8 @@ class BaseNet(object):
             self, config, images=None, labels=None,
             batch_size=None, graph=None, reuse=None):
         super().__init__()
+        #testing quantized ops, now instantiate multiple times
+        self.test_list = []
         self.graph = graph or tf.Graph()
         self.config = config
         if images is not None:
@@ -50,11 +52,13 @@ class BaseNet(object):
     def instantiate(self):
         def new_get_variable(v):
             name = v.op.name
-            return self.fixed_point_quantize(v, 2, 2)
+            op = self.fixed_point_quantize(v, 2, 4)
+            self.test_list.append(op)
+            return op
         # force all Variables to reside on the CPU
         with self.remap_variables(new_get_variable), self.context():
-        # with self.context():
             self._instantiate()
+
 
     def _instantiation_params(self, params):
         def create(params, key):
@@ -187,12 +191,6 @@ class Net(BaseNet):
     def instantiate_max_pool(self, net, params):
         return slim.max_pool2d(net, **params)
 
-    def change_vars(self):
-        model_params = tf.trainable_variables()
-        for v in model_params:
-            tf.assign(v, self.fixed_point_quantize(v, 1, 1))
-            # v = self.fixed_point_quantize(v, 2, 8)
-
     def fixed_point_quantize(self, x, n, f):
         '''
         1 bit sign, n bit int and f bit frac
@@ -204,46 +202,13 @@ class Net(BaseNet):
         # shift left f bits
         x = x * (2**f)
         # quantize
-        # with G.gradient_override_map({"Round":"Identity"}):
-        #     x = tf.round(x)
-        # # shift right f bits
-        # x = tf.div(x, 2 ** f)
-        with G.gradient_override_map({"FloorDiv":"CUSTOM_FLOOR"}):
-            x = tf.floordiv(x, 2 ** f)
+        with G.gradient_override_map({"Round":"Identity"}):
+            x = tf.round(x)
+        # shift right f bits
+        x = tf.div(x, 2 ** f)
 
         # cap int
         int_max = 2 ** n
         x = tf.clip_by_value(x, -int_max, int_max)
         # x = x * 0
         return x
-
-    # def monkey_patch_get_var(self, fn, n, b):
-    #     """
-    #     ref:
-    #     https://github.com/ppwwyyxx/tensorpack/blob/master/examples/DoReFa-Net/dorefa.py
-    #     """
-    #     def new_get_variable(v):
-    #         name = v.op.name
-    #         return fn(v, n, b)
-    #     return new_get_variable
-#
-@tf.RegisterGradient("CUSTOM_FLOOR")
-def grad_floor_div(op, grad):
-    """
-    Use div backprop for floor div
-    ref:
-    https://github.com/tensorflow/tensorflow/blob/227fc9f811eee28a2f1471aac4933f312c21479b/tensorflow/python/ops/math_grad.py
-    """
-    x = op.inputs[0]
-    y = op.inputs[1]
-    sx = array_ops.shape(x)
-    sy = array_ops.shape(y)
-    # pylint: disable=protected-access
-    rx, ry = gen_array_ops._broadcast_gradient_args(sx, sy)
-    # pylint: enable=protected-access
-    x = math_ops.conj(x)
-    y = math_ops.conj(y)
-    return (array_ops.reshape(math_ops.reduce_sum(math_ops.div(grad, y), rx), sx),
-            array_ops.reshape(
-                math_ops.reduce_sum(grad * math_ops.div(math_ops.div(-x, y), y),
-                    ry), sy))
