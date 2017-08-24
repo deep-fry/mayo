@@ -39,6 +39,8 @@ class BaseNet(object):
                 p = params[key]
             except KeyError:
                 return
+            if p is None:
+                return
             p = dict(p)
             cls = import_from_string(p.pop('type'))
             for k in p.pop('_inherit', []):
@@ -55,6 +57,8 @@ class BaseNet(object):
             params['normalizer_fn'] = import_from_string(norm_type)
         # weight and bias hyperparams
         create(params, 'weights_regularizer')
+        create(params, 'pointwise_regularizer')
+        create(params, 'depthwise_regularizer')
         create(params, 'weights_initializer')
         create(params, 'biases_initializer')
         # layer configs
@@ -62,6 +66,10 @@ class BaseNet(object):
         layer_type = params.pop('type')
         # set up parameters
         params['scope'] = layer_name
+        try:
+            params['padding'] = params['padding'].upper()
+        except KeyError:
+            pass
         return layer_name, layer_type, params, norm_params
 
     def _instantiate(self):
@@ -142,7 +150,25 @@ class Net(BaseNet):
         return slim.conv2d(net, **params)
 
     def instantiate_depthwise_separable_convolution(self, net, params):
-        return slim.separable_conv2d(net, **params)
+        scope = params.pop('scope')
+        num_outputs = params.pop('num_outputs')
+        stride = params.pop('stride')
+        kernel = params.pop('kernel_size')
+        depth_multiplier = params.pop('depth_multiplier', 1)
+        depthwise_regularizer = params.pop('depthwise_regularizer')
+        pointwise_regularizer = params.pop('pointwise_regularizer')
+        # depthwise layer
+        depthwise = slim.separable_conv2d(
+            net, num_outputs=None, kernel_size=kernel, stride=stride,
+            weights_regularizer=depthwise_regularizer,
+            depth_multiplier=1, scope='{}_depthwise'.format(scope), **params)
+        # pointwise layer
+        num_outputs = max(int(num_outputs * depth_multiplier), 8)
+        pointwise = slim.conv2d(
+            depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
+            weights_regularizer=pointwise_regularizer,
+            scope='{}_pointwise'.format(scope), **params)
+        return pointwise
 
     @staticmethod
     def _reduce_kernel_size_for_small_input(params, tensor):
