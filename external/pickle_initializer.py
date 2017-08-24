@@ -21,6 +21,10 @@ def initializer(path, net, name, base):
     return tf.constant_initializer(params[name])
 
 def vgg_initializer(path, net, name, base):
-    name = '{}/{}/{}'.format(net, name, base)
+    # name = '{}/{}/{}'.format(net, layer_name, base)
     params = _params(path)
+    for key in params.keys():
+        if (base in key) and (name in key):
+            name = key
+            break
     return tf.constant_initializer(params[name])
