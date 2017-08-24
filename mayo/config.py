@@ -187,7 +187,8 @@ class Config(_DotDict):
     def to_yaml(self, file=None):
         if file is not None:
             file = open(file, 'w')
-        return yaml.dump(self.unified, file, width=80, indent=4)
+        kwargs = {'explicit_start': True, 'width': 70, 'indent': 4}
+        return yaml.dump(self.unified, file, **kwargs)
 
     def image_shape(self):
         params = self.dataset.shape

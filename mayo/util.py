@@ -44,6 +44,7 @@ def import_from_dot_path(path, m=None):
     return m
 
 
+@functools.lru_cache(maxsize=None)
 def import_from_string(string):
     if ':' in string:
         path, string = string.split(':')
