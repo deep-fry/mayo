@@ -19,3 +19,8 @@ def initializer(path, net, name, base):
     name = '{}/{}/{}'.format(net, name, base)
     params = _params(path)
     return tf.constant_initializer(params[name])
+
+def vgg_initializer(path, net, name, base):
+    name = '{}/{}/{}'.format(net, name, base)
+    params = _params(path)
+    return tf.constant_initializer(params[name])
