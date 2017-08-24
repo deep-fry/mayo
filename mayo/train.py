@@ -31,7 +31,7 @@ def _average_gradients(tower_grads):
 
 class Train(object):
     progress_indicator = itertools.cycle(reversed('⣾⣽⣻⢿⡿⣟⣯⣷'))
-    average_loss_decay = 0.9
+    average_decay = 0.99
 
     def __init__(self, config):
         super().__init__()
@@ -128,21 +128,27 @@ class Train(object):
         epoch = step * self.config.system.batch_size
         return epoch / float(self.config.dataset.num_examples_per_epoch.train)
 
+    def _ema(self, name, value):
+        name = '_ema_{}'.format(name)
+        decay = self.average_decay
+        ema = decay * getattr(self, name, value) + (1 - decay) * value
+        setattr(self, name, ema)
+        return ema
+
     def _update_progress(self, step, loss, cp_step):
+        ind = next(self.progress_indicator)
+        epoch = self._to_epoch(step)
+        info = '{} | epoch: {:6.2f} | loss: {:8.3e} | checkpoint: {:6.2f}'
+        info = info.format(
+            ind, epoch, self._ema('loss', loss), self._to_epoch(cp_step))
+        # performance
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
-        ema_loss = getattr(self, '_ema_loss', loss)
-        epoch = self._to_epoch(step)
-        decay = self.average_loss_decay
-        self._ema_loss = decay * ema_loss + (1 - decay) * loss
-        info = '{} | epoch: {:6.2f} | loss: {:8.3e} | checkpoint: {:6.2f}'
-        ind = next(self.progress_indicator)
-        info = info.format(
-            ind, epoch, self._ema_loss, self._to_epoch(cp_step))
         if duration != 0:
             num_steps = step - getattr(self, '_prev_step', step)
             imgs_per_sec = num_steps * self.config.system.batch_size
             imgs_per_sec /= float(duration)
+            imgs_per_sec = self._ema('imgs_per_sec', imgs_per_sec)
             info += ' | throughput: {:4.0f}/s'.format(imgs_per_sec)
         print('\r' + info, end='')
         self._prev_time = now
