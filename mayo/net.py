@@ -50,8 +50,8 @@ class BaseNet(object):
         if norm_params:
             norm_params = dict(norm_params)
             norm_type = norm_params.pop('type')
+            norm_params['is_training'] = self.is_training
             params['normalizer_fn'] = import_from_string(norm_type)
-            params['is_training'] = self.is_training
         # weight and bias hyperparams
         create(params, 'weights_regularizer')
         create(params, 'weights_initializer')
