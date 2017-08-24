@@ -181,9 +181,16 @@ class Config(_DotDict):
         if not overrides:
             return
         for override in overrides.split(';'):
-            k, v = (o.strip() for o in override.split('='))
-            sub_dictionary, k = _dot_path(dictionary, k)
-            sub_dictionary[k] = yaml.load(v)
+            k_path, v = (o.strip() for o in override.split('='))
+            sub_dictionary, k = _dot_path(dictionary, k_path)
+            v = yaml.load(v)
+            cls = sub_dictionary[k].__class__
+            if not isinstance(v, cls):
+                msg = ('Type of the overriding value "{.__name__}" for '
+                       'key "{}" is not compatible with the type of '
+                       'value "{.__name__}" to be overridden.')
+                raise TypeError(msg.format(type(v), k_path, cls))
+            sub_dictionary[k] = v
 
     def to_yaml(self, file=None):
         if file is not None:
@@ -210,7 +217,7 @@ class Config(_DotDict):
         if isinstance(etype, KeyboardInterrupt):
             return
         from IPython.core import ultratb
-        use_pdb = self.system.use_pdb
+        use_pdb = self.get('system.use_pdb', False)
         return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):
