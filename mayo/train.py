@@ -1,5 +1,6 @@
 import time
 import math
+import itertools
 
 import numpy as np
 import tensorflow as tf
@@ -29,6 +30,9 @@ def _average_gradients(tower_grads):
 
 
 class Train(object):
+    progress_indicator = itertools.cycle(reversed('⣾⣽⣻⢿⡿⣟⣯⣷'))
+    average_loss_decay = 0.9
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -124,18 +128,23 @@ class Train(object):
         epoch = step * self.config.system.batch_size
         return epoch / float(self.config.dataset.num_examples_per_epoch.train)
 
-    def _update_progress(self, step, losses):
+    def _update_progress(self, step, loss, cp_step):
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
+        ema_loss = getattr(self, '_ema_loss', loss)
         epoch = self._to_epoch(step)
-        loss = sum(losses) / len(losses)
-        info = 'epoch {:.5}, average loss = {:.4} '.format(epoch, loss)
+        decay = self.average_loss_decay
+        self._ema_loss = decay * ema_loss + (1 - decay) * loss
+        info = '{} | epoch: {:6.2f} | loss: {:8.3e} | checkpoint: {:6.2f}'
+        ind = next(self.progress_indicator)
+        info = info.format(
+            ind, epoch, self._ema_loss, self._to_epoch(cp_step))
         if duration != 0:
             num_steps = step - getattr(self, '_prev_step', step)
             imgs_per_sec = num_steps * self.config.system.batch_size
             imgs_per_sec /= float(duration)
-            info += '({:.1f} imgs/sec)'.format(imgs_per_sec)
-        print(info)
+            info += ' | throughput: {:4.0f}/s'.format(imgs_per_sec)
+        print('\r' + info, end='')
         self._prev_time = now
         self._prev_step = step
 
@@ -145,7 +154,6 @@ class Train(object):
         return tf.summary.FileWriter('summaries/', graph=self._graph)
 
     def _save_summary(self, step):
-        print('Saving summaries...')
         summary = self._session.run(self._summary_op)
         self._summary_writer.add_summary(summary, step)
 
@@ -156,13 +164,12 @@ class Train(object):
         self._init_session()
         checkpoint = CheckpointHandler(
             self._session, self.config.name, self.config.dataset.name)
-        step = checkpoint.load()
+        cp_step = step = checkpoint.load()
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
         print('Training start')
         # train iterations
-        losses = []
         prev_epoch = math.floor(self._to_epoch(step))
         max_steps = self.config.system.max_steps
         try:
@@ -170,16 +177,13 @@ class Train(object):
                 _, loss = self._session.run([self._train_op, self._loss])
                 if np.isnan(loss):
                     raise ValueError('model diverged with a nan-valued loss')
-                losses.append(loss)
-                is_starting = curr_step < 100 and curr_step % 10 == 0
-                if curr_step % 100 == 0 or is_starting:
-                    self._update_progress(step, losses)
-                    losses = []
+                self._update_progress(step, loss, cp_step)
                 if curr_step % 1000 == 0:
                     self._save_summary(step)
                 curr_step += 1
                 if curr_step % 5000 == 0 or curr_step == max_steps:
                     checkpoint.save(step)
+                    cp_step = step
                 epoch = math.floor(self._to_epoch(step))
                 if epoch > prev_epoch:
                     prev_epoch = epoch

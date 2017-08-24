@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from collections import OrderedDict
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -121,6 +122,19 @@ class BaseNet(object):
     def save_graph(self):
         writer = tf.summary.FileWriter(self.config['name'], self.graph)
         writer.close()
+
+    def param_counts(self):
+        count = OrderedDict()
+        total = 0
+        for v in tf.trainable_variables():
+            shape = v.get_shape()
+            v_total = 1
+            for dim in shape:
+                v_total *= dim.value
+            count[v.name] = v_total
+            total += v_total
+        count['total'] = total
+        return count
 
 
 class Net(BaseNet):

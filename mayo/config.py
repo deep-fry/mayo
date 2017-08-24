@@ -156,6 +156,7 @@ class Config(_DotDict):
         self._override(unified, overrides)
         self._link(unified)
         self.unified = unified
+        self._setup_tensorflow_log_level()
 
     @staticmethod
     def _init_dataset(path, u, d):
@@ -215,3 +216,7 @@ class Config(_DotDict):
     def _setup_excepthook(self):
         import sys
         sys.excepthook = self._excepthook
+
+    def _setup_tensorflow_log_level(self):
+        level = self.system.tensorflow_log_level
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level)
