@@ -2,27 +2,20 @@
 name: alexnet
 logits: logits
 hyper:
-    - &initializer
-      type: tensorflow.truncated_normal_initializer
-      stddev: 0.09
-    - &conv1
+    - &bias_init {type: tensorflow.constant_initializer, value: 0.1}
+    - &weights_and_biases
+      # weight_initializer defaults to xavier
+      weights_regularizer:
+          type: tensorflow.contrib.layers.l2_regularizer
+          scale: 0.0005
+      biases_initializer: *bias_init
+    - &conv
+      <<: *weights_and_biases
       type: convolution
       kernel_size: [11, 11]
       stride: 4
-      padding: valid
-      weights_initializer: *initializer
-    - &conv2
-      type: convolution
-      kernel_size: [5, 5]
-      stride: 1
-      padding: valid
-      weights_initializer: *initializer
-    - &conv3
-      type: convolution
-      kernel_size: [3, 3]
-      stride: 1
-      padding: valid
-      weights_initializer: *initializer
+      padding: same
+    - &conv_repeat {<<: *conv, kernel_size: [3, 3], stride: 1}
     - &pool
       type: max_pool
       kernel_size: [3, 3]
@@ -31,20 +24,28 @@ hyper:
     - &dropout {type: dropout, keep_prob: 0.999}
     - &fc
       type: fully_connected
-      weights_initializer: *initializer
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
+      biases_initializer: *bias_init
 net:
-    - {name: conv0, <<: *conv1, num_outputs: 64}
-    - {name: pool0, <<: *pool}
-    - {name: conv1, <<: *conv2, num_outputs: 192}
+    - {name: conv1, <<: *conv, padding: valid, num_outputs: 64}
     - {name: pool1, <<: *pool}
-    - {name: conv2, <<: *conv3, num_outputs: 384}
-    - {name: conv3, <<: *conv3, num_outputs: 384}
-    - {name: conv4, <<: *conv3, num_outputs: 256}
+    - {name: conv2, <<: *conv,
+       kernel_size: [5, 5], stride: 1, num_outputs: 192}
     - {name: pool2, <<: *pool}
-    - {name: flatten, type: flatten}
-    - {name: fc1, <<: *fc, num_outputs: 4096}
-    - {name: dropou1, <<: *dropout}
-    - {name: fc2, <<: *fc, num_outputs: 4096}
-    - {name: dropou2, <<: *dropout}
-    - {name: logits, <<: *fc, activation_fn: null,
-       num_outputs: !arith $(dataset.num_classes) + 1}
+    - {name: conv3, <<: *conv_repeat, num_outputs: 384}
+    - {name: conv4, <<: *conv_repeat, num_outputs: 384}
+    - {name: conv5, <<: *conv_repeat, num_outputs: 256}
+    - {name: pool5, <<: *pool}
+    - {name: flatten5, type: flatten}
+    - {name: fc6, <<: *fc, num_outputs: 4096}
+    - {name: dropout6, <<: *dropout}
+    - {name: fc7, <<: *fc, num_outputs: 4096}
+    - {name: dropout7, <<: *dropout}
+    - name: logits
+      <<: *fc
+      # TODO check if alexnet uses a background class
+      num_outputs: !arith $(dataset.num_classes) + 1
+      activation_fn: null
+      biases_initializer: {type: tensorflow.zeros_initializer}
