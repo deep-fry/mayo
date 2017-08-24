@@ -27,4 +27,7 @@ def vgg_initializer(path, net, name, base):
         if (base in key) and (name in key):
             name = key
             break
+           break
+    if name == 'logits':
+        name = 'vgg_16/fc8/'+base
     return tf.constant_initializer(params[name])
