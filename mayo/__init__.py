@@ -8,5 +8,3 @@ from mayo.cli import meta
 
 __all__ = [Config, Net, Train]
 locals().update(meta())
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'

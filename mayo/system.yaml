@@ -5,3 +5,4 @@ system:
     num_preprocess_threads: 4
     batch_size: 64
     max_steps: 10000000
+    tensorflow_log_level: 2
