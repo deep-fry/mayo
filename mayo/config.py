@@ -217,7 +217,10 @@ class Config(_DotDict):
         if isinstance(etype, KeyboardInterrupt):
             return
         from IPython.core import ultratb
-        use_pdb = self.get('system.use_pdb', False)
+        try:
+            use_pdb = self['system.use_pdb']
+        except KeyError:
+            use_pdb = False
         return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):

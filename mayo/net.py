@@ -35,9 +35,8 @@ class BaseNet(object):
 
     def _instantiation_params(self, params):
         def create(params, key):
-            try:
-                p = params[key]
-            except KeyError:
+            p = params.get(key, None)
+            if p is None:
                 return
             p = dict(p)
             cls = import_from_string(p.pop('type'))
@@ -54,9 +53,12 @@ class BaseNet(object):
             norm_params['is_training'] = self.is_training
             params['normalizer_fn'] = import_from_string(norm_type)
         # weight and bias hyperparams
-        create(params, 'weights_regularizer')
-        create(params, 'weights_initializer')
-        create(params, 'biases_initializer')
+        param_names = [
+            'weights_regularizer', 'biases_regularizer',
+            'weights_initializer', 'biases_initializer',
+            'pointwise_regularizer', 'depthwise_regularizer']
+        for name in param_names:
+            create(params, name)
         # layer configs
         layer_name = params.pop('name')
         layer_type = params.pop('type')
