@@ -96,7 +96,7 @@ Options:
     def cli_export(self, args):
         print(self._config(args).to_yaml())
 
-    def cli_count(self, args):
+    def cli_info(self, args):
         import tensorflow as tf
         from mayo.net import Net
         config = self._config(args)
@@ -104,9 +104,8 @@ Options:
         labels_shape = (None, config.dataset.num_classes)
         images = tf.placeholder(tf.float32, images_shape, 'images')
         labels = tf.placeholder(tf.int32, labels_shape, 'labels')
-        counts = Net(config, images, labels, False).param_counts()
-        for name, count in counts.items():
-            print('{}: {}'.format(name, count))
+        info = Net(config, images, labels, False).info()
+        print(info)
 
     def main(self, args=None):
         if args is None:
