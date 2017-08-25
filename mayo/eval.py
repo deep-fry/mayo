@@ -29,8 +29,10 @@ class Evaluate(object):
             imgs_per_sec = self.config.system.batch_size * num_steps
             imgs_per_sec /= float(duration)
             percentage = step / num_iterations * 100
-            print('[{:.2f}%] top1: {:.2f}%, top5: {:.2f}% ({:.1f} imgs/sec)'
-                  .format(percentage, top1 * 100, top5 * 100, imgs_per_sec))
+            info = '[{:.2f}%] top1: {:.2f}%, top5: {:.2f}% ({:.1f} imgs/sec)'
+            info = info.format(
+                percentage, top1 * 100, top5 * 100, imgs_per_sec)
+            print(info, end='\r')
         self._prev_time = now
         self._prev_step = step
 
@@ -74,7 +76,7 @@ class Evaluate(object):
             print('Evaluation aborted')
             coord.request_stop(e)
 
-        print('Evaluation complete')
+        print('\nEvaluation complete')
         print('\ttop1: {:.2f}%, top5: {:.2f}% [{} images]'
               .format(top1_acc * 100, top5_acc * 100, total))
         coord.request_stop()

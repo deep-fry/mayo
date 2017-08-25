@@ -45,12 +45,11 @@ class CLI(object):
     _DOC = """
 {__mayo__} {__version__} ({__date__})
 {__description__}
-{__credits__}"""
+{__credits__}
+"""
     _USAGE = """
 Usage:
-    {__executable__} train <yaml>... [options]
-    {__executable__} eval <yaml>... [options]
-    {__executable__} export <yaml>... [options]
+    {commands}
     {__executable__} (-h | --help)
 
 Options:
@@ -58,11 +57,25 @@ Options:
                                 Example: --overrides="a.b = c; d = [e, f]"
 """
 
+    def _commands(self):
+        commands = {}
+        for method in dir(self):
+            if not method.startswith('cli_'):
+                continue
+            commands[method[4:]] = getattr(self, method)
+        return commands
+
     def doc(self):
         return self._DOC.format(**meta())
 
     def usage(self):
-        return self.doc() + self._USAGE.format(**meta())
+        usage_meta = meta()
+        commands = []
+        for k in self._commands().keys():
+            command = '{__executable__} {command} <yaml>... [options]'
+            commands.append(command.format(command=k, **usage_meta))
+        usage_meta['commands'] = '\n    '.join(commands)
+        return self.doc() + self._USAGE.format(**usage_meta)
 
     def _config(self, args):
         from importlib.util import spec_from_file_location, module_from_spec
@@ -83,15 +96,23 @@ Options:
     def cli_export(self, args):
         print(self._config(args).to_yaml())
 
+    def cli_count(self, args):
+        import tensorflow as tf
+        from mayo.net import Net
+        config = self._config(args)
+        images_shape = (None, ) + config.image_shape()
+        labels_shape = (None, config.dataset.num_classes)
+        images = tf.placeholder(tf.float32, images_shape, 'images')
+        labels = tf.placeholder(tf.int32, labels_shape, 'labels')
+        counts = Net(config, images, labels, False).param_counts()
+        for name, count in counts.items():
+            print('{}: {}'.format(name, count))
+
     def main(self, args=None):
         if args is None:
             args = docopt(self.usage(), version=meta()['__version__'])
-        for method in dir(self):
-            if not method.startswith('cli_'):
+        for name, func in self._commands().items():
+            if not args[name]:
                 continue
-            command = method[4:]
-            if not args[command]:
-                continue
-            func = getattr(self, method)
             return func(args)
         raise NotImplementedError('Command not found')

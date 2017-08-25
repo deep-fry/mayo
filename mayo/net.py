@@ -1,4 +1,5 @@
 from contextlib import contextmanager
+from collections import OrderedDict
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -34,9 +35,10 @@ class BaseNet(object):
 
     def _instantiation_params(self, params):
         def create(params, key):
-            try:
-                p = params[key]
-            except KeyError:
+            p = params.get(key, None)
+            if p is None:
+                return
+            if p is None:
                 return
             p = dict(p)
             cls = import_from_string(p.pop('type'))
@@ -50,17 +52,24 @@ class BaseNet(object):
         if norm_params:
             norm_params = dict(norm_params)
             norm_type = norm_params.pop('type')
+            norm_params['is_training'] = self.is_training
             params['normalizer_fn'] = import_from_string(norm_type)
-            params['is_training'] = self.is_training
         # weight and bias hyperparams
-        create(params, 'weights_regularizer')
-        create(params, 'weights_initializer')
-        create(params, 'biases_initializer')
+        param_names = [
+            'weights_regularizer', 'biases_regularizer',
+            'weights_initializer', 'biases_initializer',
+            'pointwise_regularizer', 'depthwise_regularizer']
+        for name in param_names:
+            create(params, name)
         # layer configs
         layer_name = params.pop('name')
         layer_type = params.pop('type')
         # set up parameters
         params['scope'] = layer_name
+        try:
+            params['padding'] = params['padding'].upper()
+        except KeyError:
+            pass
         return layer_name, layer_type, params, norm_params
 
     def _instantiate(self):
@@ -122,13 +131,44 @@ class BaseNet(object):
         writer = tf.summary.FileWriter(self.config['name'], self.graph)
         writer.close()
 
+    def param_counts(self):
+        count = OrderedDict()
+        total = 0
+        for v in tf.trainable_variables():
+            shape = v.get_shape()
+            v_total = 1
+            for dim in shape:
+                v_total *= dim.value
+            count[v.name] = v_total
+            total += v_total
+        count['total'] = total
+        return count
+
 
 class Net(BaseNet):
     def instantiate_convolution(self, net, params):
         return slim.conv2d(net, **params)
 
     def instantiate_depthwise_separable_convolution(self, net, params):
-        return slim.separable_conv2d(net, **params)
+        scope = params.pop('scope')
+        num_outputs = params.pop('num_outputs')
+        stride = params.pop('stride')
+        kernel = params.pop('kernel_size')
+        depth_multiplier = params.pop('depth_multiplier', 1)
+        depthwise_regularizer = params.pop('depthwise_regularizer')
+        pointwise_regularizer = params.pop('pointwise_regularizer')
+        # depthwise layer
+        depthwise = slim.separable_conv2d(
+            net, num_outputs=None, kernel_size=kernel, stride=stride,
+            weights_regularizer=depthwise_regularizer,
+            depth_multiplier=1, scope='{}_depthwise'.format(scope), **params)
+        # pointwise layer
+        num_outputs = max(int(num_outputs * depth_multiplier), 8)
+        pointwise = slim.conv2d(
+            depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
+            weights_regularizer=pointwise_regularizer,
+            scope='{}_pointwise'.format(scope), **params)
+        return pointwise
 
     @staticmethod
     def _reduce_kernel_size_for_small_input(params, tensor):
