@@ -16,7 +16,9 @@ class BaseNet(object):
         self.config = config
         self.is_training = is_training
         self._reuse = reuse
-        self.end_points = {'images': images, 'labels': labels}
+        self.end_points = OrderedDict()
+        self.end_points['images'] = images
+        self.end_points['labels'] = labels
         self.instantiate()
 
     @contextmanager
