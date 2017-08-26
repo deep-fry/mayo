@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 
 import sys
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 
@@ -53,6 +54,7 @@ class BaseNet(object):
         def new_get_variable(v):
             name = v.op.name
             op = self.fixed_point_quantize(v, 2, 4)
+            op = self.pruning_test(v, name)
             self.test_list.append(op)
             return op
         # force all Variables to reside on the CPU
@@ -183,13 +185,33 @@ class Net(BaseNet):
         return slim.softmax(net, **params)
 
     def instantiate_fully_connected(self, net, params):
-        return slim.fully_connected(net, **params)
+        if params['scope'] == 'logits':
+            weights = tf.get_variable('logits/weights',
+                                    shape = [512,11],
+                                    initializer = tf.truncated_normal_initializer)
+            bias = tf.get_variable('logits/biases',
+                                    shape = [11],
+                                    initializer = tf.truncated_normal_initializer)
+            self.test_w = weights
+            return  tf.nn.relu(tf.matmul(net, weights) + bias)
+        else:
+            return slim.fully_connected(net, **params)
 
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
 
     def instantiate_max_pool(self, net, params):
         return slim.max_pool2d(net, **params)
+
+    def pruning_test(self, x, name):
+        if 'logits' in name and 'weights' in name:
+            print(name)
+            mask = np.ones([512,11])
+            mask[1:] = 0
+            mask = tf.constant(mask, dtype=tf.float32)
+            return tf.multiply(mask,x)
+        else:
+            return x
 
     def fixed_point_quantize(self, x, n, f):
         '''

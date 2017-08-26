@@ -167,7 +167,7 @@ class Train(object):
         try:
             while step < config.max_steps:
                 #test fixed-point quantization
-                _, loss, test_val = self._session.run([self._train_op, self._loss, self._net.test_list[0]])
+                _, loss, test_val, test_w= self._session.run([self._train_op, self._loss, self._net.test_list[0], self._net.test_w])
                 if np.isnan(loss):
                     raise ValueError('model diverged with a nan-valued loss')
                 losses.append(loss)
@@ -177,6 +177,7 @@ class Train(object):
                     # print(tf.trainable_variables()[1].eval(session = self._session))
                     # print one value to prove quantization is working
                     print(test_val)
+                    print(test_w)
                     sys.exit()
                     self._update_progress(step, losses)
                     losses = []
