@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from mayo.net import Net
 from mayo.checkpoint import CheckpointHandler
-from mayo.preprocess import Preprocess
+from mayo.vgg_preprocess import Preprocess
 
 
 class Evaluate(object):
