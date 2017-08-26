@@ -187,6 +187,7 @@ class Preprocess(object):
         num_threads = self.config.system.num_preprocess_threads
         if num_threads % 4:
             raise ValueError('Expect number of threads to be a multiple of 4.')
+        images_labels = []
         for tid in range(num_threads):
             image_buffer, label, bbox, _ = self._parse_proto(serialized)
             image = self._preprocess(image_buffer, bbox, mode, tid)
