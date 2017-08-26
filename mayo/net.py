@@ -4,7 +4,7 @@ from collections import OrderedDict
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import import_from_string
+from mayo.util import import_from_string, tabular
 
 
 class BaseNet(object):
@@ -16,7 +16,9 @@ class BaseNet(object):
         self.config = config
         self.is_training = is_training
         self._reuse = reuse
-        self.end_points = {'images': images, 'labels': labels}
+        self.end_points = OrderedDict()
+        self.end_points['images'] = images
+        self.end_points['labels'] = labels
         self.instantiate()
 
     @contextmanager
@@ -131,18 +133,28 @@ class BaseNet(object):
         writer = tf.summary.FileWriter(self.config['name'], self.graph)
         writer.close()
 
-    def param_counts(self):
-        count = OrderedDict()
+    def info(self):
+        def format_shape(shape):
+            return ' x '.join(
+                '?' if s is None else str(s) for s in shape.as_list())
+
+        param_table = [('Param', 'Shape', 'Count'), '-']
         total = 0
         for v in tf.trainable_variables():
             shape = v.get_shape()
             v_total = 1
             for dim in shape:
                 v_total *= dim.value
-            count[v.name] = v_total
             total += v_total
-        count['total'] = total
-        return count
+            param_table.append((v.name, format_shape(shape), v_total))
+        param_table += ['-', (None, '    Total:', total)]
+        param_table = tabular(param_table)
+
+        layer_table = [('Layer', 'Shape'), '-']
+        for name, layer in self.end_points.items():
+            layer_table.append((name, format_shape(layer.shape)))
+        layer_table = tabular(layer_table)
+        return param_table + '\n' + layer_table
 
 
 class Net(BaseNet):

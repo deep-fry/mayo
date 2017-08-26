@@ -3,37 +3,29 @@ import tensorflow as tf
 from mayo.util import memoize
 
 
-class Preprocess(object):
-    images_per_shard = 1024
-    queue_memory_factor = 16
-    num_readers = 4
-
-    def __init__(self, config):
+class _ImagePreprocess(object):
+    def __init__(self, shape, bbox, tid):
         super().__init__()
-        self.config = config
+        self.bbox = bbox
+        self.tid = tid
+        self.shape = shape
 
-    @staticmethod
-    def _decode_jpeg(image_buffer, channels):
-        with tf.name_scope(values=[image_buffer], name='decode_jpeg'):
-            i = tf.image.decode_jpeg(image_buffer, channels=channels)
-            return tf.image.convert_image_dtype(i, dtype=tf.float32)
-
-    def _distort_bbox(self, i, bbox, tid):
-        height, width, channels = self.config.image_shape()
+    def distort_bbox(self, i):
+        height, width, channels = i.shape.as_list()
         # distort bbox
-        distort_bbox_func = tf.image.sample_distorted_bounding_box
-        bbox_begin, bbox_size, _ = distort_bbox_func(
-            tf.shape(i), bounding_boxes=bbox, min_object_covered=0.1,
-            aspect_ratio_range=[0.75, 1.33], area_range=[0.05, 1.0],
+        shape = tf.shape(i)
+        bbox_begin, bbox_size, _ = tf.image.sample_distorted_bounding_box(
+            shape, bounding_boxes=self.bbox,
+            min_object_covered=0.1, aspect_ratio_range=[0.75, 1.33],
+            area_range=[0.05, 1.0],
             max_attempts=100, use_image_if_no_bounding_boxes=True)
         # distorted image
         i = tf.slice(i, bbox_begin, bbox_size)
-        i = tf.image.resize_images(i, [height, width], method=(tid % 4))
+        i = tf.image.resize_images(i, [height, width], method=(self.tid % 4))
         i.set_shape([height, width, channels])
         return i
 
-    @staticmethod
-    def _distort_color(i, tid):
+    def distort_color(self, i):
         brightness = lambda i: \
             tf.image.random_brightness(i, max_delta=32.0 / 255.0)
         saturation = lambda i: \
@@ -55,7 +47,7 @@ class Preprocess(object):
                 'either 1 or 3.')
         if not has_color:
             order = [brightness, contrast]
-        elif tid % 2 == 0:
+        elif self.tid % 2 == 0:
             order = [brightness, saturation, hue, contrast]
         else:
             order = [brightness, contrast, saturation, hue]
@@ -63,37 +55,77 @@ class Preprocess(object):
             i = func(i)
         return tf.clip_by_value(i, 0.0, 1.0)
 
-    def _eval(self, i):
-        height, width, _ = self.config.image_shape()
-        with tf.name_scope(values=[i], name='preprocess_eval'):
-            i = tf.image.central_crop(i, central_fraction=0.875)
-            i = tf.expand_dims(i, 0)
-            shape = [height, width]
-            i = tf.image.resize_bilinear(i, shape, align_corners=False)
-            return tf.squeeze(i, [0])
+    def central_crop(self, i, central_fraction=0.875):
+        return tf.image.central_crop(i, central_fraction=central_fraction)
 
-    def _distort(self, i, bbox, tid=0):
-        params = self.config.dataset.preprocess
-        with tf.name_scope(values=[i, bbox], name='preprocess_train'):
-            if params.distort:
-                i = self._distort_bbox(i, bbox, tid)
-            else:
-                # otherwise ensure image is the correct size
-                i = self._eval(i)
-            if params.flip:
-                i = tf.image.random_flip_left_right(i)
-            if params.color:
-                i = self._distort_color(i, tid)
+    def random_flip(self, i):
+        return tf.image.random_flip_left_right(i)
+
+    def linear_map(self, i, scale=1, shift=0):
+        if scale != 1:
+            i = tf.multiply(i, scale)
+        if shift != 0:
+            i = tf.add(i, shift)
+        return i
+
+    def subtract_channel_means(self, i, means):
+        shape = [1, 1, 1, len(means)]
+        means = tf.constant(
+            means, dtype=tf.float32, shape=shape, name='image_mean')
+        return i - means
+
+    def _ensure_shape(self, i):
+        # ensure image is the correct shape
+        ph, pw, pc = i.shape.as_list()
+        h, w, c = self.shape
+        if pc != c:
+            raise ValueError(
+                'Curious, preprocessed channel size is not the same '
+                'as the one expected by us.')
+        if ph == h or pw == w:
             return i
+        # rescale image
+        i = tf.expand_dims(i, 0)
+        i = tf.image.resize_bilinear(i, [h, w], align_corners=False)
+        return tf.squeeze(i, [0])
 
-    def _preprocess(self, image_buffer, bbox, mode, tid):
+    def preprocess(self, image, actions):
+        with tf.name_scope(values=[image], name='preprocess_image'):
+            for params in actions:
+                params = dict(params)
+                name = params.pop('type')
+                try:
+                    func = getattr(self, name)
+                except AttributeError:
+                    raise NotImplementedError(
+                        'Action named {} is not implemented.'.format(name))
+                image = func(image, **params)
+        return self._ensure_shape(image)
+
+
+class Preprocess(object):
+    images_per_shard = 1024
+    queue_memory_factor = 16
+    num_readers = 4
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+    @staticmethod
+    def _decode_jpeg(buffer, channels):
+        with tf.name_scope(values=[buffer], name='decode_jpeg'):
+            i = tf.image.decode_jpeg(buffer, channels=channels)
+            return tf.image.convert_image_dtype(i, dtype=tf.float32)
+
+    def _preprocess(self, buffer, bbox, mode, tid):
         channels = self.config.image_shape()[-1]
-        image = self._decode_jpeg(image_buffer, channels)
-        if mode == 'train':
-            image = self._distort(image, bbox, tid)
-        else:
-            image = self._eval(image)
-        return tf.multiply(tf.subtract(image, 0.5), 2.0)
+        image = self._decode_jpeg(buffer, channels)
+        shape = self.config.image_shape()
+        image_preprocess = _ImagePreprocess(shape, bbox, tid)
+        actions_map = self.config.preprocess
+        actions = actions_map[mode] + actions_map['final']
+        return image_preprocess.preprocess(image, actions)
 
     def _filename_queue(self, mode):
         """
@@ -189,8 +221,8 @@ class Preprocess(object):
             raise ValueError('Expect number of threads to be a multiple of 4.')
         images_labels = []
         for tid in range(num_threads):
-            image_buffer, label, bbox, _ = self._parse_proto(serialized)
-            image = self._preprocess(image_buffer, bbox, mode, tid)
+            buffer, label, bbox, _ = self._parse_proto(serialized)
+            image = self._preprocess(buffer, bbox, mode, tid)
             images_labels.append((image, label))
         batch_size = self.config.system.batch_size
         capacity = 2 * num_threads * batch_size

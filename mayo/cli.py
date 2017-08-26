@@ -15,10 +15,7 @@ def _vigenere(key, string, decode=False):
     for i in range(len(string)):
         key_c = ord(key[i % len(key)]) % 256
         encoded_c = ord(string[i])
-        if decode:
-            encoded_c -= key_c
-        else:
-            encoded_c += key_c
+        encoded_c += -key_c if decode else key_c
         encoded_chars.append(chr(encoded_c))
     encoded_str = "".join(encoded_chars)
     if decode:
@@ -96,7 +93,7 @@ Options:
     def cli_export(self, args):
         print(self._config(args).to_yaml())
 
-    def cli_count(self, args):
+    def cli_info(self, args):
         import tensorflow as tf
         from mayo.net import Net
         config = self._config(args)
@@ -104,9 +101,7 @@ Options:
         labels_shape = (None, config.dataset.num_classes)
         images = tf.placeholder(tf.float32, images_shape, 'images')
         labels = tf.placeholder(tf.int32, labels_shape, 'labels')
-        counts = Net(config, images, labels, False).param_counts()
-        for name, count in counts.items():
-            print('{}: {}'.format(name, count))
+        print(Net(config, images, labels, False).info())
 
     def main(self, args=None):
         if args is None:

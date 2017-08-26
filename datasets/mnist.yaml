@@ -10,11 +10,9 @@ dataset:
         train: 58001
         validate: 1000
         test: 9001
-    preprocess:
-        distort: false
-        flip: false
-        color: false
     shape:
         height: 28
         width: 28
         channels: 1
+preprocess:
+    train: []

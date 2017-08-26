@@ -10,11 +10,12 @@ dataset:
         train: 1281167
         test: null
         validate: 50000
-    preprocess:
-        distort: true
-        flip: true
-        color: true
     shape:
         height: 224
         width: 224
         channels: 3
+preprocess:
+    train:
+        - {type: distort_bbox}
+        - {type: distort_color}
+        - {type: random_flip}
