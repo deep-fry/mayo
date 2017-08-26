@@ -22,10 +22,19 @@ class BaseNet(object):
     @contextmanager
     def context(self):
         graph_ctx = self.graph.as_default()
-        var_ctx = tf.variable_scope(self.config['name'], reuse=self._reuse)
+        getter = self._custom_getter()
+        var_ctx = tf.variable_scope(
+            self.config['name'], reuse=self._reuse, custom_getter=getter)
         cpu_ctx = slim.arg_scope([slim.model_variable], device='/cpu:0')
         with graph_ctx, var_ctx, cpu_ctx as scope:
             yield scope
+
+    def _custom_getter(self, getter, *args, **kwargs):
+        v = getter(*args, **kwargs)
+        return self._variable_override(v)
+
+    def _variable_override(self, variable):
+        raise NotImplementedError
 
     def _add_end_point(self, key, layer):
         if key in self.end_points:
