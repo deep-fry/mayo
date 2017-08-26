@@ -1,5 +1,5 @@
+import os
 import time
-import math
 import itertools
 
 import numpy as np
@@ -157,7 +157,9 @@ class Train(object):
     @property
     @memoize
     def _summary_writer(self):
-        return tf.summary.FileWriter('summaries/', graph=self._graph)
+        directory = os.path.join(
+            'summaries/', self.config.name, self.config.dataset.name)
+        return tf.summary.FileWriter(directory, graph=self._graph)
 
     def _save_summary(self, step):
         summary = self._session.run(self._summary_op)
@@ -176,13 +178,12 @@ class Train(object):
         self._net.save_graph()
         print('Training start')
         # train iterations
-        prev_epoch = math.floor(self._to_epoch(step))
         max_steps = self.config.system.max_steps
         try:
             while step < max_steps:
                 _, loss = self._session.run([self._train_op, self._loss])
                 if np.isnan(loss):
-                    raise ValueError('model diverged with a nan-valued loss')
+                    raise ValueError('Model diverged with a nan-valued loss')
                 self._update_progress(step, loss, cp_step)
                 if curr_step % 1000 == 0:
                     self._save_summary(step)
@@ -190,13 +191,9 @@ class Train(object):
                 if curr_step % 5000 == 0 or curr_step == max_steps:
                     checkpoint.save(step)
                     cp_step = step
-                epoch = math.floor(self._to_epoch(step))
-                if epoch > prev_epoch:
-                    prev_epoch = epoch
-                    self.eval()
                 step += 1
         except KeyboardInterrupt:
-            print('Stopped, saving checkpoint in 3 seconds.')
+            print('\nStopped, saving checkpoint in 3 seconds.')
         try:
             time.sleep(3)
         except KeyboardInterrupt:
@@ -206,6 +203,3 @@ class Train(object):
     def train(self):
         with self._graph.as_default(), tf.device('/cpu:0'):
             self._train()
-
-    def eval(self):
-        ...

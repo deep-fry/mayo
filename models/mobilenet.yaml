@@ -1,7 +1,10 @@
 ---
 name: mobilenet_v1
+preprocess:
+    validate: [{type: central_crop, central_fraction: 0.875}]
+    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
-dm: &depth_multiplier 1
+depth_multiplier: &depth_multiplier 1
 hyper:
     - &regularizer
       type: tensorflow.contrib.layers.l2_regularizer
@@ -40,7 +43,7 @@ hyper:
       weights_regularizer: *regularizer
 net:
     - {name: conv0, <<: *conv, stride: 2,
-       num_outputs: !arith 'max(int(32 * $(dm)), 8)',
+       num_outputs: !arith 'max(int(32 * $(depth_multiplier)), 8)',
        weights_regularizer: *regularizer}
     - {name: conv1, <<: *dsconv, stride: 1, num_outputs: 64}
     - {name: conv2, <<: *dsconv, stride: 2, num_outputs: 128}

@@ -1,5 +1,11 @@
 ---
 name: vgg16
+preprocess:
+    validate: []
+    final:
+        - {type: linear_map, scale: 255.0}
+        - type: subtract_channel_means
+          means: [123.68, 116.78, 103.94]
 logits: logits
 hyper:
     - &conv

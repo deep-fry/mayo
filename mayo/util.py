@@ -52,3 +52,23 @@ def import_from_string(string):
     else:
         mod = None
     return import_from_dot_path(string, mod)
+
+
+def tabular(data):
+    data = ['-'] + data + ['-']
+    valid_rows = [row for row in data if row != '-']
+    widths = [max(len(str(x)) for x in col if x) for col in zip(*valid_rows)]
+    table = []
+    for row in data:
+        if row == '-':
+            table.append('+-{}-+'.format('-+-'.join('-' * w for w in widths)))
+            continue
+        cols = []
+        for width, x in zip(widths, row):
+            if x is None:
+                x = ''
+            align = '' if isinstance(x, str) else '>'
+            col = "{:{align}{width}}".format(x, width=width, align=align)
+            cols.append(col)
+        table.append("| {} |".format(" | ".join(cols)))
+    return '\n'.join(table)
