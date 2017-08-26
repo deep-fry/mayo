@@ -1,5 +1,8 @@
 ---
 name: vgg16
+preprocess:
+    validate: []
+    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
 hyper:
     - &conv
