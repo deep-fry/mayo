@@ -61,8 +61,18 @@ class _ImagePreprocess(object):
     def random_flip(self, i):
         return tf.image.random_flip_left_right(i)
 
-    def linear_map(self, i, scale, shift):
-        return tf.add(tf.multiply(i, scale), shift)
+    def linear_map(self, i, scale=1, shift=0):
+        if scale != 1:
+            i = tf.multiply(i, scale)
+        if shift != 0:
+            i = tf.add(i, shift)
+        return i
+
+    def subtract_channel_means(self, i, means):
+        shape = [1, 1, 1, len(means)]
+        means = tf.constant(
+            means, dtype=tf.float32, shape=shape, name='image_mean')
+        return i - means
 
     def _ensure_shape(self, i):
         # ensure image is the correct shape
@@ -103,16 +113,16 @@ class Preprocess(object):
         self.config = config
 
     @staticmethod
-    def _decode_jpeg(image_buffer, channels):
-        with tf.name_scope(values=[image_buffer], name='decode_jpeg'):
-            i = tf.image.decode_jpeg(image_buffer, channels=channels)
+    def _decode_jpeg(buffer, channels):
+        with tf.name_scope(values=[buffer], name='decode_jpeg'):
+            i = tf.image.decode_jpeg(buffer, channels=channels)
             return tf.image.convert_image_dtype(i, dtype=tf.float32)
 
-    def _preprocess(self, image_buffer, bbox, mode, tid):
+    def _preprocess(self, buffer, bbox, mode, tid):
         channels = self.config.image_shape()[-1]
-        image = self._decode_jpeg(image_buffer, channels)
-        true_shape = self.config.image_shape()
-        image_preprocess = _ImagePreprocess(true_shape, bbox, tid)
+        image = self._decode_jpeg(buffer, channels)
+        shape = self.config.image_shape()
+        image_preprocess = _ImagePreprocess(shape, bbox, tid)
         actions_map = self.config.preprocess
         actions = actions_map[mode] + actions_map['final']
         return image_preprocess.preprocess(image, actions)
@@ -211,8 +221,8 @@ class Preprocess(object):
             raise ValueError('Expect number of threads to be a multiple of 4.')
         images_labels = []
         for tid in range(num_threads):
-            image_buffer, label, bbox, _ = self._parse_proto(serialized)
-            image = self._preprocess(image_buffer, bbox, mode, tid)
+            buffer, label, bbox, _ = self._parse_proto(serialized)
+            image = self._preprocess(buffer, bbox, mode, tid)
             images_labels.append((image, label))
         batch_size = self.config.system.batch_size
         capacity = 2 * num_threads * batch_size
