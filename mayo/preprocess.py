@@ -11,18 +11,17 @@ class _ImagePreprocess(object):
         self.shape = shape
 
     def distort_bbox(self, i):
-        height, width, channels = i.shape.as_list()
         # distort bbox
-        shape = tf.shape(i)
         bbox_begin, bbox_size, _ = tf.image.sample_distorted_bounding_box(
-            shape, bounding_boxes=self.bbox,
+            tf.shape(i), bounding_boxes=self.bbox,
             min_object_covered=0.1, aspect_ratio_range=[0.75, 1.33],
             area_range=[0.05, 1.0],
             max_attempts=100, use_image_if_no_bounding_boxes=True)
         # distorted image
         i = tf.slice(i, bbox_begin, bbox_size)
+        height, width, _ = self.shape
         i = tf.image.resize_images(i, [height, width], method=(self.tid % 4))
-        i.set_shape([height, width, channels])
+        i.set_shape(self.shape)
         return i
 
     def distort_color(self, i):
