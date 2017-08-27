@@ -64,6 +64,9 @@ class BaseNet(object):
             create(params, name)
         # layer configs
         layer_name = params.pop('name')
+        # num outputs
+        if params.get('num_outputs', None) == 'num_classes':
+            params['num_outputs'] = self.config.num_classes()
         # set up parameters
         params['scope'] = layer_name
         try:

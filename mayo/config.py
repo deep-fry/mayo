@@ -186,9 +186,10 @@ class Config(_DotDict):
             with open(path, 'r') as file:
                 d = yaml.load(file)
             _dict_merge(unified, copy.deepcopy(d))
-            if 'dataset' in d:
-                self._init_dataset(path, unified, d)
             _dict_merge(dictionary, d)
+        # init search paths
+        self._init_search_paths(unified, dictionary, yaml_files)
+        # finalize
         self._override(dictionary, overrides)
         self._link(dictionary)
         self._wrap(dictionary)
@@ -198,16 +199,6 @@ class Config(_DotDict):
         self.unified = unified
         self._setup_tensorflow_log_level()
 
-    @staticmethod
-    def _init_dataset(path, u, d):
-        root = os.path.dirname(path)
-        u['dataset']['path'].setdefault('root', root)
-        d = d['dataset']
-        root = d['path'].pop('root', root)
-        # change relative path to our working directory
-        for mode, path in d['path'].items():
-            d['path'][mode] = os.path.join(root, path)
-
     def _init_system_config(self, unified, dictionary):
         root = os.path.dirname(__file__)
         system_yaml = os.path.join(root, 'system.yaml')
@@ -215,6 +206,11 @@ class Config(_DotDict):
             system = yaml.load(file)
         _dict_merge(unified, system)
         _dict_merge(dictionary, system)
+
+    def _init_search_paths(self, unified, dictionary, yaml_files):
+        search_paths = [os.path.dirname(f) for f in yaml_files]
+        for d in (dictionary, unified):
+            d['dataset'].setdefault('_search_paths', search_paths)
 
     @staticmethod
     def _override(dictionary, overrides):
@@ -246,15 +242,26 @@ class Config(_DotDict):
         params = self.dataset.shape
         return (params.height, params.width, params.channels)
 
+    def label_offset(self):
+        bg = self.dataset.background_class
+        return int(bg.use) - int(bg.has)
+
+    def num_classes(self):
+        return self.dataset.num_classes + self.label_offset()
+
     def data_files(self, mode):
         try:
             path = self.dataset.path[mode]
         except KeyError:
             raise KeyError('Mode {} not recognized.'.format(mode))
-        files = glob.glob(path)
+        files = []
+        search_paths = self.dataset._search_paths
+        for directory in search_paths:
+            files += glob.glob(os.path.join(directory, path))
         if not files:
-            msg = 'No files found for dataset {} with mode {} at {}'
-            raise FileNotFoundError(msg.format(self.config.name, mode, path))
+            msg = 'No files found for dataset {} with mode {} at {!r}'
+            paths = '{{{}}}/{}'.format(','.join(search_paths), path)
+            raise FileNotFoundError(msg.format(self.name, mode, paths))
         return files
 
     def _excepthook(self, etype, evalue, etb):
@@ -264,7 +271,7 @@ class Config(_DotDict):
         try:
             use_pdb = self['system.use_pdb']
         except KeyError:
-            use_pdb = False
+            use_pdb = True
         return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):

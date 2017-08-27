@@ -3,12 +3,11 @@ dataset:
     name: imagenet
     path:
         train: imagenet/train-*
-        test: &vpath imagenet/validation-*
         validate: *vpath
-    num_classes: 1000
+    num_classes: 1001
+    background_class: {has: true}
     num_examples_per_epoch:
         train: 1281167
-        test: null
         validate: 50000
     shape:
         height: 224

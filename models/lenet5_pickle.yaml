@@ -1,5 +1,7 @@
 ---
 name: lenet5
+dataset:
+    background_class: {use: true}
 logits: logits
 hyper:
     - &pickle_initializer
@@ -33,5 +35,4 @@ net:
     - {name: flatten, type: flatten}
     - {name: dropout, <<: *dropout}
     - {name: fc1, <<: *fc, num_outputs: 512}
-    - {name: logits, <<: *fc, activation_fn: null,
-       num_outputs: !arith $(dataset.num_classes) + 1}
+    - {name: logits, <<: *fc, num_outputs: num_classes, activation_fn: null}
