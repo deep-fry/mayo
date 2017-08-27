@@ -58,7 +58,5 @@ net:
     - {name: fc6, <<: *fc, num_outputs: 4096}
     - {name: dropout1, <<: *dropout}
     - {name: fc7, <<: *fc, num_outputs: 4096}
-    - {name: dropout2, <<: *dropout}
-    - {name: logits, <<: *fc,
-      num_outputs: !arith $(dataset.num_classes),
-      activation_fn: null}
+    - {name: dropout, <<: *dropout}
+    - {name: logits, <<: *fc, num_outputs: num_classes, activation_fn: null}

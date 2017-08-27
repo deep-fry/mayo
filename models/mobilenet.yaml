@@ -1,5 +1,7 @@
 ---
 name: mobilenet_v1
+dataset:
+    background_class: {use: true}
 preprocess:
     validate: [{type: central_crop, central_fraction: 0.875}]
     final: [{type: linear_map, scale: 2.0, shift: -1.0}]
@@ -37,7 +39,7 @@ hyper:
     - &fc
       type: convolution
       kernel_size: [1, 1]
-      num_outputs: !arith $(dataset.num_classes) + 1
+      num_outputs: num_classes
       activation_fn: null
       normalizer_fn: null
       weights_regularizer: *regularizer

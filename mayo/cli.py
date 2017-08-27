@@ -69,7 +69,7 @@ Options:
         usage_meta = meta()
         commands = []
         for k in self._commands().keys():
-            command = '{__executable__} {command} <yaml>... [options]'
+            command = '{__executable__} {command} [<yaml>...] [options]'
             commands.append(command.format(command=k, **usage_meta))
         usage_meta['commands'] = '\n    '.join(commands)
         return self.doc() + self._USAGE.format(**usage_meta)
