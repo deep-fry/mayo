@@ -6,7 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from mayo.net import Net
-from mayo.util import memoize, import_from_dot_path
+from mayo.util import memoize, object_from_params
 from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
 
@@ -63,7 +63,7 @@ class Train(object):
     @memoize
     def optimizer(self):
         params = self.config.train.optimizer
-        optimizer_class = import_from_dot_path(params.pop('type'))
+        optimizer_class, params = object_from_params(params)
         return optimizer_class(self.learning_rate, **params)
 
     def tower_loss(self, images, labels, reuse):

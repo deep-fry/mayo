@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from mayo.util import memoize
+from mayo.util import memoize, object_from_params
 
 
 class _ImagePreprocess(object):
@@ -92,13 +92,7 @@ class _ImagePreprocess(object):
     def preprocess(self, image, actions):
         with tf.name_scope(values=[image], name='preprocess_image'):
             for params in actions:
-                params = dict(params)
-                name = params.pop('type')
-                try:
-                    func = getattr(self, name)
-                except AttributeError:
-                    raise NotImplementedError(
-                        'Action named {} is not implemented.'.format(name))
+                func, params = object_from_params(params, self)
                 image = func(image, **params)
         return self._ensure_shape(image)
 

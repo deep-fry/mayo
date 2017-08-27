@@ -9,7 +9,45 @@ import collections
 import yaml
 
 
-class ArithTag(object):
+class YamlTag(object):
+    tag = None
+
+    @classmethod
+    def register(cls):
+        yaml.add_constructor(cls.tag, cls.constructor)
+        yaml.add_representer(cls, cls.representer)
+
+    @classmethod
+    def constructor(cls, loader, node):
+        raise NotImplementedError
+
+    @classmethod
+    def representer(cls, dumper, data):
+        raise NotImplementedError
+
+
+class YamlScalarTag(YamlTag):
+    def __init__(self, content):
+        super().__init__()
+        self.content = content
+
+    @classmethod
+    def constructor(cls, loader, node):
+        content = loader.construct_scalar(node)
+        return cls(content)
+
+    @classmethod
+    def representer(cls, dumper, tag):
+        return dumper.represent_scalar(cls.tag, tag.content)
+
+    def value(self):
+        raise NotImplementedError
+
+    def __repr__(self):
+        return repr('{} {!r}'.format(self.tag, self.content))
+
+
+class ArithTag(YamlScalarTag):
     tag = '!arith'
     _eval_expr_map = {
         ast.Add: operator.add,
@@ -21,12 +59,8 @@ class ArithTag(object):
         ast.USub: operator.neg,
     }
 
-    def __init__(self, expr):
-        super().__init__()
-        self.expr = expr
-
     def value(self):
-        tree = ast.parse(self.expr, mode='eval').body
+        tree = ast.parse(self.content, mode='eval').body
         return self._eval(tree)
 
     def _eval(self, n):
@@ -43,21 +77,23 @@ class ArithTag(object):
             return op(self._eval(n.operand))
         return op(self._eval(n.left), self._eval(n.right))
 
-    @staticmethod
-    def constructor(loader, node):
-        expr = loader.construct_scalar(node)
-        return ArithTag(expr)
 
-    @classmethod
-    def representer(cls, dumper, data):
-        return dumper.represent_scalar(cls.tag, data.expr)
+class CodeTag(YamlScalarTag):
+    tag = '!code'
 
-    def __repr__(self):
-        return repr("{} '{}'".format(self.tag, self.expr))
+    def value(self):
+        try:
+            return self._value
+        except AttributeError:
+            pass
+        variables = {}
+        exec(self.content, variables)
+        self._value = variables
+        return variables
 
 
-yaml.add_constructor(ArithTag.tag, ArithTag.constructor)
-yaml.add_representer(ArithTag, ArithTag.representer)
+ArithTag.register()
+CodeTag.register()
 
 
 def _dot_path(keyable, dot_path_key):
@@ -104,19 +140,23 @@ class _DotDict(dict):
 
     def _link(self, obj):
         def link_str(string):
-            keys = re.findall(r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)', string)
+            regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
+            keys = re.findall(regex, string, re.MULTILINE)
             for k in keys:
                 d, fk = _dot_path(obj, k)
                 string = string.replace('$({})'.format(k), str(d[fk]))
             return string
 
-        def link_arith(arith):
+        def link_tag(tag):
             try:
-                return ArithTag(link_str(arith.expr)).value()
+                tag = tag.__class__(link_str(tag.content))
             except KeyError:
-                return arith
+                pass
+            if isinstance(tag, ArithTag):
+                return tag.value()
+            return tag
 
-        link_map = {str: link_str, ArithTag: link_arith}
+        link_map = {str: link_str, YamlScalarTag: link_tag}
         return self._recursive_apply(obj, link_map)
 
     def __getitem__(self, key):
@@ -184,12 +224,16 @@ class Config(_DotDict):
             k_path, v = (o.strip() for o in override.split('='))
             sub_dictionary, k = _dot_path(dictionary, k_path)
             v = yaml.load(v)
-            cls = sub_dictionary[k].__class__
-            if not isinstance(v, cls):
-                msg = ('Type of the overriding value "{.__name__}" for '
-                       'key "{}" is not compatible with the type of '
-                       'value "{.__name__}" to be overridden.')
-                raise TypeError(msg.format(type(v), k_path, cls))
+            try:
+                cls = sub_dictionary[k].__class__
+            except KeyError:
+                pass
+            else:
+                if not isinstance(v, cls):
+                    msg = ('Type of the overriding value "{.__name__}" for '
+                           'key "{}" is not compatible with the type of '
+                           'value "{.__name__}" to be overridden.')
+                    raise TypeError(msg.format(type(v), k_path, cls))
             sub_dictionary[k] = v
 
     def to_yaml(self, file=None):
