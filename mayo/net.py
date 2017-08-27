@@ -212,3 +212,6 @@ class Net(BaseNet):
 
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
+
+    def instantiate_lrn(self, net, params):
+        return tf.nn.local_response_normalization(x, **params)

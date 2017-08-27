@@ -33,11 +33,19 @@ hyper:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
       biases_initializer: *bias_init
+    - &lrn
+      type: lrn
+      depth_radius: 2
+      alpha: 0.00002
+      beta: 0.75
+      bias: 1.0
 net:
     - {name: conv1, <<: *conv, padding: valid, num_outputs: 64}
+    - {name: lrn1, <<: *lrn}
     - {name: pool1, <<: *pool}
     - {name: conv2, <<: *conv,
        kernel_size: [5, 5], stride: 1, num_outputs: 192}
+    - {name: lrn2, <<: *lrn}
     - {name: pool2, <<: *pool}
     - {name: conv3, <<: *conv_repeat, num_outputs: 384}
     - {name: conv4, <<: *conv_repeat, num_outputs: 384}
