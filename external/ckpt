@@ -2,8 +2,8 @@
 """
 Usage:
     ckpt yaml <ckpt>
-    ckpt pickle <ckpt> <pkl> [options]
-    ckpt checkpoint <ckpt> <new_ckpt> [options]
+    ckpt pickle <ckpt> <new> [options]
+    ckpt checkpoint <ckpt> <new> [options]
 
 Options:
     --interactive       Interactively enter a new key for each key
@@ -41,7 +41,7 @@ class CLI(object):
         super().__init__()
         opt = docopt(__doc__)
         self.cp_name = opt['<ckpt>']
-        self.pickle_name = opt['<pkl>']
+        self.save_name = opt['<new>']
         self.formatter = opt['--formatter']
         self.interactive = opt['--interactive']
         self.should_format = self.formatter or self.interactive
@@ -58,7 +58,7 @@ class CLI(object):
             var_tensor = self.formatted_var_tensor_map()
         else:
             var_tensor = self.var_tensor_map()
-        with open(self.pickle_name, 'wb') as f:
+        with open(self.save_name, 'wb') as f:
             pickle.dump(var_tensor, f)
 
     def to_ckpt(self):
