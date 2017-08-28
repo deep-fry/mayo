@@ -182,10 +182,13 @@ class Train(object):
         self._setup_train_operation()
         log.info('Initializing session...')
         self._init_session()
-        checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name,
-            self.config.system.search_paths.checkpoints)
-        cp_step = step = checkpoint.load()
+        if self.config.system.checkpoint.load:
+            checkpoint = CheckpointHandler(
+                self._session, self.config.name, self.config.dataset.name,
+                self.config.system.search_paths.checkpoints)
+            cp_step = step = checkpoint.load()
+        else:
+            cp_step = step = 0
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
@@ -202,10 +205,11 @@ class Train(object):
                     self._save_summary(step)
                 curr_step += 1
                 if curr_step % 5000 == 0 or curr_step == max_steps:
-                    self._update_progress(step, loss, 'saving')
-                    with log.level('warn'):
-                        checkpoint.save(step)
-                    cp_step = step
+                    if self.config.system.checkpoint.save:
+                        self._update_progress(step, loss, 'saving')
+                        with log.level('warn'):
+                            checkpoint.save(step)
+                        cp_step = step
                 step += 1
         except KeyboardInterrupt:
             log.info('Stopped, saving checkpoint in 3 seconds.')
