@@ -32,7 +32,7 @@ def _average_gradients(tower_grads):
 
 class Train(object):
     progress_indicator = itertools.cycle(reversed('⣾⣽⣻⢿⡿⣟⣯⣷'))
-    average_decay = 0.99
+    average_count = 100
 
     def __init__(self, config):
         super().__init__()
@@ -129,21 +129,27 @@ class Train(object):
         epoch = step * self.config.system.batch_size
         return epoch / float(self.config.dataset.num_examples_per_epoch.train)
 
-    def _ema(self, name, value):
-        name = '_ema_{}'.format(name)
-        decay = self.average_decay
-        ema = decay * getattr(self, name, value) + (1 - decay) * value
-        setattr(self, name, ema)
-        return ema
+    def _moving_average(self, name, value, std=True):
+        name = '_ma_{}'.format(name)
+        history = getattr(self, name, [])
+        if len(history) == self.average_count:
+            history.pop(0)
+        history.add(value)
+        setattr(self, name, history)
+        mean = np.mean(history)
+        if not std:
+            return mean
+        return mean, np.std(history)
 
     def _update_progress(self, step, loss, cp_step):
         ind = next(self.progress_indicator)
         epoch = self._to_epoch(step)
         if not isinstance(cp_step, str):
             cp_step = '{:6.2f}'.format(self._to_epoch(cp_step))
-        info = '{} | epoch: {:6.2f} | loss: {:8.3e} | checkpoint: {}'
+        info = '{} | epoch: {:6.2f} | loss: {:8.3g}±{5.0f} | ckpt: {}'
+        loss_mean, loss_std = self._moving_average('loss', loss)
         info = info.format(
-            ind, epoch, self._ema('loss', loss), cp_step)
+            ind, epoch, loss_mean, cp_step)
         # performance
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
@@ -151,8 +157,9 @@ class Train(object):
             num_steps = step - getattr(self, '_prev_step', step)
             imgs_per_sec = num_steps * self.config.system.batch_size
             imgs_per_sec /= float(duration)
-            imgs_per_sec = self._ema('imgs_per_sec', imgs_per_sec)
-            info += ' | throughput: {:4.0f}/s'.format(imgs_per_sec)
+            imgs_per_sec = self._moving_average(
+                'imgs_per_sec', imgs_per_sec, std=False)
+            info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
         log.info(info, update=True)
         self._prev_time = now
         self._prev_step = step
@@ -196,7 +203,7 @@ class Train(object):
                 curr_step += 1
                 if curr_step % 5000 == 0 or curr_step == max_steps:
                     self._update_progress(step, loss, 'saving')
-                    with log.level('warning'):
+                    with log.level('warn'):
                         checkpoint.save(step)
                     cp_step = step
                 step += 1
