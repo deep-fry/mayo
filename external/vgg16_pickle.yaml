@@ -5,8 +5,8 @@ dataset:
 preprocess:
     validate: []
     final:
-        - {type: linear_map, scale: 255.0}
         - {type: subtract_channel_means}
+        - {type: linear_map, scale: 255.0}
 logits: logits
 hyper:
     - &pickle_initializer
