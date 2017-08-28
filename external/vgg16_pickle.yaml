@@ -1,17 +1,18 @@
 ---
 name: vgg16
+dataset:
+    background_class: {use: false}
 preprocess:
     validate: []
     final:
         - {type: linear_map, scale: 255.0}
-        - type: subtract_channel_means
-          means: [123.68, 116.78, 103.94]
+        - {type: subtract_channel_means}
 logits: logits
 hyper:
     - &pickle_initializer
       weights_initializer: &weights_initializer
           type: external/pickle_initializer.py:initializer
-          path: externel/$(name)_pickle.pkl
+          path: external/$(name)_pickle.pkl
           net: $(name)
           base: weights
           perturb: 0.0
@@ -73,7 +74,7 @@ net:
     - {name: dropout1, <<: *dropout}
     - {name: fc7, <<: *conv_fc2, num_outputs: 4096}
     - {name: dropout2, <<: *dropout}
-    - {name: fc8, <<: *conv_fc2, num_outputs: !arith $(dataset.num_classes), activation_fn: null, normalizer_fn: null}
+    - {name: fc8, <<: *conv_fc2, num_outputs: num_classes, activation_fn: null, normalizer_fn: null}
     - {name: logits,
       type: squeeze,
       axis: [1,2]}
