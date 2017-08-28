@@ -1,0 +1,63 @@
+---
+name: alexnet
+dataset:
+    background_class: {use: true}
+preprocess:
+    validate: []
+    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
+logits: logits
+hyper:
+    - &bias_init {type: tensorflow.constant_initializer, value: 0.01}
+    - &weights_and_biases
+      # weight_initializer defaults to xavier
+      weights_regularizer:
+          type: tensorflow.contrib.layers.l2_regularizer
+          scale: 0.0005
+      biases_initializer: *bias_init
+    - &conv
+      <<: *weights_and_biases
+      type: convolution
+      kernel_size: [11, 11]
+      stride: 4
+      padding: same
+    - &conv_repeat {<<: *conv, kernel_size: [3, 3], stride: 1}
+    - &pool
+      type: max_pool
+      kernel_size: [3, 3]
+      stride: 2
+      padding: valid
+    - &dropout {type: dropout, keep_prob: 0.999}
+    - &fc
+      type: fully_connected
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
+      biases_initializer: *bias_init
+    - &lrn
+      type: lrn
+      depth_radius: 2
+      alpha: 0.00002
+      beta: 0.75
+      bias: 1.0
+net:
+    - {name: conv1, <<: *conv, padding: valid, num_outputs: 64}
+    - {name: lrn1, <<: *lrn}
+    - {name: pool1, <<: *pool}
+    - {name: conv2, <<: *conv,
+       kernel_size: [5, 5], stride: 1, num_outputs: 192}
+    - {name: lrn2, <<: *lrn}
+    - {name: pool2, <<: *pool}
+    - {name: conv3, <<: *conv_repeat, num_outputs: 384}
+    - {name: conv4, <<: *conv_repeat, num_outputs: 384}
+    - {name: conv5, <<: *conv_repeat, num_outputs: 256}
+    - {name: pool5, <<: *pool}
+    - {name: flatten5, type: flatten}
+    - {name: fc6, <<: *fc, num_outputs: 4096}
+    - {name: dropout6, <<: *dropout}
+    - {name: fc7, <<: *fc, num_outputs: 4096}
+    - {name: dropout7, <<: *dropout}
+    - name: logits
+      <<: *fc
+      num_outputs: !arith $(dataset.num_classes)
+      activation_fn: null
+      biases_initializer: {type: tensorflow.zeros_initializer}

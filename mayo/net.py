@@ -1,11 +1,12 @@
 from contextlib import contextmanager
+from collections import OrderedDict
 
 import sys
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import import_from_dot_path
+from mayo.util import object_from_params, tabular
 
 from tensorflow.python.ops import array_ops
 from tensorflow.python.ops import gen_array_ops
@@ -14,95 +15,89 @@ from tensorflow.python.ops import math_ops
 
 class BaseNet(object):
     def __init__(
-            self, config, images=None, labels=None,
-            batch_size=None, graph=None, reuse=None):
+            self, config, images, labels, is_training,
+            graph=None, reuse=None):
         super().__init__()
         #testing quantized ops, now instantiate multiple times
         self.test_list = []
         self.graph = graph or tf.Graph()
         self.config = config
-        if images is not None:
-            self.batch_size = images.get_shape().as_list()[0]
-        else:
-            self.batch_size = config.dataset.batch_size
+        self.is_training = is_training
         self._reuse = reuse
-        self.end_points = {'images': images, 'labels': labels}
+        self.end_points = OrderedDict()
+        self.end_points['images'] = images
+        self.end_points['labels'] = labels
         self.instantiate()
         # self.change_vars()
 
     @contextmanager
     def context(self):
         graph_ctx = self.graph.as_default()
-        var_ctx = tf.variable_scope(self.config['name'], reuse=self._reuse)
+        getter = self._custom_getter()
+        var_ctx = tf.variable_scope(
+            self.config['name'], reuse=self._reuse, custom_getter=getter)
         cpu_ctx = slim.arg_scope([slim.model_variable], device='/cpu:0')
         with graph_ctx, var_ctx, cpu_ctx as scope:
             yield scope
 
-    @contextmanager
-    def custom_getter_scope(self, custom_getter):
-        scope = tf.get_variable_scope()
-        with tf.variable_scope(scope, custom_getter=custom_getter):
-            yield
+    def _custom_getter(self, getter, *args, **kwargs):
+        v = getter(*args, **kwargs)
+        return self._variable_override(v)
 
-    def remap_variables(self, fn):
-        def custom_getter(getter, *args, **kwargs):
-            v = getter(*args, **kwargs)
-            return fn(v)
-        return (self.custom_getter_scope(custom_getter))
+    def _variable_override(self, variable):
+        raise NotImplementedError
 
-    def instantiate(self):
-        def new_get_variable(v):
-            name = v.op.name
-            op = self.fixed_point_quantize(v, 2, 4)
-            op = self.pruning_test(v, name)
-            self.test_list.append(op)
-            return op
-        # force all Variables to reside on the CPU
-        with self.remap_variables(new_get_variable), self.context():
-            self._instantiate()
+    def _add_end_point(self, key, layer):
+        if key in self.end_points:
+            raise KeyError(
+                'layer {!r} already exists in end_points.'.format(layer))
+        self.end_points[key] = layer
 
 
     def _instantiation_params(self, params):
         def create(params, key):
-            try:
-                p = params[key]
-            except KeyError:
+            p = params.get(key, None)
+            if p is None:
+                return
+            if p is None:
                 return
             p = dict(p)
-            cls = import_from_dot_path(p.pop('type'))
+            cls, p = object_from_params(p)
+            for k in p.pop('_inherit', []):
+                p[k] = params[k]
             params[key] = cls(**p)
 
-        # layer configs
         params = dict(params)
-        layer_name = params.pop('name')
-        layer_type = params.pop('type')
-        # set up parameters
-        params['scope'] = layer_name
         # batch norm
         norm_params = params.pop('normalizer_fn', None)
         if norm_params:
-            norm_params = dict(norm_params)
-            norm_type = norm_params.pop('type')
-            params['normalizer_fn'] = import_from_dot_path(norm_type)
-        # weight initializer
-        create(params, 'weights_initializer')
-        create(params, 'weights_regularizer')
-        return layer_name, layer_type, params, norm_params
+            obj, norm_params = object_from_params(norm_params)
+            norm_params['is_training'] = self.is_training
+            params['normalizer_fn'] = obj
+        # weight and bias hyperparams
+        param_names = [
+            'weights_regularizer', 'biases_regularizer',
+            'weights_initializer', 'biases_initializer',
+            'pointwise_regularizer', 'depthwise_regularizer']
+        for name in param_names:
+            create(params, name)
+        # layer configs
+        layer_name = params.pop('name')
+        # num outputs
+        if params.get('num_outputs', None) == 'num_classes':
+            params['num_outputs'] = self.config.num_classes()
+        # set up parameters
+        params['scope'] = layer_name
+        try:
+            params['padding'] = params['padding'].upper()
+        except KeyError:
+            pass
+        return layer_name, params, norm_params
 
     def _instantiate(self):
         net = self.end_points['images']
-        if net is None:
-            # if we don't have an input, we initialize the net with
-            # a placeholder input
-            shape = (self.config.dataset.batch_size, )
-            shape += self.config.input_shape
-            net = tf.placeholder(tf.float32, shape=shape, name='input')
         for params in self.config.net:
-            layer_name, layer_type, params, norm_params = \
-                self._instantiation_params(params)
-            # get method by its name to instantiate a layer
-            func_name = 'instantiate_' + layer_type
-            inst_func = getattr(self, func_name, self.generic_instantiate)
+            name, params, norm_params = self._instantiation_params(params)
             # we do not have direct access to normalizer instantiation,
             # so arg_scope must be used
             if norm_params:
@@ -110,21 +105,26 @@ class BaseNet(object):
                     [params['normalizer_fn']], **norm_params)
             else:
                 norm_scope = slim.arg_scope([])
+            # get method by its name to instantiate a layer
+            func, params = object_from_params(params, self, 'instantiate_')
             # instantiation
-            try:
-                with norm_scope:
-                    net = inst_func(net, params)
-            except NotImplementedError:
-                raise NotImplementedError(
-                    'Instantiation method for layer named "{}" with type "{}" '
-                    'is not implemented.'.format(params['scope'], layer_type))
+            with norm_scope:
+                net = func(net, params)
             # save end points
-            self.end_points[layer_name] = net
-            if layer_name == self.config.logits:
-                self.end_points['logits'] = net
+            self._add_end_point(name, net)
+            if name != 'logits' and name == self.config.logits:
+                self._add_end_point('logits', net)
+
+    def instantiate(self):
+        # force all Variables to reside on the CPU
+        with self.context():
+            self._instantiate()
 
     def generic_instantiate(self, net, params):
         raise NotImplementedError
+
+    def logits(self):
+        return self.end_points['logits']
 
     def loss(self):
         try:
@@ -132,23 +132,42 @@ class BaseNet(object):
         except KeyError:
             pass
         labels = self.end_points['labels']
-        if labels is None:
-            raise ValueError(
-                'Unable to get the loss operator without initializing '
-                'Net with "labels".')
+        logits = self.end_points['logits']
         with tf.name_scope('loss'):
-            labels = slim.one_hot_encoding(
-                labels, self.config.dataset.num_classes)
+            labels = slim.one_hot_encoding(labels, logits.shape[1])
             loss = tf.losses.softmax_cross_entropy(
-                logits=self.end_points['logits'], onehot_labels=labels)
+                logits=logits, onehot_labels=labels)
             loss = tf.reduce_mean(loss)
             tf.add_to_collection('losses', loss)
-        self.end_points['loss'] = loss
+        self._add_end_point('loss', loss)
         return loss
 
     def save_graph(self):
         writer = tf.summary.FileWriter(self.config['name'], self.graph)
         writer.close()
+
+    def info(self):
+        def format_shape(shape):
+            return ' x '.join(
+                '?' if s is None else str(s) for s in shape.as_list())
+
+        param_table = [('Param', 'Shape', 'Count'), '-']
+        total = 0
+        for v in tf.trainable_variables():
+            shape = v.get_shape()
+            v_total = 1
+            for dim in shape:
+                v_total *= dim.value
+            total += v_total
+            param_table.append((v.name, format_shape(shape), v_total))
+        param_table += ['-', (None, '    Total:', total)]
+        param_table = tabular(param_table)
+
+        layer_table = [('Layer', 'Shape'), '-']
+        for name, layer in self.end_points.items():
+            layer_table.append((name, format_shape(layer.shape)))
+        layer_table = tabular(layer_table)
+        return param_table + '\n' + layer_table
 
 
 class Net(BaseNet):
@@ -156,81 +175,63 @@ class Net(BaseNet):
         return slim.conv2d(net, **params)
 
     def instantiate_depthwise_separable_convolution(self, net, params):
-        return slim.separable_conv2d(net, **params)
+        scope = params.pop('scope')
+        num_outputs = params.pop('num_outputs')
+        stride = params.pop('stride')
+        kernel = params.pop('kernel_size')
+        depth_multiplier = params.pop('depth_multiplier', 1)
+        depthwise_regularizer = params.pop('depthwise_regularizer')
+        pointwise_regularizer = params.pop('pointwise_regularizer')
+        # depthwise layer
+        depthwise = slim.separable_conv2d(
+            net, num_outputs=None, kernel_size=kernel, stride=stride,
+            weights_regularizer=depthwise_regularizer,
+            depth_multiplier=1, scope='{}_depthwise'.format(scope), **params)
+        # pointwise layer
+        num_outputs = max(int(num_outputs * depth_multiplier), 8)
+        pointwise = slim.conv2d(
+            depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
+            weights_regularizer=pointwise_regularizer,
+            scope='{}_pointwise'.format(scope), **params)
+        return pointwise
 
     @staticmethod
-    def _reduce_kernel_size_for_small_input(tensor, kernel, stride=1):
+    def _reduce_kernel_size_for_small_input(params, tensor):
         shape = tensor.get_shape().as_list()
         if shape[1] is None or shape[2] is None:
-            return kernel, stride
-        kernel = [min(shape[1], kernel[0]), min(shape[2], kernel[1])]
-        stride = min(stride, kernel[0], kernel[1])
-        return kernel, stride
+            return
+        kernel = params['kernel_size']
+        stride = params.get('stride', 1)
+        params['kernel_size'] = [
+            min(shape[1], kernel[0]), min(shape[2], kernel[1])]
+        # tensorflow complains when stride > kernel size
+        params['stride'] = min(stride, kernel[0], kernel[1])
 
     def instantiate_average_pool(self, net, params):
-        kernel, stride = self._reduce_kernel_size_for_small_input(
-            net, params['kernel_size'], params['stride'])
-        params['kernel_size'] = kernel
-        params['stride'] = stride
+        self._reduce_kernel_size_for_small_input(params, net)
         return slim.avg_pool2d(net, **params)
 
+    def instantiate_max_pool(self, net, params):
+        self._reduce_kernel_size_for_small_input(params, net)
+        return slim.max_pool2d(net, **params)
+
+    def instantiate_fully_connected(self, net, params):
+        return slim.fully_connected(net, **params)
+
+    def instantiate_softmax(self, net, params):
+        return slim.softmax(net, **params)
+
     def instantiate_dropout(self, net, params):
+        params['is_training'] = self.is_training
         return slim.dropout(net, **params)
 
     def instantiate_squeeze(self, net, params):
         params['name'] = params.pop('scope')
         return tf.squeeze(net, **params)
 
-    def instantiate_softmax(self, net, params):
-        return slim.softmax(net, **params)
-
-    def instantiate_fully_connected(self, net, params):
-        if params['scope'] == 'logits':
-            weights = tf.get_variable('logits/weights',
-                                    shape = [512,11],
-                                    initializer = tf.truncated_normal_initializer)
-            bias = tf.get_variable('logits/biases',
-                                    shape = [11],
-                                    initializer = tf.truncated_normal_initializer)
-            self.test_w = weights
-            return  tf.nn.relu(tf.matmul(net, weights) + bias)
-        else:
-            return slim.fully_connected(net, **params)
-
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
 
-    def instantiate_max_pool(self, net, params):
-        return slim.max_pool2d(net, **params)
-
-    def pruning_test(self, x, name):
-        if 'logits' in name and 'weights' in name:
-            print(name)
-            mask = np.ones([512,11])
-            mask[1:] = 0
-            mask = tf.constant(mask, dtype=tf.float32)
-            return tf.multiply(mask,x)
-        else:
-            return x
-
-    def fixed_point_quantize(self, x, n, f):
-        '''
-        1 bit sign, n bit int and f bit frac
-        ref:
-        https://github.com/tensorflow/tensorflow/blob/r1.3/tensorflow/python/ops/array_grad.py
-        '''
-        G = tf.get_default_graph()
-
-        # shift left f bits
-        x = x * (2**f)
-        # quantize
-        with G.gradient_override_map({"Round":"Identity"}):
-            x = tf.round(x)
-        # shift right f bits
-        x = tf.div(x, 2 ** f)
-
-        # cap int
-        int_max = 2 ** n
-        x = tf.clip_by_value(x, -int_max, int_max)
-        # x = x * 0
-        return x
+    def instantiate_lrn(self, net, params):
+        params['name'] = params.pop('scope')
+        return tf.nn.local_response_normalization(net, **params)

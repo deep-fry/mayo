@@ -1,14 +1,21 @@
+---
 name: lenet5
+dataset:
+    background_class: {use: true}
+preprocess:
+    validate: []
+    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
 hyper:
+    - &initializer
+      type: tensorflow.truncated_normal_initializer
+      stddev: 0.09
     - &conv
       type: convolution
       kernel_size: [5, 5]
       stride: 1
       padding: valid
-      weights_initializer:
-          type: tensorflow.truncated_normal_initializer
-          stddev: 0.09
+      weights_initializer: *initializer
     - &pool
       type: max_pool
       kernel_size: [2, 2]
@@ -17,9 +24,7 @@ hyper:
     - &dropout {type: dropout, keep_prob: 0.999}
     - &fc
       type: fully_connected
-      weights_initializer:
-          type: tensorflow.truncated_normal_initializer
-          stddev: 0.09
+      weights_initializer: *initializer
 net:
     - {name: conv0, <<: *conv, num_outputs: 32}
     - {name: pool0, <<: *pool}
@@ -28,5 +33,4 @@ net:
     - {name: flatten, type: flatten}
     - {name: dropout, <<: *dropout}
     - {name: fc1, <<: *fc, num_outputs: 512}
-    - {name: logits, <<: *fc, num_outputs: $dataset.num_classes,
-       activation_fn: null}
+    - {name: logits, <<: *fc, activation_fn: null, num_outputs: num_classes}

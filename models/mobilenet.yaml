@@ -1,6 +1,16 @@
+---
 name: mobilenet_v1
+dataset:
+    background_class: {use: true}
+preprocess:
+    validate: [{type: central_crop, central_fraction: 0.875}]
+    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
+depth_multiplier: &depth_multiplier 1
 hyper:
+    - &regularizer
+      type: tensorflow.contrib.layers.l2_regularizer
+      scale: 0.00004
     - &conv
       type: convolution
       kernel_size: [3, 3]
@@ -14,13 +24,12 @@ hyper:
       weights_initializer:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
-      weights_regularizer:
-          type: tensorflow.contrib.layers.l2_regularizer
-          scale: 0.00004
     - &dsconv
       <<: *conv
       type: depthwise_separable_convolution
-      depth_multiplier: 1
+      depth_multiplier: *depth_multiplier
+      depthwise_regularizer: null
+      pointwise_regularizer: *regularizer
     - &pool
       type: average_pool
       kernel_size: [7, 7]
@@ -30,11 +39,14 @@ hyper:
     - &fc
       type: convolution
       kernel_size: [1, 1]
-      num_outputs: $dataset.num_classes
+      num_outputs: num_classes
       activation_fn: null
       normalizer_fn: null
+      weights_regularizer: *regularizer
 net:
-    - {name: conv0, <<: *conv, stride: 2, num_outputs: 32}
+    - {name: conv0, <<: *conv, stride: 2,
+       num_outputs: !arith 'max(int(32 * $(depth_multiplier)), 8)',
+       weights_regularizer: *regularizer}
     - {name: conv1, <<: *dsconv, stride: 1, num_outputs: 64}
     - {name: conv2, <<: *dsconv, stride: 2, num_outputs: 128}
     - {name: conv3, <<: *dsconv, stride: 1, num_outputs: 128}

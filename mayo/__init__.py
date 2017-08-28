@@ -1,11 +1,11 @@
 import os
 
+from mayo.log import log
 from mayo.config import Config
 from mayo.net import Net
 from mayo.train import Train
+from mayo.eval import Evaluate
 from mayo.cli import meta
 
-__all__ = [Config, Net, Train]
+__all__ = [log, Config, Net, Train, Evaluate]
 locals().update(meta())
-
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '0'
