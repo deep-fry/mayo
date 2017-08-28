@@ -11,7 +11,7 @@ hyper:
     - &pickle_initializer
       weights_initializer: &weights_initializer
           type: external/pickle_initializer.py:vgg_initializer
-          path: models/$(name)_pickle.pkl
+          path: externel/$(name)_pickle.pkl
           net: $(name)
           base: weights
           _inherit: [name]
