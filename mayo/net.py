@@ -4,7 +4,7 @@ from collections import OrderedDict
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import object_from_params, import_from_string, tabular
+from mayo.util import object_from_params, tabular
 
 
 class BaseNet(object):
