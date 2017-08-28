@@ -157,8 +157,9 @@ class Train(object):
     @property
     @memoize
     def _summary_writer(self):
+        path = self.config.system.search_paths.summaries[0]
         directory = os.path.join(
-            'summaries/', self.config.name, self.config.dataset.name)
+            path, self.config.name, self.config.dataset.name)
         return tf.summary.FileWriter(directory, graph=self._graph)
 
     def _save_summary(self, step):
@@ -171,7 +172,8 @@ class Train(object):
         self._setup_train_operation()
         self._init_session()
         checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name)
+            self._session, self.config.name, self.config.dataset.name,
+            self.config.system.search_paths.checkpoints)
         cp_step = step = checkpoint.load()
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)

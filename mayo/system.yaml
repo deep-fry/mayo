@@ -6,3 +6,7 @@ system:
     batch_size: 64
     max_steps: 10000000
     tensorflow_log_level: 2
+    search_paths:
+        datasets: [datasets]
+        checkpoints: [checkpoints]
+        summaries: [summaries]

@@ -44,7 +44,8 @@ class Evaluate(object):
 
         # load checkpoint
         checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name)
+            self._session, self.config.name, self.config.dataset.name,
+            self.config.system.search_paths.checkpoints)
         checkpoint.load()
 
         # queue runners

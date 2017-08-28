@@ -9,6 +9,17 @@ import collections
 import yaml
 
 
+def _unique(items):
+    found = set([])
+    keep = []
+    for item in items:
+        if item in found:
+            continue
+        found.add(item)
+        keep.append(item)
+    return keep
+
+
 class YamlTag(object):
     tag = None
 
@@ -96,12 +107,15 @@ ArithTag.register()
 CodeTag.register()
 
 
-def _dot_path(keyable, dot_path_key):
+def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
     *dot_path, final_key = dot_path_key.split('.')
     for key in dot_path:
         if isinstance(keyable, (tuple, list)):
             key = int(key)
-        keyable = keyable[key]
+        if insert_if_not_exists:
+            keyable = keyable.setdefault(key, keyable.__class__())
+        else:
+            keyable = keyable[key]
     return keyable, final_key
 
 
@@ -204,21 +218,26 @@ class Config(_DotDict):
         system_yaml = os.path.join(root, 'system.yaml')
         with open(system_yaml, 'r') as file:
             system = yaml.load(file)
-        _dict_merge(unified, system)
+        _dict_merge(unified, copy.deepcopy(system))
         _dict_merge(dictionary, system)
 
     def _init_search_paths(self, unified, dictionary, yaml_files):
-        search_paths = [os.path.dirname(f) for f in yaml_files]
+        default = {'datasets': [os.path.dirname(f) for f in yaml_files]}
         for d in (dictionary, unified):
-            d['dataset'].setdefault('_search_paths', search_paths)
+            search_paths = d['system']['search_paths']
+            for key, paths in default.items():
+                paths = search_paths.get(key, paths)
+                if isinstance(paths, str):
+                    paths = (p.strip() for p in ';'.split(paths))
+                search_paths[key] = _unique(paths)
 
     @staticmethod
     def _override(dictionary, overrides):
         if not overrides:
             return
-        for override in overrides.split(';'):
+        for override in overrides:
             k_path, v = (o.strip() for o in override.split('='))
-            sub_dictionary, k = _dot_path(dictionary, k_path)
+            sub_dictionary, k = _dot_path(dictionary, k_path, True)
             v = yaml.load(v)
             try:
                 cls = sub_dictionary[k].__class__
@@ -255,7 +274,7 @@ class Config(_DotDict):
         except KeyError:
             raise KeyError('Mode {} not recognized.'.format(mode))
         files = []
-        search_paths = self.dataset._search_paths
+        search_paths = self.system.search_paths.datasets
         for directory in search_paths:
             files += glob.glob(os.path.join(directory, path))
         if not files:
