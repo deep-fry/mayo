@@ -4,11 +4,12 @@ from mayo.util import memoize, object_from_params
 
 
 class _ImagePreprocess(object):
-    def __init__(self, shape, bbox, tid):
+    def __init__(self, shape, means, bbox, tid):
         super().__init__()
+        self.shape = shape
+        self.means = means
         self.bbox = bbox
         self.tid = tid
-        self.shape = shape
 
     def distort_bbox(self, i):
         # distort bbox
@@ -67,11 +68,13 @@ class _ImagePreprocess(object):
             i = tf.add(i, shift)
         return i
 
-    def subtract_channel_means(self, i, means):
+    def subtract_channel_means(self, i):
         shape = [1, 1, 1, len(means)]
-        means = tf.constant(
-            means, dtype=tf.float32, shape=shape, name='image_mean')
+        means = tf.constant(self.means, shape=shape, name='image_means')
         return i - means
+
+    def subtract_image_mean(self, i):
+        return i - tf.reduce_mean(i)
 
     def _ensure_shape(self, i):
         # ensure image is the correct shape
@@ -115,7 +118,8 @@ class Preprocess(object):
         channels = self.config.image_shape()[-1]
         image = self._decode_jpeg(buffer, channels)
         shape = self.config.image_shape()
-        image_preprocess = _ImagePreprocess(shape, bbox, tid)
+        means = self.config.dataset.get('channel_means', [0.5] * channels)
+        image_preprocess = _ImagePreprocess(shape, means, bbox, tid)
         actions_map = self.config.preprocess
         actions = actions_map[mode] + actions_map['final']
         return image_preprocess.preprocess(image, actions)

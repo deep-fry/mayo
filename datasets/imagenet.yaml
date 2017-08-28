@@ -13,6 +13,10 @@ dataset:
         height: 224
         width: 224
         channels: 3
+    channel_means:
+        - 0.485019607843137
+        - 0.4579607843
+        - 0.407607843137255
 preprocess:
     train:
         - {type: distort_bbox}
