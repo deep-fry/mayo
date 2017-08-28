@@ -1,0 +1,116 @@
+#!/usr/bin/env python3
+"""
+Usage:
+    ckpt yaml <ckpt>
+    ckpt pickle <ckpt> <pkl> [options]
+    ckpt checkpoint <ckpt> <new_ckpt> [options]
+
+Options:
+    --interactive       Interactively enter a new key for each key
+                        in checkpoint.
+    --formatter=<yaml>  Replaces keys with new keys given in the specified
+                        YAML file.
+
+Help:
+    Loading meta only might not work.
+    If the checkpoint contains:
+    model.ckpt.meta
+    model.ckpt.index
+    model.ckpt.data-XXXX
+    model_name = model.ckpt
+    If the checkpoint only contains model.ckpt
+    model_name = model.ckpt
+    Checked on inceptionv3 and mobilenet
+
+References:
+1. https://stackoverflow.com/questions/40118062/how-to-read-weights-saved-in-tensorflow-checkpoint-file
+2. https://www.tensorflow.org/s/results/?q=freezegraph&p=%2F
+"""
+import numpy as np
+import pickle
+
+import yaml
+from docopt import docopt
+from tensorflow.python import pywrap_tensorflow
+
+np.set_printoptions(precision=32)
+
+
+class CLI(object):
+    def __init__(self):
+        super().__init__()
+        opt = docopt(__doc__)
+        self.cp_name = opt['<ckpt>']
+        self.pickle_name = opt['<pkl>']
+        self.formatter = opt['--formatter']
+        self.interactive = opt['--interactive']
+        self.should_format = self.formatter or self.interactive
+        self.reader = pywrap_tensorflow.NewCheckpointReader(self.cp_name)
+        if opt['pickle']:
+            self.to_pickle()
+        elif opt['checkpoint']:
+            self.to_ckpt()
+        elif opt['yaml']:
+            self.to_yaml()
+
+    def to_pickle(self):
+        if self.should_format:
+            var_tensor = self.formatted_var_tensor_map()
+        else:
+            var_tensor = self.var_tensor_map()
+        with open(self.pickle_name, 'wb') as f:
+            pickle.dump(var_tensor, f)
+
+    def to_ckpt(self):
+        raise NotImplementedError
+
+    def to_yaml(self):
+        var_shape = self.var_shape_map()
+        info = {}
+        for k, v in var_shape.items():
+            info[k] = {
+                'new_name': k,
+                'shape': v,
+            }
+        print(yaml.safe_dump(info))
+
+    def var_shape_map(self):
+        try:
+            return self._var_shape
+        except AttributeError:
+            pass
+        self._var_shape = self.reader.get_variable_to_shape_map()
+        return self._var_shape
+
+    def var_tensor_map(self):
+        try:
+            return self._var_tensor
+        except AttributeError:
+            pass
+        params = {}
+        for key in self.var_to_shape_map():
+            params[key] = self.reader.get_tensor(key)
+        self._var_tensor = params
+        return self._var_tensor
+
+    def formatted_var_tensor_map(self):
+        if self.formatter:
+            formatter = yaml.load(open(self.formatter, 'r'))
+        else:
+            formatter = {}
+        var_shape = self.var_shape_map()
+        for key, value in var_shape.items():
+            new_key = input(
+                'Enter a new name for key {!r} with shape {!r}\n[{}]:'
+                .format(key, value, key))
+            formatter[key] = {'new': new_key or key}
+        var_tensor = self.var_tensor_map()
+        if formatter:
+            for key in list(var_tensor):
+                tensor = var_tensor.pop(key)
+                var_tensor[formatter[key]['new']] = tensor
+        return var_tensor
+
+
+if __name__ == "__main__":
+    CLI()
