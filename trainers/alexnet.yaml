@@ -1,0 +1,9 @@
+---
+train:
+    moving_average_decay: 0.9999
+    learning_rate:
+        initial: 0.002
+        decay_factor: 0.16
+        num_epochs_per_decay: 20.0
+    optimizer:
+        type: tensorflow.train.GradientDescentOptimizer

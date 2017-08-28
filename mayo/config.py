@@ -9,7 +9,56 @@ import collections
 import yaml
 
 
-class ArithTag(object):
+def _unique(items):
+    found = set([])
+    keep = []
+    for item in items:
+        if item in found:
+            continue
+        found.add(item)
+        keep.append(item)
+    return keep
+
+
+class YamlTag(object):
+    tag = None
+
+    @classmethod
+    def register(cls):
+        yaml.add_constructor(cls.tag, cls.constructor)
+        yaml.add_representer(cls, cls.representer)
+
+    @classmethod
+    def constructor(cls, loader, node):
+        raise NotImplementedError
+
+    @classmethod
+    def representer(cls, dumper, data):
+        raise NotImplementedError
+
+
+class YamlScalarTag(YamlTag):
+    def __init__(self, content):
+        super().__init__()
+        self.content = content
+
+    @classmethod
+    def constructor(cls, loader, node):
+        content = loader.construct_scalar(node)
+        return cls(content)
+
+    @classmethod
+    def representer(cls, dumper, tag):
+        return dumper.represent_scalar(cls.tag, tag.content)
+
+    def value(self):
+        raise NotImplementedError
+
+    def __repr__(self):
+        return repr('{} {!r}'.format(self.tag, self.content))
+
+
+class ArithTag(YamlScalarTag):
     tag = '!arith'
     _eval_expr_map = {
         ast.Add: operator.add,
@@ -21,12 +70,8 @@ class ArithTag(object):
         ast.USub: operator.neg,
     }
 
-    def __init__(self, expr):
-        super().__init__()
-        self.expr = expr
-
     def value(self):
-        tree = ast.parse(self.expr, mode='eval').body
+        tree = ast.parse(self.content, mode='eval').body
         return self._eval(tree)
 
     def _eval(self, n):
@@ -43,29 +88,34 @@ class ArithTag(object):
             return op(self._eval(n.operand))
         return op(self._eval(n.left), self._eval(n.right))
 
-    @staticmethod
-    def constructor(loader, node):
-        expr = loader.construct_scalar(node)
-        return ArithTag(expr)
 
-    @classmethod
-    def representer(cls, dumper, data):
-        return dumper.represent_scalar(cls.tag, data.expr)
+class CodeTag(YamlScalarTag):
+    tag = '!code'
 
-    def __repr__(self):
-        return repr("{} '{}'".format(self.tag, self.expr))
-
-
-yaml.add_constructor(ArithTag.tag, ArithTag.constructor)
-yaml.add_representer(ArithTag, ArithTag.representer)
+    def value(self):
+        try:
+            return self._value
+        except AttributeError:
+            pass
+        variables = {}
+        exec(self.content, variables)
+        self._value = variables
+        return variables
 
 
-def _dot_path(keyable, dot_path_key):
+ArithTag.register()
+CodeTag.register()
+
+
+def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
     *dot_path, final_key = dot_path_key.split('.')
     for key in dot_path:
         if isinstance(keyable, (tuple, list)):
             key = int(key)
-        keyable = keyable[key]
+        if insert_if_not_exists:
+            keyable = keyable.setdefault(key, keyable.__class__())
+        else:
+            keyable = keyable[key]
     return keyable, final_key
 
 
@@ -104,19 +154,23 @@ class _DotDict(dict):
 
     def _link(self, obj):
         def link_str(string):
-            keys = re.findall(r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)', string)
+            regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
+            keys = re.findall(regex, string, re.MULTILINE)
             for k in keys:
                 d, fk = _dot_path(obj, k)
                 string = string.replace('$({})'.format(k), str(d[fk]))
             return string
 
-        def link_arith(arith):
+        def link_tag(tag):
             try:
-                return ArithTag(link_str(arith.expr)).value()
+                tag = tag.__class__(link_str(tag.content))
             except KeyError:
-                return arith
+                pass
+            if isinstance(tag, ArithTag):
+                return tag.value()
+            return tag
 
-        link_map = {str: link_str, ArithTag: link_arith}
+        link_map = {str: link_str, YamlScalarTag: link_tag}
         return self._recursive_apply(obj, link_map)
 
     def __getitem__(self, key):
@@ -146,9 +200,10 @@ class Config(_DotDict):
             with open(path, 'r') as file:
                 d = yaml.load(file)
             _dict_merge(unified, copy.deepcopy(d))
-            if 'dataset' in d:
-                self._init_dataset(path, unified, d)
             _dict_merge(dictionary, d)
+        # init search paths
+        self._init_search_paths(unified, dictionary, yaml_files)
+        # finalize
         self._override(dictionary, overrides)
         self._link(dictionary)
         self._wrap(dictionary)
@@ -158,38 +213,42 @@ class Config(_DotDict):
         self.unified = unified
         self._setup_tensorflow_log_level()
 
-    @staticmethod
-    def _init_dataset(path, u, d):
-        root = os.path.dirname(path)
-        u['dataset']['path'].setdefault('root', root)
-        d = d['dataset']
-        root = d['path'].pop('root', root)
-        # change relative path to our working directory
-        for mode, path in d['path'].items():
-            d['path'][mode] = os.path.join(root, path)
-
     def _init_system_config(self, unified, dictionary):
         root = os.path.dirname(__file__)
         system_yaml = os.path.join(root, 'system.yaml')
         with open(system_yaml, 'r') as file:
             system = yaml.load(file)
-        _dict_merge(unified, system)
+        _dict_merge(unified, copy.deepcopy(system))
         _dict_merge(dictionary, system)
+
+    def _init_search_paths(self, unified, dictionary, yaml_files):
+        default = {'datasets': [os.path.dirname(f) for f in yaml_files]}
+        for d in (dictionary, unified):
+            search_paths = d['system']['search_paths']
+            for key, paths in default.items():
+                paths = search_paths.get(key, paths)
+                if isinstance(paths, str):
+                    paths = (p.strip() for p in ';'.split(paths))
+                search_paths[key] = _unique(paths)
 
     @staticmethod
     def _override(dictionary, overrides):
         if not overrides:
             return
-        for override in overrides.split(';'):
+        for override in overrides:
             k_path, v = (o.strip() for o in override.split('='))
-            sub_dictionary, k = _dot_path(dictionary, k_path)
+            sub_dictionary, k = _dot_path(dictionary, k_path, True)
             v = yaml.load(v)
-            cls = sub_dictionary[k].__class__
-            if not isinstance(v, cls):
-                msg = ('Type of the overriding value "{.__name__}" for '
-                       'key "{}" is not compatible with the type of '
-                       'value "{.__name__}" to be overridden.')
-                raise TypeError(msg.format(type(v), k_path, cls))
+            try:
+                cls = sub_dictionary[k].__class__
+            except KeyError:
+                pass
+            else:
+                if not isinstance(v, cls):
+                    msg = ('Type of the overriding value "{.__name__}" for '
+                           'key "{}" is not compatible with the type of '
+                           'value "{.__name__}" to be overridden.')
+                    raise TypeError(msg.format(type(v), k_path, cls))
             sub_dictionary[k] = v
 
     def to_yaml(self, file=None):
@@ -202,15 +261,26 @@ class Config(_DotDict):
         params = self.dataset.shape
         return (params.height, params.width, params.channels)
 
+    def label_offset(self):
+        bg = self.dataset.background_class
+        return int(bg.use) - int(bg.has)
+
+    def num_classes(self):
+        return self.dataset.num_classes + self.label_offset()
+
     def data_files(self, mode):
         try:
             path = self.dataset.path[mode]
         except KeyError:
             raise KeyError('Mode {} not recognized.'.format(mode))
-        files = glob.glob(path)
+        files = []
+        search_paths = self.system.search_paths.datasets
+        for directory in search_paths:
+            files += glob.glob(os.path.join(directory, path))
         if not files:
-            msg = 'No files found for dataset {} with mode {} at {}'
-            raise FileNotFoundError(msg.format(self.config.name, mode, path))
+            msg = 'No files found for dataset {} with mode {} at {!r}'
+            paths = '{{{}}}/{}'.format(','.join(search_paths), path)
+            raise FileNotFoundError(msg.format(self.name, mode, paths))
         return files
 
     def _excepthook(self, etype, evalue, etb):
@@ -220,7 +290,7 @@ class Config(_DotDict):
         try:
             use_pdb = self['system.use_pdb']
         except KeyError:
-            use_pdb = False
+            use_pdb = True
         return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):

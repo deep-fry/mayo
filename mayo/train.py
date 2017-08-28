@@ -5,8 +5,9 @@ import itertools
 import numpy as np
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.net import Net
-from mayo.util import memoize, import_from_dot_path
+from mayo.util import memoize, object_from_params
 from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
 
@@ -63,7 +64,7 @@ class Train(object):
     @memoize
     def optimizer(self):
         params = self.config.train.optimizer
-        optimizer_class = import_from_dot_path(params.pop('type'))
+        optimizer_class, params = object_from_params(params)
         return optimizer_class(self.learning_rate, **params)
 
     def tower_loss(self, images, labels, reuse):
@@ -138,9 +139,11 @@ class Train(object):
     def _update_progress(self, step, loss, cp_step):
         ind = next(self.progress_indicator)
         epoch = self._to_epoch(step)
-        info = '{} | epoch: {:6.2f} | loss: {:8.3e} | checkpoint: {:6.2f}'
+        if not isinstance(cp_step, str):
+            cp_step = '{:6.2f}'.format(self._to_epoch(cp_step))
+        info = '{} | epoch: {:6.2f} | loss: {:8.3e} | checkpoint: {}'
         info = info.format(
-            ind, epoch, self._ema('loss', loss), self._to_epoch(cp_step))
+            ind, epoch, self._ema('loss', loss), cp_step)
         # performance
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
@@ -150,15 +153,16 @@ class Train(object):
             imgs_per_sec /= float(duration)
             imgs_per_sec = self._ema('imgs_per_sec', imgs_per_sec)
             info += ' | throughput: {:4.0f}/s'.format(imgs_per_sec)
-        print('\r' + info, end='')
+        log.info(info, update=True)
         self._prev_time = now
         self._prev_step = step
 
     @property
     @memoize
     def _summary_writer(self):
+        path = self.config.system.search_paths.summaries[0]
         directory = os.path.join(
-            'summaries/', self.config.name, self.config.dataset.name)
+            path, self.config.name, self.config.dataset.name)
         return tf.summary.FileWriter(directory, graph=self._graph)
 
     def _save_summary(self, step):
@@ -166,17 +170,19 @@ class Train(object):
         self._summary_writer.add_summary(summary, step)
 
     def _train(self):
-        print('Instantiating...')
+        log.info('Instantiating...')
         self._setup_gradients()
         self._setup_train_operation()
+        log.info('Initializing session...')
         self._init_session()
         checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name)
+            self._session, self.config.name, self.config.dataset.name,
+            self.config.system.search_paths.checkpoints)
         cp_step = step = checkpoint.load()
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
-        print('Training start')
+        log.info('Training start')
         # train iterations
         max_steps = self.config.system.max_steps
         try:
@@ -189,11 +195,13 @@ class Train(object):
                     self._save_summary(step)
                 curr_step += 1
                 if curr_step % 5000 == 0 or curr_step == max_steps:
-                    checkpoint.save(step)
+                    self._update_progress(step, loss, 'saving')
+                    with log.level('warning'):
+                        checkpoint.save(step)
                     cp_step = step
                 step += 1
         except KeyboardInterrupt:
-            print('\nStopped, saving checkpoint in 3 seconds.')
+            log.info('Stopped, saving checkpoint in 3 seconds.')
         try:
             time.sleep(3)
         except KeyboardInterrupt:

@@ -54,6 +54,35 @@ def import_from_string(string):
     return import_from_dot_path(string, mod)
 
 
+def object_from_params(params, import_from=None, import_from_prefix=''):
+    """
+    import an object or get an object from <import_from> for <params>
+    with format:
+        {'type': <some importable object>, ...}
+    or exec code for <params> with format:
+        {'type': inline,
+         '_code': <some python code>,
+         '_object': <existing object from the above code>, ...}
+    """
+    params = dict(params)
+    otype = params.pop('type')
+    if otype == 'inline':
+        code = params.pop('_code')
+        obj = params.pop('_object')
+        return code.value()[obj], params
+    if import_from is not None:
+        otype = import_from_prefix + otype
+        try:
+            cls = getattr(import_from, otype)
+        except AttributeError:
+            raise NotImplementedError(
+                '{} does not implement object named {!r}'
+                .format(import_from, otype))
+    else:
+        cls = import_from_string(otype)
+    return cls, params
+
+
 def tabular(data):
     data = ['-'] + data + ['-']
     valid_rows = [row for row in data if row != '-']

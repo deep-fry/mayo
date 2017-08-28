@@ -49,9 +49,9 @@ Usage:
     {commands}
     {__executable__} (-h | --help)
 
-Options:
-    --overrides=<overrides>     Specify hyper-parameters to override.
-                                Example: --overrides="a.b = c; d = [e, f]"
+Arguments:
+    <anything> can either be a YAML file or an override command
+    formatted as <dot_key_path>=<yaml_value>
 """
 
     def _commands(self):
@@ -69,7 +69,7 @@ Options:
         usage_meta = meta()
         commands = []
         for k in self._commands().keys():
-            command = '{__executable__} {command} <yaml>... [options]'
+            command = '{__executable__} {command} [<anything>...]'
             commands.append(command.format(command=k, **usage_meta))
         usage_meta['commands'] = '\n    '.join(commands)
         return self.doc() + self._USAGE.format(**usage_meta)
@@ -80,7 +80,11 @@ Options:
         spec = spec_from_file_location('mayo.config', path)
         mod = module_from_spec(spec)
         spec.loader.exec_module(mod)
-        return mod.Config(args['<yaml>'], overrides=args['--overrides'])
+        anything = args['<anything>']
+        yamls, overrides = [], []
+        for each in anything:
+            (overrides if '=' in each else yamls).append(each)
+        return mod.Config(yamls, overrides=overrides)
 
     def cli_train(self, args):
         from mayo.train import Train

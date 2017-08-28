@@ -4,7 +4,7 @@ from collections import OrderedDict
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import import_from_string, tabular
+from mayo.util import object_from_params, import_from_string, tabular
 
 
 class BaseNet(object):
@@ -16,7 +16,9 @@ class BaseNet(object):
         self.config = config
         self.is_training = is_training
         self._reuse = reuse
-        self.end_points = {'images': images, 'labels': labels}
+        self.end_points = OrderedDict()
+        self.end_points['images'] = images
+        self.end_points['labels'] = labels
         self.instantiate()
 
     @contextmanager
@@ -50,7 +52,7 @@ class BaseNet(object):
             if p is None:
                 return
             p = dict(p)
-            cls = import_from_string(p.pop('type'))
+            cls, p = object_from_params(p)
             for k in p.pop('_inherit', []):
                 p[k] = params[k]
             params[key] = cls(**p)
@@ -59,10 +61,9 @@ class BaseNet(object):
         # batch norm
         norm_params = params.pop('normalizer_fn', None)
         if norm_params:
-            norm_params = dict(norm_params)
-            norm_type = norm_params.pop('type')
+            obj, norm_params = object_from_params(norm_params)
             norm_params['is_training'] = self.is_training
-            params['normalizer_fn'] = import_from_string(norm_type)
+            params['normalizer_fn'] = obj
         # weight and bias hyperparams
         param_names = [
             'weights_regularizer', 'biases_regularizer',
@@ -72,23 +73,21 @@ class BaseNet(object):
             create(params, name)
         # layer configs
         layer_name = params.pop('name')
-        layer_type = params.pop('type')
+        # num outputs
+        if params.get('num_outputs', None) == 'num_classes':
+            params['num_outputs'] = self.config.num_classes()
         # set up parameters
         params['scope'] = layer_name
         try:
             params['padding'] = params['padding'].upper()
         except KeyError:
             pass
-        return layer_name, layer_type, params, norm_params
+        return layer_name, params, norm_params
 
     def _instantiate(self):
         net = self.end_points['images']
         for params in self.config.net:
-            layer_name, layer_type, params, norm_params = \
-                self._instantiation_params(params)
-            # get method by its name to instantiate a layer
-            func_name = 'instantiate_' + layer_type
-            inst_func = getattr(self, func_name, self.generic_instantiate)
+            name, params, norm_params = self._instantiation_params(params)
             # we do not have direct access to normalizer instantiation,
             # so arg_scope must be used
             if norm_params:
@@ -96,17 +95,14 @@ class BaseNet(object):
                     [params['normalizer_fn']], **norm_params)
             else:
                 norm_scope = slim.arg_scope([])
+            # get method by its name to instantiate a layer
+            func, params = object_from_params(params, self, 'instantiate_')
             # instantiation
-            try:
-                with norm_scope:
-                    net = inst_func(net, params)
-            except NotImplementedError:
-                raise NotImplementedError(
-                    'Instantiation method for layer named "{}" with type "{}" '
-                    'is not implemented.'.format(params['scope'], layer_type))
+            with norm_scope:
+                net = func(net, params)
             # save end points
-            self._add_end_point(layer_name, net)
-            if layer_name != 'logits' and layer_name == self.config.logits:
+            self._add_end_point(name, net)
+            if name != 'logits' and name == self.config.logits:
                 self._add_end_point('logits', net)
 
     def instantiate(self):
@@ -225,3 +221,7 @@ class Net(BaseNet):
 
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
+
+    def instantiate_lrn(self, net, params):
+        params['name'] = params.pop('scope')
+        return tf.nn.local_response_normalization(net, **params)

@@ -3,18 +3,22 @@ dataset:
     name: imagenet
     path:
         train: imagenet/train-*
-        test: &vpath imagenet/validation-*
-        validate: *vpath
-    num_classes: 1000
+        validate: imagenet/validation-* 
+    num_classes: 1001
+    background_class: {has: true}
     num_examples_per_epoch:
         train: 1281167
-        test: null
         validate: 50000
-    preprocess:
-        distort: true
-        flip: true
-        color: true
     shape:
         height: 224
         width: 224
         channels: 3
+    channel_means:
+        - 0.485019607843137
+        - 0.4579607843
+        - 0.407607843137255
+preprocess:
+    train:
+        - {type: distort_bbox}
+        - {type: distort_color}
+        - {type: random_flip}
