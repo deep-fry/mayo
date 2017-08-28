@@ -196,7 +196,7 @@ class Train(object):
                 curr_step += 1
                 if curr_step % 5000 == 0 or curr_step == max_steps:
                     self._update_progress(step, loss, 'saving')
-                    with log.level('warning'):
+                    with log.level('warn'):
                         checkpoint.save(step)
                     cp_step = step
                 step += 1
