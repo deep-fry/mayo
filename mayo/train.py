@@ -145,8 +145,8 @@ class Train(object):
         ind = next(self.progress_indicator)
         epoch = self._to_epoch(step)
         if not isinstance(cp_step, str):
-            cp_step = '{:6.2f}'.format(self._to_epoch(cp_step))
-        info = '{} | epoch: {:6.2f} | loss: {:8.3g}±{:3}% | ckpt: {}'
+            cp_step = '{:.2f}'.format(self._to_epoch(cp_step))
+        info = '{} | epoch: {:.2f} | loss: {:<8.3}±{:3}% | ckpt: {}'
         loss_mean, loss_std = self._moving_average('loss', loss)
         info = info.format(
             ind, epoch, loss_mean, int(loss_std / loss_mean * 100), cp_step)

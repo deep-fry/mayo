@@ -10,3 +10,4 @@ system:
         datasets: [datasets]
         checkpoints: [checkpoints]
         summaries: [summaries]
+    checkpoint: {load: true}

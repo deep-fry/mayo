@@ -44,10 +44,13 @@ class Evaluate(object):
         top5_op = tf.nn.in_top_k(logits, labels, 5)
 
         # load checkpoint
-        checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name,
-            self.config.system.search_paths.checkpoints)
-        checkpoint.load(must=True)
+        if self.config.system.checkpoint.load:
+            checkpoint = CheckpointHandler(
+                self._session, self.config.name, self.config.dataset.name,
+                self.config.system.search_paths.checkpoints)
+            checkpoint.load(must=True)
+        else:
+            self._session.run(tf.global_variables_initializer())
 
         # queue runners
         coord = tf.train.Coordinator()

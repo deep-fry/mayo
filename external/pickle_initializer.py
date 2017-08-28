@@ -1,9 +1,12 @@
 import pickle
 
+import yaml
+import numpy as np
 import tensorflow as tf
 
 
 _init_params = {}
+_formatter = {}
 
 
 def _params(path):
@@ -15,16 +18,25 @@ def _params(path):
     return params
 
 
-def initializer(path, net, name, base):
-    name = '{}/{}/{}'.format(net, name, base)
-    params = _params(path)
-    return tf.constant_initializer(params[name])
+def formatter(file):
+    f = _formatter.get(file, None)
+    if f is None:
+        with open(file, 'r') as file:
+            f = yaml.load(file)
+        _formatter[file] = f
+    return f
 
-def vgg_initializer(path, net, name, base):
-    # name = '{}/{}/{}'.format(net, layer_name, base)
+
+def initializer(path, net, name, base, perturb=0.0):
+    #  name = '{}/{}/{}'.format(net, name, base)
+    # FIXME grep-based hack
     params = _params(path)
     for key in params.keys():
         if (base in key) and (name in key):
             name = key
             break
-    return tf.constant_initializer(params[name])
+    tensor = params[name]
+    if perturb > 0:
+        std = np.std(tensor)
+        tensor += np.random.normal(0, perturb * std, tensor.shape)
+    return tf.constant_initializer(tensor)
