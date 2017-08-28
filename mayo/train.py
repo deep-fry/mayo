@@ -134,7 +134,7 @@ class Train(object):
         history = getattr(self, name, [])
         if len(history) == self.average_count:
             history.pop(0)
-        history.add(value)
+        history.append(value)
         setattr(self, name, history)
         mean = np.mean(history)
         if not std:
@@ -146,10 +146,10 @@ class Train(object):
         epoch = self._to_epoch(step)
         if not isinstance(cp_step, str):
             cp_step = '{:6.2f}'.format(self._to_epoch(cp_step))
-        info = '{} | epoch: {:6.2f} | loss: {:8.3g}±{5.0f} | ckpt: {}'
+        info = '{} | epoch: {:6.2f} | loss: {:8.3g}±{:3}% | ckpt: {}'
         loss_mean, loss_std = self._moving_average('loss', loss)
         info = info.format(
-            ind, epoch, loss_mean, cp_step)
+            ind, epoch, loss_mean, int(loss_std / loss_mean * 100), cp_step)
         # performance
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
