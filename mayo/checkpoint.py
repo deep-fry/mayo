@@ -41,12 +41,14 @@ class CheckpointHandler(object):
         with self._session.as_default():
             return tf.global_variables()
 
-    def load(self):
+    def load(self, must=False):
         cp_path = self._path(False)
         try:
             with open(cp_path, 'r') as f:
                 manifest = yaml.load(f)
         except FileNotFoundError:
+            if must:
+                raise
             return
         print('Loading latest checkpoint...')
         cp_name = manifest['model_checkpoint_path']

@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from mayo.net import Net
 from mayo.checkpoint import CheckpointHandler
-from mayo.vgg_preprocess import Preprocess
+from mayo.preprocess import Preprocess
 
 
 class Evaluate(object):
@@ -46,7 +46,7 @@ class Evaluate(object):
         checkpoint = CheckpointHandler(
             self._session, self.config.name, self.config.dataset.name,
             self.config.system.search_paths.checkpoints)
-        checkpoint.load()
+        checkpoint.load(must=True)
 
         # queue runners
         coord = tf.train.Coordinator()

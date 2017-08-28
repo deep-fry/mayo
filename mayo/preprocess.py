@@ -69,7 +69,7 @@ class _ImagePreprocess(object):
         return i
 
     def subtract_channel_means(self, i):
-        shape = [1, 1, 1, len(means)]
+        shape = [1, 1, len(self.means)]
         means = tf.constant(self.means, shape=shape, name='image_means')
         return i - means
 

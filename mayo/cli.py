@@ -49,7 +49,7 @@ Usage:
     {commands}
     {__executable__} (-h | --help)
 
-Options:
+Arguments:
     <anything> can either be a YAML file or an override command
     formatted as <dot_key_path>=<yaml_value>
 """
