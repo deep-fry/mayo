@@ -212,3 +212,7 @@ class Net(BaseNet):
 
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
+
+    def instantiate_lrn(self, net, params):
+        params['name'] = params.pop('scope')
+        return tf.nn.local_response_normalization(net, **params)
