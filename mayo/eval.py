@@ -4,6 +4,7 @@ import math
 import numpy as np
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.net import Net
 from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
@@ -32,7 +33,7 @@ class Evaluate(object):
             info = '[{:.2f}%] top1: {:.2f}%, top5: {:.2f}% ({:.1f} imgs/sec)'
             info = info.format(
                 percentage, top1 * 100, top5 * 100, imgs_per_sec)
-            print(info, end='\r')
+            log.info(info, update=True)
         self._prev_time = now
         self._prev_step = step
 
@@ -59,7 +60,7 @@ class Evaluate(object):
         batch_size = self.config.system.batch_size
         num_iterations = int(math.ceil(num_examples / batch_size))
 
-        print('Starting evaluation...')
+        log.info('Starting evaluation...')
         top1s, top5s, step = 0.0, 0.0, 0
         try:
             while step < num_iterations and not coord.should_stop():
@@ -74,12 +75,12 @@ class Evaluate(object):
                     self._update_progress(
                         step, top1_acc, top5_acc, num_iterations)
         except KeyboardInterrupt as e:
-            print('Evaluation aborted')
+            log.info('Evaluation aborted')
             coord.request_stop(e)
 
-        print('\nEvaluation complete')
-        print('\ttop1: {:.2f}%, top5: {:.2f}% [{} images]'
-              .format(top1_acc * 100, top5_acc * 100, total))
+        log.info('Evaluation complete')
+        log.info('\ttop1: {:.2f}%, top5: {:.2f}% [{} images]'.format(
+            top1_acc * 100, top5_acc * 100, total))
         coord.request_stop()
         coord.join(threads, stop_grace_period_secs=10)
 

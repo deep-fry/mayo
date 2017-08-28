@@ -4,6 +4,8 @@ import re
 import yaml
 import tensorflow as tf
 
+from mayo.log import log
+
 
 class CheckpointHandler(object):
     _checkpoint_basename = 'checkpoint'
@@ -50,18 +52,18 @@ class CheckpointHandler(object):
             if must:
                 raise
             return
-        print('Loading latest checkpoint...')
+        log.info('Loading latest checkpoint...')
         cp_name = manifest['model_checkpoint_path']
         cp_dir = os.path.dirname(cp_path)
         path = os.path.join(cp_dir, cp_name)
         restorer = tf.train.Saver(self._variables())
         restorer.restore(self._session, path)
-        print('Pre-trained model restored from {}'.format(path))
+        log.info('Pre-trained model restored from {}'.format(path))
         step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
         return int(step[0])
 
     def save(self, step):
-        print('Saving checkpoint at step {}...'.format(step))
+        log.info('Saving checkpoint at step {}...'.format(step))
         cp_path = self._path(True)
         saver = tf.train.Saver(self._variables())
         saver.save(self._session, cp_path, global_step=step)
