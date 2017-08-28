@@ -88,7 +88,7 @@ class CLI(object):
         except AttributeError:
             pass
         params = {}
-        for key in self.var_to_shape_map():
+        for key in self.var_shape_map():
             params[key] = self.reader.get_tensor(key)
         self._var_tensor = params
         return self._var_tensor
@@ -103,12 +103,12 @@ class CLI(object):
             new_key = input(
                 'Enter a new name for key {!r} with shape {!r}\n[{}]:'
                 .format(key, value, key))
-            formatter[key] = {'new': new_key or key}
+            formatter[key] = {'new_name': new_key or key}
         var_tensor = self.var_tensor_map()
         if formatter:
             for key in list(var_tensor):
                 tensor = var_tensor.pop(key)
-                var_tensor[formatter[key]['new']] = tensor
+                var_tensor[formatter[key]['new_name']] = tensor
         return var_tensor
 
 
