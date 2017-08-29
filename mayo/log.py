@@ -17,6 +17,12 @@ class Logger(object):
         'warn': '\033[43m',
         'error': '\033[41m',
     }
+    _signs = {
+        'debug': ' ',
+        'info': '.',
+        'warn': '!',
+        'error': '‼',
+    }
     _colors_end = '\033[0m'
 
     def __init__(self):
@@ -64,7 +70,8 @@ class Logger(object):
         else:
             color = self._colors[level] + '\033[97m'
             colors_end = self._colors_end
-        return '{}{}{} {}'.format(color, level[0], colors_end, text)
+        sign = self._signs[level]
+        return '{}{}{} {}'.format(color, sign, colors_end, text)
 
     def log(self, text, level='info', update=False):
         num_level = self._levels[level]
