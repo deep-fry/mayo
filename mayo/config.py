@@ -114,8 +114,16 @@ def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
             key = int(key)
         if insert_if_not_exists:
             keyable = keyable.setdefault(key, keyable.__class__())
-        else:
-            keyable = keyable[key]
+            continue
+        try:
+            value = keyable[key]
+        except KeyError:
+            raise KeyError('Key path {!r} not found.'.format(dot_path_key))
+        except AttributeError:
+            raise AttributeError(
+                'Key path {!r} resolution stopped at {!r} because the '
+                'current object is not dict-like.'.format(dot_path_key, key))
+        keyable = value
     return keyable, final_key
 
 
@@ -162,15 +170,15 @@ class _DotDict(dict):
             return string
 
         def link_tag(tag):
-            try:
-                tag = tag.__class__(link_str(tag.content))
-            except KeyError:
-                pass
+            tag = tag.__class__(link_str(tag.content))
             if isinstance(tag, ArithTag):
                 return tag.value()
             return tag
 
-        link_map = {str: link_str, YamlScalarTag: link_tag}
+        link_map = {
+            str: lambda s: yaml.load(link_str(s)),
+            YamlScalarTag: link_tag,
+        }
         return self._recursive_apply(obj, link_map)
 
     def __getitem__(self, key):

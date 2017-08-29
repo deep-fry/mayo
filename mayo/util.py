@@ -79,7 +79,13 @@ def object_from_params(params, import_from=None, import_from_prefix=''):
                 '{} does not implement object named {!r}'
                 .format(import_from, otype))
     else:
-        cls = import_from_string(otype)
+        try:
+            cls = import_from_string(otype)
+        except ImportError:
+            raise ImportError('Unable to import {!r}'.format(otype))
+    for key in list(params):
+        if key.startswith('_'):
+            params.pop(key)
     return cls, params
 
 

@@ -43,9 +43,9 @@ class BaseNet(object):
             if p is None:
                 return
             p = dict(p)
-            cls, p = object_from_params(p)
-            for k in p.pop('_inherit', []):
+            for k in p.get('_inherit', []):
                 p[k] = params[k]
+            cls, p = object_from_params(p)
             params[key] = cls(**p)
 
         params = dict(params)

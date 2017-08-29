@@ -52,13 +52,8 @@ class Train(object):
     @memoize
     def learning_rate(self):
         params = self.config.train.learning_rate
-        steps_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        # 1 step == 1 batch
-        steps_per_epoch /= self.config.system.batch_size
-        decay_steps = int(steps_per_epoch * params.num_epochs_per_decay)
-        return tf.train.exponential_decay(
-            params.initial, self.global_step, decay_steps,
-            params.decay_factor, staircase=True)
+        lr_class, params = object_from_params(params)
+        return lr_class(global_step=self.global_step, **params)
 
     @property
     @memoize
