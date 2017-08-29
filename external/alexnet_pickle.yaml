@@ -6,6 +6,7 @@ preprocess:
     validate: []
     final:
         - {type: subtract_image_mean}
+        - {type: permute_channels, permute: [1, 2, 0]}
         - {type: linear_map, scale: 255.0}
 logits: logits
 hyper:
@@ -35,7 +36,7 @@ hyper:
       <<: *pickle_initializer
       type: fully_connected
     - &lrn
-      type: lrn
+      type: local_response_normalization
       depth_radius: 2
       alpha: 0.00002
       beta: 0.75
