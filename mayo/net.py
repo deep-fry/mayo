@@ -220,17 +220,16 @@ class Net(BaseNet):
         return tf.nn.local_response_normalization(net, **params)
 
     def instantiate_convolution_split(self, net, params):
-        inputs_shape = net.get_shape()[-1]
+        inputs_shape = int(net.get_shape()[-1])
         groups = params['groups']
-        if groups <= 1:
-            raise ValueError('Number of groups must be greater than 1.')
+        #  if groups <= 1:
+        #      raise ValueError('Number of groups must be greater than 1.')
         if inputs_shape % groups:
             raise ValueError(
                 'Shape of convolution input should be divisible by the '
                 'number of groups.')
-        weights_shape = params['kernel_size']
-        weights_shape += [int(inputs_shape / params['groups'])]
-        weights_shape += [int(params['num_outputs'])]
+        weights_shape = params['kernel_size'] + [
+            inputs_shape / params['groups'], params['num_outputs']]
         with tf.variable_scope(params['scope']):
             weights = tf.get_variable(
                 'weights', shape=weights_shape,
@@ -241,6 +240,9 @@ class Net(BaseNet):
             strides = [1, params['stride'], params['stride'], 1]
             convolve = lambda i, k: tf.nn.conv2d(
                 i, k, strides=strides, padding=params['padding'])
+            # no grouping
+            if groups == 1:
+                return tf.nn.relu(convolve(net, weights) + biases)
             # split input and weights and convolve them separately
             input_groups = tf.split(
                 axis=3, num_or_size_splits=params['groups'], value=net)
