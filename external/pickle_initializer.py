@@ -39,4 +39,4 @@ def initializer(path, net, name, base, perturb=0.0):
     if perturb > 0:
         std = np.std(tensor)
         tensor += np.random.normal(0, perturb * std, tensor.shape)
-    return tf.constant_initializer(tensor)
+    return tf.constant_initializer(tensor, verify_shape=True)
