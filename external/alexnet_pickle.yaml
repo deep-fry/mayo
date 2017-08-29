@@ -6,7 +6,7 @@ preprocess:
     validate: []
     final:
         - {type: subtract_image_mean}
-        - {type: permute_channels, permute: [1, 2, 0]}
+        - {type: permute_channels, order: [2, 1, 0]}
         - {type: linear_map, scale: 255.0}
 logits: logits
 hyper:

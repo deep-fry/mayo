@@ -82,10 +82,10 @@ class _ImagePreprocess(object):
     def subtract_image_mean(self, i):
         return i - tf.reduce_mean(i)
 
-    def permute_channels(self, i, permute):
-        channels = len(permute)
+    def permute_channels(self, i, order):
+        channels = len(order)
         channel_splits = tf.split(i, channels, axis=-1)
-        permuted_splits = [channel_splits[p] for p in permute]
+        permuted_splits = [channel_splits[o] for o in order]
         return tf.concat(permuted_splits, -1)
 
     def _ensure_shape(self, i):
