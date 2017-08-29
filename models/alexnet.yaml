@@ -1,10 +1,12 @@
 ---
 name: alexnet
 dataset:
-    background_class: {use: true}
+    background_class: {use: false}
 preprocess:
     validate: []
-    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
+    final:
+        - {type: subtract_image_mean}
+        - {type: linear_map, scale: 255.0}
 logits: logits
 hyper:
     - &bias_init {type: tensorflow.constant_initializer, value: 0.01}
@@ -58,6 +60,6 @@ net:
     - {name: dropout7, <<: *dropout}
     - name: logits
       <<: *fc
-      num_outputs: !arith $(dataset.num_classes)
+      num_outputs: num_classes
       activation_fn: null
       biases_initializer: {type: tensorflow.zeros_initializer}
