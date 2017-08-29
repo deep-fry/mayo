@@ -82,6 +82,12 @@ class _ImagePreprocess(object):
     def subtract_image_mean(self, i):
         return i - tf.reduce_mean(i)
 
+    def permute_channels(self, i, permute):
+        channels = len(permute)
+        channel_splits = tf.split(i, channels, axis=-1)
+        permuted_splits = [channel_splits[p] for p in permute]
+        return tf.concat(permuted_splits, -1)
+
     def _ensure_shape(self, i):
         # ensure image is the correct shape
         ph, pw, pc = i.shape.as_list()
