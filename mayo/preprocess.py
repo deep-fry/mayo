@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.util import memoize, object_from_params
 
 
@@ -69,6 +70,11 @@ class _ImagePreprocess(object):
         return i
 
     def subtract_channel_means(self, i):
+        if not self.means:
+            log.warn(
+                'Channel means not found in "dataset.channel_means", '
+                'defaulting to 0.5 for each channel.')
+            self.means = [0.5] * self.shape[-1]
         shape = [1, 1, len(self.means)]
         means = tf.constant(self.means, shape=shape, name='image_means')
         return i - means
@@ -94,6 +100,7 @@ class _ImagePreprocess(object):
     def preprocess(self, image, actions):
         with tf.name_scope(values=[image], name='preprocess_image'):
             for params in actions:
+                log.debug('Preprocess: {}'.format(params))
                 func, params = object_from_params(params, self)
                 image = func(image, **params)
         return self._ensure_shape(image)
@@ -118,7 +125,7 @@ class Preprocess(object):
         channels = self.config.image_shape()[-1]
         image = self._decode_jpeg(buffer, channels)
         shape = self.config.image_shape()
-        means = self.config.dataset.get('channel_means', [0.5] * channels)
+        means = self.config.dataset.get('channel_means', None)
         image_preprocess = _ImagePreprocess(shape, means, bbox, tid)
         actions_map = self.config.preprocess
         actions = actions_map[mode] + actions_map['final']

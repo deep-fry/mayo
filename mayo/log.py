@@ -27,6 +27,18 @@ class Logger(object):
         self.width = 80
         self._last_is_update = False
 
+    @property
+    def level(self):
+        for k, v in self._levels.items():
+            if v == self._level:
+                return v
+        raise ValueError('Unrecognized log level.')
+
+    @level.setter
+    def level(self, value):
+        self._level = self._levels[value]
+        self.debug('Log level: {}'.format(value))
+
     def debug(self, text, update=False):
         return self.log(text, 'debug', update)
 
@@ -40,7 +52,7 @@ class Logger(object):
         return self.log(text, 'error', update)
 
     @contextmanager
-    def level(self, level):
+    def use_level(self, level):
         self._prev_level = self._level
         self._level = self._levels[level]
         yield

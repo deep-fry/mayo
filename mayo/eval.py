@@ -61,19 +61,26 @@ class Evaluate(object):
             threads += queue_threads
         num_examples = self.config.dataset.num_examples_per_epoch.validate
         batch_size = self.config.system.batch_size
-        num_iterations = int(math.ceil(num_examples / batch_size))
+        num_iterations = math.ceil(num_examples / batch_size)
+        num_final_examples = num_examples % batch_size
 
         log.info('Starting evaluation...')
-        top1s, top5s, step = 0.0, 0.0, 0
+        top1s, top5s, step, total = 0.0, 0.0, 0, 0
         try:
             while step < num_iterations and not coord.should_stop():
                 top1, top5 = self._session.run([top1_op, top5_op])
+                if step == num_iterations - 1:
+                    # final iteration
+                    top1 = top1[:num_final_examples]
+                    top5 = top5[:num_final_examples]
+                    total += num_final_examples
+                else:
+                    total += batch_size
                 top1s += np.sum(top1)
                 top5s += np.sum(top5)
-                step += 1
-                total = step * batch_size
                 top1_acc = top1s / total
                 top5_acc = top5s / total
+                step += 1
                 if step % 20 == 0:
                     self._update_progress(
                         step, top1_acc, top5_acc, num_iterations)

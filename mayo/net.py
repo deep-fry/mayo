@@ -4,7 +4,8 @@ from collections import OrderedDict
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import object_from_params, import_from_string, tabular
+from mayo.log import log
+from mayo.util import object_from_params, tabular
 
 
 class BaseNet(object):
@@ -63,22 +64,22 @@ class BaseNet(object):
         for name in param_names:
             create(params, name)
         # layer configs
-        layer_name = params.pop('name')
         # num outputs
         if params.get('num_outputs', None) == 'num_classes':
             params['num_outputs'] = self.config.num_classes()
         # set up parameters
-        params['scope'] = layer_name
+        params['scope'] = params.pop('name')
         try:
             params['padding'] = params['padding'].upper()
         except KeyError:
             pass
-        return layer_name, params, norm_params
+        return params, norm_params
 
     def _instantiate(self):
         net = self.end_points['images']
         for params in self.config.net:
-            name, params, norm_params = self._instantiation_params(params)
+            name = params['name']
+            params, norm_params = self._instantiation_params(params)
             # we do not have direct access to normalizer instantiation,
             # so arg_scope must be used
             if norm_params:
@@ -89,6 +90,7 @@ class BaseNet(object):
             # get method by its name to instantiate a layer
             func, params = object_from_params(params, self, 'instantiate_')
             # instantiation
+            log.debug('Instantiating {!r} with params {}'.format(name, params))
             with norm_scope:
                 net = func(net, params)
             # save end points

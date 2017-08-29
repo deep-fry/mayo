@@ -219,7 +219,7 @@ class Config(_DotDict):
         self._override(unified, overrides)
         self._link(unified)
         self.unified = unified
-        self._setup_tensorflow_log_level()
+        self._setup_log_level()
 
     def _init_system_config(self, unified, dictionary):
         root = os.path.dirname(__file__)
@@ -305,6 +305,9 @@ class Config(_DotDict):
         import sys
         sys.excepthook = self._excepthook
 
-    def _setup_tensorflow_log_level(self):
-        level = self.system.tensorflow_log_level
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level)
+    def _setup_log_level(self):
+        level = self.system.log_level
+        if level != 'info':
+            from mayo.log import log
+            log.level = level.mayo
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level.tensorflow)
