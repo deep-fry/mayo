@@ -51,7 +51,7 @@ class CheckpointHandler(object):
         except FileNotFoundError:
             if must:
                 raise
-            return
+            return 0
         log.info('Loading latest checkpoint...')
         cp_name = manifest['model_checkpoint_path']
         cp_dir = os.path.dirname(cp_path)

@@ -45,7 +45,8 @@ class Train(object):
     def global_step(self):
         initializer = tf.constant_initializer(0)
         global_step = tf.get_variable(
-            'global_step', [], initializer=initializer, trainable=False)
+            'global_step', [], initializer=initializer, trainable=False,
+            dtype=tf.int32)
         return global_step
 
     @property
@@ -53,7 +54,12 @@ class Train(object):
     def learning_rate(self):
         params = self.config.train.learning_rate
         lr_class, params = object_from_params(params)
-        return lr_class(global_step=self.global_step, **params)
+        if lr_class is tf.train.piecewise_constant:
+            step_name = 'x'
+        else:
+            step_name = 'global_step'
+        params[step_name] = self.global_step
+        return lr_class(**params)
 
     @property
     @memoize
@@ -177,10 +183,10 @@ class Train(object):
         self._setup_train_operation()
         log.info('Initializing session...')
         self._init_session()
+        checkpoint = CheckpointHandler(
+            self._session, self.config.name, self.config.dataset.name,
+            self.config.system.search_paths.checkpoints)
         if self.config.system.checkpoint.load:
-            checkpoint = CheckpointHandler(
-                self._session, self.config.name, self.config.dataset.name,
-                self.config.system.search_paths.checkpoints)
             cp_step = step = checkpoint.load()
         else:
             cp_step = step = 0
