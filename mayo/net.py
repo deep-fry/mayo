@@ -230,7 +230,7 @@ class Net(BaseNet):
                 'number of groups.')
         weights_shape = params['kernel_size'] + [
             inputs_shape / params['groups'], params['num_outputs']]
-        with tf.variable_scope(params['scope']):
+        with tf.variable_scope(params['scope']), tf.device('/cpu:0'):
             weights = tf.get_variable(
                 'weights', shape=weights_shape,
                 initializer=params['weights_initializer'])
