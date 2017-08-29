@@ -1,8 +1,17 @@
 ---
 system:
     use_pdb: true
+    log_level:
+        mayo: info
+        tensorflow: 2
     num_gpus: 4
     num_preprocess_threads: 4
     batch_size: 64
     max_steps: 10000000
-    tensorflow_log_level: 2
+    search_paths:
+        datasets: [datasets]
+        checkpoints: [checkpoints]
+        summaries: [summaries]
+    checkpoint:
+        load: true
+        save: true

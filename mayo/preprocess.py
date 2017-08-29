@@ -1,14 +1,16 @@
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.util import memoize, object_from_params
 
 
 class _ImagePreprocess(object):
-    def __init__(self, shape, bbox, tid):
+    def __init__(self, shape, means, bbox, tid):
         super().__init__()
+        self.shape = shape
+        self.means = means
         self.bbox = bbox
         self.tid = tid
-        self.shape = shape
 
     def distort_bbox(self, i):
         # distort bbox
@@ -67,11 +69,24 @@ class _ImagePreprocess(object):
             i = tf.add(i, shift)
         return i
 
-    def subtract_channel_means(self, i, means):
-        shape = [1, 1, 1, len(means)]
-        means = tf.constant(
-            means, dtype=tf.float32, shape=shape, name='image_mean')
+    def subtract_channel_means(self, i):
+        if not self.means:
+            log.warn(
+                'Channel means not found in "dataset.channel_means", '
+                'defaulting to 0.5 for each channel.')
+            self.means = [0.5] * self.shape[-1]
+        shape = [1, 1, len(self.means)]
+        means = tf.constant(self.means, shape=shape, name='image_means')
         return i - means
+
+    def subtract_image_mean(self, i):
+        return i - tf.reduce_mean(i)
+
+    def permute_channels(self, i, order):
+        channels = len(order)
+        channel_splits = tf.split(i, channels, axis=-1)
+        permuted_splits = [channel_splits[o] for o in order]
+        return tf.concat(permuted_splits, -1)
 
     def _ensure_shape(self, i):
         # ensure image is the correct shape
@@ -91,6 +106,7 @@ class _ImagePreprocess(object):
     def preprocess(self, image, actions):
         with tf.name_scope(values=[image], name='preprocess_image'):
             for params in actions:
+                log.debug('Preprocess: {}'.format(params))
                 func, params = object_from_params(params, self)
                 image = func(image, **params)
         return self._ensure_shape(image)
@@ -115,7 +131,8 @@ class Preprocess(object):
         channels = self.config.image_shape()[-1]
         image = self._decode_jpeg(buffer, channels)
         shape = self.config.image_shape()
-        image_preprocess = _ImagePreprocess(shape, bbox, tid)
+        means = self.config.dataset.get('channel_means', None)
+        image_preprocess = _ImagePreprocess(shape, means, bbox, tid)
         actions_map = self.config.preprocess
         actions = actions_map[mode] + actions_map['final']
         return image_preprocess.preprocess(image, actions)

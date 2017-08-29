@@ -5,6 +5,7 @@ import itertools
 import numpy as np
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.net import Net
 from mayo.util import memoize, object_from_params
 from mayo.preprocess import Preprocess
@@ -31,7 +32,7 @@ def _average_gradients(tower_grads):
 
 class Train(object):
     progress_indicator = itertools.cycle(reversed('⣾⣽⣻⢿⡿⣟⣯⣷'))
-    average_decay = 0.99
+    average_count = 100
 
     def __init__(self, config):
         super().__init__()
@@ -44,20 +45,21 @@ class Train(object):
     def global_step(self):
         initializer = tf.constant_initializer(0)
         global_step = tf.get_variable(
-            'global_step', [], initializer=initializer, trainable=False)
+            'global_step', [], initializer=initializer, trainable=False,
+            dtype=tf.int32)
         return global_step
 
     @property
     @memoize
     def learning_rate(self):
         params = self.config.train.learning_rate
-        steps_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        # 1 step == 1 batch
-        steps_per_epoch /= self.config.system.batch_size
-        decay_steps = int(steps_per_epoch * params.num_epochs_per_decay)
-        return tf.train.exponential_decay(
-            params.initial, self.global_step, decay_steps,
-            params.decay_factor, staircase=True)
+        lr_class, params = object_from_params(params)
+        if lr_class is tf.train.piecewise_constant:
+            step_name = 'x'
+        else:
+            step_name = 'global_step'
+        params[step_name] = self.global_step
+        return lr_class(**params)
 
     @property
     @memoize
@@ -128,19 +130,27 @@ class Train(object):
         epoch = step * self.config.system.batch_size
         return epoch / float(self.config.dataset.num_examples_per_epoch.train)
 
-    def _ema(self, name, value):
-        name = '_ema_{}'.format(name)
-        decay = self.average_decay
-        ema = decay * getattr(self, name, value) + (1 - decay) * value
-        setattr(self, name, ema)
-        return ema
+    def _moving_average(self, name, value, std=True):
+        name = '_ma_{}'.format(name)
+        history = getattr(self, name, [])
+        if len(history) == self.average_count:
+            history.pop(0)
+        history.append(value)
+        setattr(self, name, history)
+        mean = np.mean(history)
+        if not std:
+            return mean
+        return mean, np.std(history)
 
     def _update_progress(self, step, loss, cp_step):
         ind = next(self.progress_indicator)
         epoch = self._to_epoch(step)
-        info = '{} | epoch: {:6.2f} | loss: {:8.3e} | checkpoint: {:6.2f}'
+        if not isinstance(cp_step, str):
+            cp_step = '{:.2f}'.format(self._to_epoch(cp_step))
+        info = '{} | epoch: {:.2f} | loss: {:<8.3}±{:3}% | ckpt: {}'
+        loss_mean, loss_std = self._moving_average('loss', loss)
         info = info.format(
-            ind, epoch, self._ema('loss', loss), self._to_epoch(cp_step))
+            ind, epoch, loss_mean, int(loss_std / loss_mean * 100), cp_step)
         # performance
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
@@ -148,17 +158,19 @@ class Train(object):
             num_steps = step - getattr(self, '_prev_step', step)
             imgs_per_sec = num_steps * self.config.system.batch_size
             imgs_per_sec /= float(duration)
-            imgs_per_sec = self._ema('imgs_per_sec', imgs_per_sec)
-            info += ' | throughput: {:4.0f}/s'.format(imgs_per_sec)
-        print('\r' + info, end='')
+            imgs_per_sec = self._moving_average(
+                'imgs_per_sec', imgs_per_sec, std=False)
+            info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
+        log.info(info, update=True)
         self._prev_time = now
         self._prev_step = step
 
     @property
     @memoize
     def _summary_writer(self):
+        path = self.config.system.search_paths.summaries[0]
         directory = os.path.join(
-            'summaries/', self.config.name, self.config.dataset.name)
+            path, self.config.name, self.config.dataset.name)
         return tf.summary.FileWriter(directory, graph=self._graph)
 
     def _save_summary(self, step):
@@ -166,17 +178,22 @@ class Train(object):
         self._summary_writer.add_summary(summary, step)
 
     def _train(self):
-        print('Instantiating...')
+        log.info('Instantiating...')
         self._setup_gradients()
         self._setup_train_operation()
+        log.info('Initializing session...')
         self._init_session()
         checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name)
-        cp_step = step = checkpoint.load()
+            self._session, self.config.name, self.config.dataset.name,
+            self.config.system.search_paths.checkpoints)
+        if self.config.system.checkpoint.load:
+            cp_step = step = checkpoint.load()
+        else:
+            cp_step = step = 0
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
-        print('Training start')
+        log.info('Training start')
         # train iterations
         max_steps = self.config.system.max_steps
         try:
@@ -189,11 +206,14 @@ class Train(object):
                     self._save_summary(step)
                 curr_step += 1
                 if curr_step % 5000 == 0 or curr_step == max_steps:
-                    checkpoint.save(step)
-                    cp_step = step
+                    if self.config.system.checkpoint.save:
+                        self._update_progress(step, loss, 'saving')
+                        with log.use_level('warn'):
+                            checkpoint.save(step)
+                        cp_step = step
                 step += 1
         except KeyboardInterrupt:
-            print('\nStopped, saving checkpoint in 3 seconds.')
+            log.info('Stopped, saving checkpoint in 3 seconds.')
         try:
             time.sleep(3)
         except KeyboardInterrupt:

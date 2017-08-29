@@ -9,6 +9,17 @@ import collections
 import yaml
 
 
+def _unique(items):
+    found = set([])
+    keep = []
+    for item in items:
+        if item in found:
+            continue
+        found.add(item)
+        keep.append(item)
+    return keep
+
+
 class YamlTag(object):
     tag = None
 
@@ -96,12 +107,23 @@ ArithTag.register()
 CodeTag.register()
 
 
-def _dot_path(keyable, dot_path_key):
+def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
     *dot_path, final_key = dot_path_key.split('.')
     for key in dot_path:
         if isinstance(keyable, (tuple, list)):
             key = int(key)
-        keyable = keyable[key]
+        if insert_if_not_exists:
+            keyable = keyable.setdefault(key, keyable.__class__())
+            continue
+        try:
+            value = keyable[key]
+        except KeyError:
+            raise KeyError('Key path {!r} not found.'.format(dot_path_key))
+        except AttributeError:
+            raise AttributeError(
+                'Key path {!r} resolution stopped at {!r} because the '
+                'current object is not dict-like.'.format(dot_path_key, key))
+        keyable = value
     return keyable, final_key
 
 
@@ -148,15 +170,15 @@ class _DotDict(dict):
             return string
 
         def link_tag(tag):
-            try:
-                tag = tag.__class__(link_str(tag.content))
-            except KeyError:
-                pass
+            tag = tag.__class__(link_str(tag.content))
             if isinstance(tag, ArithTag):
                 return tag.value()
             return tag
 
-        link_map = {str: link_str, YamlScalarTag: link_tag}
+        link_map = {
+            str: lambda s: yaml.load(link_str(s)),
+            YamlScalarTag: link_tag,
+        }
         return self._recursive_apply(obj, link_map)
 
     def __getitem__(self, key):
@@ -197,28 +219,33 @@ class Config(_DotDict):
         self._override(unified, overrides)
         self._link(unified)
         self.unified = unified
-        self._setup_tensorflow_log_level()
+        self._setup_log_level()
 
     def _init_system_config(self, unified, dictionary):
         root = os.path.dirname(__file__)
         system_yaml = os.path.join(root, 'system.yaml')
         with open(system_yaml, 'r') as file:
             system = yaml.load(file)
-        _dict_merge(unified, system)
+        _dict_merge(unified, copy.deepcopy(system))
         _dict_merge(dictionary, system)
 
     def _init_search_paths(self, unified, dictionary, yaml_files):
-        search_paths = [os.path.dirname(f) for f in yaml_files]
+        default = {'datasets': [os.path.dirname(f) for f in yaml_files]}
         for d in (dictionary, unified):
-            d['dataset'].setdefault('_search_paths', search_paths)
+            search_paths = d['system']['search_paths']
+            for key, paths in default.items():
+                paths = search_paths.get(key, paths)
+                if isinstance(paths, str):
+                    paths = (p.strip() for p in ';'.split(paths))
+                search_paths[key] = _unique(paths)
 
     @staticmethod
     def _override(dictionary, overrides):
         if not overrides:
             return
-        for override in overrides.split(';'):
+        for override in overrides:
             k_path, v = (o.strip() for o in override.split('='))
-            sub_dictionary, k = _dot_path(dictionary, k_path)
+            sub_dictionary, k = _dot_path(dictionary, k_path, True)
             v = yaml.load(v)
             try:
                 cls = sub_dictionary[k].__class__
@@ -255,7 +282,7 @@ class Config(_DotDict):
         except KeyError:
             raise KeyError('Mode {} not recognized.'.format(mode))
         files = []
-        search_paths = self.dataset._search_paths
+        search_paths = self.system.search_paths.datasets
         for directory in search_paths:
             files += glob.glob(os.path.join(directory, path))
         if not files:
@@ -278,6 +305,9 @@ class Config(_DotDict):
         import sys
         sys.excepthook = self._excepthook
 
-    def _setup_tensorflow_log_level(self):
-        level = self.system.tensorflow_log_level
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level)
+    def _setup_log_level(self):
+        level = self.system.log_level
+        if level != 'info':
+            from mayo.log import log
+            log.level = level.mayo
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level.tensorflow)

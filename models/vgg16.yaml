@@ -1,12 +1,12 @@
 ---
 name: vgg16
+dataset:
+    background_class: {use: false}
 preprocess:
     validate: []
     final:
+        - {type: subtract_channel_means}
         - {type: linear_map, scale: 255.0}
-        - type: subtract_channel_means
-          means: [123.68, 116.78, 103.94]
-logits: logits
 hyper:
     - &conv
       type: convolution
@@ -16,6 +16,9 @@ hyper:
       weights_initializer:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
+      biases_initializer:
+          type: tensorflow.constant_initializer
+          value: 0.1
       weights_regularizer:
           type: tensorflow.contrib.layers.l2_regularizer
           scale: 0.00004
@@ -23,12 +26,12 @@ hyper:
       type: max_pool
       kernel_size: [2, 2]
       padding: valid
+      stride: 2
     - &dropout {type: dropout, keep_prob: 0.5}
     - &fc
-      type: fully_connected
-      weights_initializer:
-          type: tensorflow.truncated_normal_initializer
-          stddev: 0.09
+      <<: *conv
+      kernel_size: [1, 1]
+      padding: valid
 net:
     - {name: conv1_1, <<: *conv, num_outputs: 64}
     - {name: conv1_2, <<: *conv, num_outputs: 64}
@@ -48,9 +51,10 @@ net:
     - {name: conv5_2, <<: *conv, num_outputs: 512}
     - {name: conv5_3, <<: *conv, num_outputs: 512}
     - {name: pool5, <<: *pool}
-    - {name: flatten, type: flatten}
-    - {name: fc6, <<: *fc, num_outputs: 4096}
-    - {name: dropout, <<: *dropout}
+    - {name: fc6, <<: *fc, kernel_size: [7, 7], num_outputs: 4096}
+    - {name: dropout6, <<: *dropout}
     - {name: fc7, <<: *fc, num_outputs: 4096}
-    - {name: dropout, <<: *dropout}
-    - {name: logits, <<: *fc, num_outputs: num_classes, activation_fn: null}
+    - {name: dropout7, <<: *dropout}
+    - {name: fc8, <<: *fc, num_outputs: num_classes, activation_fn: null}
+    - {name: logits, type: squeeze, axis: [1, 2]}
+logits: logits

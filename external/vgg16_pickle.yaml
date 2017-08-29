@@ -1,0 +1,80 @@
+---
+name: vgg16
+dataset:
+    background_class: {use: false}
+preprocess:
+    validate: []
+    final:
+        - {type: subtract_channel_means}
+        - {type: linear_map, scale: 255.0}
+logits: logits
+hyper:
+    - &pickle_initializer
+      weights_initializer: &weights_initializer
+          type: external/pickle_initializer.py:initializer
+          path: external/$(name)_pickle.pkl
+          net: $(name)
+          base: weights
+          perturb: 0.0
+          _inherit: [name]
+      biases_initializer: {<<: *weights_initializer, base: biases}
+    - &conv
+      <<: *pickle_initializer
+      type: convolution
+      kernel_size: [3, 3]
+      stride: 1
+      weights_regularizer:
+          type: tensorflow.contrib.layers.l2_regularizer
+          scale: 0.00004
+    - &conv_fc1
+      <<: *pickle_initializer
+      type: convolution
+      kernel_size: [7, 7]
+      stride: 1
+      padding: valid
+      weights_regularizer:
+          type: tensorflow.contrib.layers.l2_regularizer
+          scale: 0.00004
+    - &conv_fc2
+      <<: *pickle_initializer
+      type: convolution
+      kernel_size: [1, 1]
+      stride: 1
+      weights_regularizer:
+          type: tensorflow.contrib.layers.l2_regularizer
+          scale: 0.00004
+    - &pool
+      type: max_pool
+      kernel_size: [2, 2]
+      stride: 2
+    - &dropout {type: dropout, keep_prob: 0.5}
+    - &fc
+      <<: *pickle_initializer
+      type: fully_connected
+net:
+    - {name: conv1_1, <<: *conv, num_outputs: 64}
+    - {name: conv1_2, <<: *conv, num_outputs: 64}
+    - {name: pool1, <<: *pool}
+    - {name: conv2_1, <<: *conv, num_outputs: 128}
+    - {name: conv2_2, <<: *conv, num_outputs: 128}
+    - {name: pool2, <<: *pool}
+    - {name: conv3_1, <<: *conv, num_outputs: 256}
+    - {name: conv3_2, <<: *conv, num_outputs: 256}
+    - {name: conv3_3, <<: *conv, num_outputs: 256}
+    - {name: pool3, <<: *pool}
+    - {name: conv4_1, <<: *conv, num_outputs: 512}
+    - {name: conv4_2, <<: *conv, num_outputs: 512}
+    - {name: conv4_3, <<: *conv, num_outputs: 512}
+    - {name: pool4, <<: *pool}
+    - {name: conv5_1, <<: *conv, num_outputs: 512}
+    - {name: conv5_2, <<: *conv, num_outputs: 512}
+    - {name: conv5_3, <<: *conv, num_outputs: 512}
+    - {name: pool5, <<: *pool}
+    - {name: fc6, <<: *conv_fc1, num_outputs: 4096}
+    - {name: dropout1, <<: *dropout}
+    - {name: fc7, <<: *conv_fc2, num_outputs: 4096}
+    - {name: dropout2, <<: *dropout}
+    - {name: fc8, <<: *conv_fc2, num_outputs: num_classes, activation_fn: null, normalizer_fn: null}
+    - {name: logits,
+      type: squeeze,
+      axis: [1,2]}
