@@ -195,6 +195,8 @@ class Net(BaseNet):
         if shape[1] is None or shape[2] is None:
             return
         kernel = params['kernel_size']
+        if isinstance(kernel, int):
+            kernel = [kernel, kernel]
         stride = params.get('stride', 1)
         params['kernel_size'] = [
             min(shape[1], kernel[0]), min(shape[2], kernel[1])]
