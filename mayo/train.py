@@ -1,6 +1,6 @@
 import os
+import sys
 import time
-import itertools
 
 import numpy as np
 import tensorflow as tf
@@ -31,7 +31,6 @@ def _average_gradients(tower_grads):
 
 
 class Train(object):
-    progress_indicator = itertools.cycle(reversed('⣾⣽⣻⢿⡿⣟⣯⣷'))
     average_count = 100
 
     def __init__(self, config):
@@ -143,14 +142,13 @@ class Train(object):
         return mean, np.std(history)
 
     def _update_progress(self, step, loss, cp_step):
-        ind = next(self.progress_indicator)
         epoch = self._to_epoch(step)
         if not isinstance(cp_step, str):
             cp_step = '{:.2f}'.format(self._to_epoch(cp_step))
-        info = '{} | epoch: {:.2f} | loss: {:<8.3}±{:3}% | ckpt: {}'
+        info = 'epoch: {:.2f} | loss: {:<8.3}±{:3}% | ckpt: {}'
         loss_mean, loss_std = self._moving_average('loss', loss)
         info = info.format(
-            ind, epoch, loss_mean, int(loss_std / loss_mean * 100), cp_step)
+            epoch, loss_mean, int(loss_std / loss_mean * 100), cp_step)
         # performance
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
@@ -196,6 +194,7 @@ class Train(object):
         log.info('Training start.')
         # train iterations
         max_steps = self.config.system.max_steps
+        max_steps = sys.maxsize if max_steps <= 0 else max_steps
         try:
             while step < max_steps:
                 _, loss = self._session.run([self._train_op, self._loss])

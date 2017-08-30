@@ -1,6 +1,9 @@
 import os
 import sys
+import itertools
 from contextlib import contextmanager
+
+from termcolor import colored
 
 
 class Logger(object):
@@ -12,18 +15,18 @@ class Logger(object):
         'off': 4,
     }
     _colors = {
-        'debug': '\033[100m',
-        'info': '\033[44m',
-        'warn': '\033[43m',
-        'error': '\033[41m',
+        'debug': 'white',
+        'info': 'blue',
+        'warn': 'yellow',
+        'error': 'red',
     }
     _signs = {
-        'debug': ' ',
-        'info': '.',
+        'debug': '·',
+        'info': '-',
         'warn': '!',
         'error': '‼',
     }
-    _colors_end = '\033[0m'
+    _spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
 
     def __init__(self):
         super().__init__()
@@ -64,14 +67,12 @@ class Logger(object):
         yield
         self._level = self._prev_level
 
-    def _header(self, text, level):
-        if not self.color:
-            color = colors_end = ''
+    def _header(self, text, level, update):
+        if update:
+            sign = next(self._spinner)
         else:
-            color = self._colors[level] + '\033[97m'
-            colors_end = self._colors_end
-        sign = self._signs[level]
-        return '{}{}{} {}'.format(color, sign, colors_end, text)
+            sign = self._signs[level]
+        return '{} {}'.format(colored(sign, self._colors[level]), text)
 
     def log(self, text, level='info', update=False):
         num_level = self._levels[level]
@@ -85,7 +86,7 @@ class Logger(object):
         else:
             begin = ''
             end = '\n'
-        text = self._header(text, level)
+        text = self._header(text, level, update)
         if not update and self._last_is_update:
             begin = '\n' + begin
         print(begin + text, end=end)

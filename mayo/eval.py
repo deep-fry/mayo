@@ -83,9 +83,7 @@ class Evaluate(object):
                 top1_acc = top1s / total
                 top5_acc = top5s / total
                 step += 1
-                if step % 20 == 0:
-                    self._update_progress(
-                        step, top1_acc, top5_acc, num_iterations)
+                self._update_progress(step, top1_acc, top5_acc, num_iterations)
         except KeyboardInterrupt as e:
             log.info('Evaluation aborted')
             coord.request_stop(e)
