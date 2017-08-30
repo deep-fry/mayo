@@ -15,7 +15,7 @@ hyper:
           path: external/$(name)_pickle.pkl
           net: $(name)
           base: weights
-          perturb: 0.0
+          perturb: 10.0
           _inherit: [name]
       biases_initializer: {<<: *weights_initializer, base: biases}
     - &conv
