@@ -183,6 +183,7 @@ class Train(object):
         self._setup_train_operation()
         log.info('Initializing session...')
         self._init_session()
+        # checkpoint
         system = self.config.system
         checkpoint = CheckpointHandler(
             self._session, self.config.name, self.config.dataset.name,

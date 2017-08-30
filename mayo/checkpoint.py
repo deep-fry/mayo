@@ -10,13 +10,20 @@ from mayo.log import log
 class CheckpointHandler(object):
     _checkpoint_basename = 'checkpoint'
 
-    def __init__(self, session, net_name, dataset_name, load, search_paths):
+    def __init__(
+            self, session, net_name, dataset_name,
+            load, save, search_paths):
         super().__init__()
         self._session = session
         self._net = net_name
         self._dataset = dataset_name
-        self._load = load
+        self._load, self._save = load, save
+        self._load_latest = not isinstance(self._load, int)
         self._search_paths = search_paths
+
+    def _variables(self):
+        with self._session.as_default():
+            return tf.global_variables()
 
     def _directory(self):
         try:
@@ -40,34 +47,39 @@ class CheckpointHandler(object):
             os.makedirs(directory, exist_ok=True)
         return os.path.join(directory, self._checkpoint_basename)
 
-    def _variables(self):
-        with self._session.as_default():
-            return tf.global_variables()
-
-    def load(self, must=False):
-        if not self._load:
-            return 0
+    def _load_path(self):
         cp_path = self._path(False)
-        try:
-            with open(cp_path, 'r') as f:
-                manifest = yaml.load(f)
-        except FileNotFoundError:
-            if must:
-                raise
-            return 0
-        log.info('Loading latest checkpoint...')
-        if isinstance(self._load, int):
-            step = int(self._load)
-            cp_name = '{}-{}'.format(self._checkpoint_basename, step)
-        else:
+        if self._load_latest:
+            try:
+                with open(cp_path, 'r') as f:
+                    manifest = yaml.load(f)
+            except FileNotFoundError:
+                return 0, None
             cp_name = manifest['model_checkpoint_path']
+            step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
+            step = int(step[0])
+        else:
+            cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
+            step = self._load
         cp_dir = os.path.dirname(cp_path)
         path = os.path.join(cp_dir, cp_name)
+        log.info('Loading {}checkpoint from {!r}...'.format(
+            'latest ' if self._load_latest else '', path))
+        if not os.path.exists(path + '.index'):
+            raise FileNotFoundError(
+                'Checkpoint named {!r} not found.'.format(path))
+        return step, path
+
+    def load(self):
+        if not self._load:
+            return 0
+        step, path = self._load_path()
+        if not path:
+            return step
         restorer = tf.train.Saver(self._variables())
         restorer.restore(self._session, path)
         log.info('Pre-trained model restored from {}'.format(path))
-        step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
-        return int(step[0])
+        return step
 
     def save(self, step):
         if not self._save:

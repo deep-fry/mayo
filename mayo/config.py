@@ -246,18 +246,7 @@ class Config(_DotDict):
         for override in overrides:
             k_path, v = (o.strip() for o in override.split('='))
             sub_dictionary, k = _dot_path(dictionary, k_path, True)
-            v = yaml.load(v)
-            try:
-                cls = sub_dictionary[k].__class__
-            except KeyError:
-                pass
-            else:
-                if not isinstance(v, cls):
-                    msg = ('Type of the overriding value "{.__name__}" for '
-                           'key "{}" is not compatible with the type of '
-                           'value "{.__name__}" to be overridden.')
-                    raise TypeError(msg.format(type(v), k_path, cls))
-            sub_dictionary[k] = v
+            sub_dictionary[k] = yaml.load(v)
 
     def to_yaml(self, file=None):
         if file is not None:

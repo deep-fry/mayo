@@ -50,7 +50,7 @@ class Evaluate(object):
                 self._session, self.config.name, self.config.dataset.name,
                 system.checkpoint.load, system.checkpoint.save,
                 system.search_paths.checkpoints)
-            checkpoint.load(must=True)
+            checkpoint.load()
         else:
             self._session.run(tf.global_variables_initializer())
 
