@@ -13,5 +13,5 @@ system:
         checkpoints: [checkpoints]
         summaries: [summaries]
     checkpoint:
-        load: true
+        load: latest
         save: true

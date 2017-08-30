@@ -183,24 +183,23 @@ class Train(object):
         self._setup_train_operation()
         log.info('Initializing session...')
         self._init_session()
+        system = self.config.system
         checkpoint = CheckpointHandler(
             self._session, self.config.name, self.config.dataset.name,
-            self.config.system.search_paths.checkpoints)
-        if self.config.system.checkpoint.load:
-            cp_step = step = checkpoint.load()
-        else:
-            cp_step = step = 0
+            system.checkpoint.load, system.checkpoint.save,
+            system.search_paths.checkpoints)
+        cp_step = step = checkpoint.load()
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._net.save_graph()
-        log.info('Training start')
+        log.info('Training start.')
         # train iterations
         max_steps = self.config.system.max_steps
         try:
             while step < max_steps:
                 _, loss = self._session.run([self._train_op, self._loss])
                 if np.isnan(loss):
-                    raise ValueError('Model diverged with a nan-valued loss')
+                    raise ValueError('Model diverged with a nan-valued loss.')
                 self._update_progress(step, loss, cp_step)
                 if curr_step % 1000 == 0:
                     self._save_summary(step)

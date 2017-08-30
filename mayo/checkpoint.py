@@ -10,11 +10,12 @@ from mayo.log import log
 class CheckpointHandler(object):
     _checkpoint_basename = 'checkpoint'
 
-    def __init__(self, session, net_name, dataset_name, search_paths):
+    def __init__(self, session, net_name, dataset_name, load, search_paths):
         super().__init__()
         self._session = session
         self._net = net_name
         self._dataset = dataset_name
+        self._load = load
         self._search_paths = search_paths
 
     def _directory(self):
@@ -44,6 +45,8 @@ class CheckpointHandler(object):
             return tf.global_variables()
 
     def load(self, must=False):
+        if not self._load:
+            return 0
         cp_path = self._path(False)
         try:
             with open(cp_path, 'r') as f:
@@ -53,7 +56,11 @@ class CheckpointHandler(object):
                 raise
             return 0
         log.info('Loading latest checkpoint...')
-        cp_name = manifest['model_checkpoint_path']
+        if isinstance(self._load, int):
+            step = int(self._load)
+            cp_name = '{}-{}'.format(self._checkpoint_basename, step)
+        else:
+            cp_name = manifest['model_checkpoint_path']
         cp_dir = os.path.dirname(cp_path)
         path = os.path.join(cp_dir, cp_name)
         restorer = tf.train.Saver(self._variables())
@@ -63,6 +70,8 @@ class CheckpointHandler(object):
         return int(step[0])
 
     def save(self, step):
+        if not self._save:
+            return
         log.info('Saving checkpoint at step {}...'.format(step))
         cp_path = self._path(True)
         saver = tf.train.Saver(self._variables())
