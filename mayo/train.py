@@ -37,6 +37,7 @@ class Train(object):
         super().__init__()
         self.config = config
         self._graph = tf.Graph()
+        self._nets = []
         self._preprocessor = Preprocess(self.config)
 
     @property
@@ -68,9 +69,10 @@ class Train(object):
         return optimizer_class(self.learning_rate, **params)
 
     def tower_loss(self, images, labels, reuse):
-        self._net = Net(
+        net = Net(
             self.config, images, labels, True, graph=self._graph, reuse=reuse)
-        return self._net.loss()
+        self._nets.append(net)
+        return net.loss(), net.accuracy()
 
     def _setup_gradients(self):
         config = self.config.system
@@ -89,7 +91,7 @@ class Train(object):
             name = 'tower_{}'.format(i)
             with tf.device('/gpu:{}'.format(i)), tf.name_scope(name):
                 # loss from the final tower
-                self._loss = self.tower_loss(
+                self._loss, self._acc = self.tower_loss(
                     images_split, label_split, reuse)
                 reuse = True
                 # batch norm updates from the final tower
@@ -141,14 +143,18 @@ class Train(object):
             return mean
         return mean, np.std(history)
 
-    def _update_progress(self, step, loss, cp_step):
+    def _update_progress(self, step, loss, accuracy, cp_step):
         epoch = self._to_epoch(step)
         if not isinstance(cp_step, str):
             cp_step = '{:.2f}'.format(self._to_epoch(cp_step))
-        info = 'epoch: {:.2f} | loss: {:<8.3}±{:3}% | ckpt: {}'
+        info = 'epoch: {:.2f} | loss: {:<8.3}±{:3}% | acc: {:5.1f}% | ckpt: {}'
         loss_mean, loss_std = self._moving_average('loss', loss)
+        acc_percentage = np.sum(accuracy) / self.config.system.batch_size
+        acc_percentage *= self.config.system.num_gpus * 100
+        accuracy_mean, _ = self._moving_average('accuracy', acc_percentage)
         info = info.format(
-            epoch, loss_mean, int(loss_std / loss_mean * 100), cp_step)
+            epoch, loss_mean, int(loss_std / loss_mean * 100),
+            accuracy_mean, cp_step)
         # performance
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
@@ -190,17 +196,18 @@ class Train(object):
         cp_step = step = checkpoint.load()
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
-        self._net.save_graph()
+        self._nets[0].save_graph()
         log.info('Training start.')
         # train iterations
         max_steps = self.config.system.max_steps
         max_steps = sys.maxsize if max_steps <= 0 else max_steps
         try:
             while step < max_steps:
-                _, loss = self._session.run([self._train_op, self._loss])
+                _, loss, acc = self._session.run(
+                    [self._train_op, self._loss, self._acc])
                 if np.isnan(loss):
                     raise ValueError('Model diverged with a nan-valued loss.')
-                self._update_progress(step, loss, cp_step)
+                self._update_progress(step, loss, acc, cp_step)
                 if curr_step % 1000 == 0:
                     self._save_summary(step)
                 curr_step += 1

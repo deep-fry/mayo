@@ -87,12 +87,12 @@ class Evaluate(object):
         except KeyboardInterrupt as e:
             log.info('Evaluation aborted')
             coord.request_stop(e)
-
-        log.info('Evaluation complete')
-        log.info('\ttop1: {:.2f}%, top5: {:.2f}% [{} images]'.format(
-            top1_acc * 100, top5_acc * 100, total))
-        coord.request_stop()
-        coord.join(threads, stop_grace_period_secs=10)
+        else:
+            log.info('Evaluation complete')
+            log.info('\ttop1: {:.2f}%, top5: {:.2f}% [{} images]'.format(
+                top1_acc * 100, top5_acc * 100, total))
+            coord.request_stop()
+            coord.join(threads, stop_grace_period_secs=10)
 
     def eval(self):
         with self._graph.as_default():

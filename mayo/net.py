@@ -125,6 +125,17 @@ class BaseNet(object):
         self._add_end_point('loss', loss)
         return loss
 
+    def accuracy(self):
+        try:
+            return self.end_points['accuracy']
+        except KeyError:
+            pass
+        logits = self.end_points['logits']
+        labels = self.end_points['labels']
+        acc = tf.nn.in_top_k(logits, labels, 1)
+        self._add_end_point('accuracy', acc)
+        return acc
+
     def save_graph(self):
         writer = tf.summary.FileWriter(self.config['name'], self.graph)
         writer.close()
