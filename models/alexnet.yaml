@@ -8,7 +8,13 @@ preprocess:
         - {type: subtract_image_mean}
         - {type: linear_map, scale: 255.0}
 hyper:
-    - &const_init {type: tensorflow.constant_initializer, value: 0.1}
+    - &init
+      biases_initializer:
+          type: tensorflow.constant_initializer
+          value: 0.01
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
     - &conv
       type: convolution
       padding: same
@@ -16,13 +22,13 @@ hyper:
       weights_regularizer:
           type: tensorflow.contrib.layers.l2_regularizer
           scale: 0.0005
-      biases_initializer: *const_init
+      <<: *init
     - &fc
       type: fully_connected
       weights_initializer:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
-      biases_initializer: *const_init
+      <<: *init
     - &norm
       type: local_response_normalization
       depth_radius: 2
