@@ -213,7 +213,7 @@ class Train(object):
                 curr_step += 1
                 if curr_step % 5000 == 0 or curr_step == max_steps:
                     if self.config.system.checkpoint.save:
-                        self._update_progress(step, loss, 'saving')
+                        self._update_progress(step, loss, acc, 'saving')
                         with log.use_level('warn'):
                             checkpoint.save(step)
                         cp_step = step
