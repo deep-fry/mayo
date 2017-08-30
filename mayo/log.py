@@ -1,5 +1,6 @@
 import os
 import sys
+import shutil
 import itertools
 from contextlib import contextmanager
 
@@ -27,6 +28,7 @@ class Logger(object):
         'error': '‼',
     }
     _spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
+    _spinner_done = '⣿'
 
     def __init__(self):
         super().__init__()
@@ -35,6 +37,16 @@ class Logger(object):
         self.color = 'color' in os.environ['TERM']
         self.width = 80
         self._last_is_update = False
+        self._last_level = self._level
+
+    @property
+    def width(self):
+        width, _ = shutil.get_terminal_size((self._width, 24))
+        return width
+
+    @width.setter
+    def width(self, value):
+        self._width = value
 
     @property
     def level(self):
@@ -81,16 +93,20 @@ class Logger(object):
         if update:
             begin = '\r'
             end = ''
-            header_len = 2
-            text = text[:min(self.width - header_len, len(text))]
+            header_len = 4
+            width = self.width - header_len
+            text += ' ' * width
+            text = text[:width]
         else:
             begin = ''
             end = '\n'
         text = self._header(text, level, update)
         if not update and self._last_is_update:
-            begin = '\n' + begin
+            tick = colored(self._spinner_done, self._colors[self._last_level])
+            begin = '\r{}\n{}'.format(tick, begin)
         print(begin + text, end=end)
         self._last_is_update = update
+        self._last_level = level
         while num_level >= self.pause_level:
             r = input(
                 'Continue [Return], Stack trace [t], '
