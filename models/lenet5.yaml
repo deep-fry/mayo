@@ -1,7 +1,11 @@
 ---
 name: lenet5
 dataset:
-    background_class: {use: true}
+    background_class: {use: false}
+    preprocessed_shape:
+        height: 28
+        width: 28
+        channels: 1
 preprocess:
     validate: []
     final: [{type: linear_map, scale: 2.0, shift: -1.0}]
@@ -9,19 +13,16 @@ logits: logits
 hyper:
     - &initializer
       type: tensorflow.truncated_normal_initializer
-      stddev: 0.09
+      stddev: 0.1
     - &conv
       type: convolution
-      kernel_size: [5, 5]
-      stride: 1
-      padding: valid
+      kernel_size: 5
       weights_initializer: *initializer
     - &pool
       type: max_pool
-      kernel_size: [2, 2]
+      kernel_size: 2
       stride: 2
-      padding: valid
-    - &dropout {type: dropout, keep_prob: 0.999}
+    - &dropout {type: dropout, keep_prob: 0.5}
     - &fc
       type: fully_connected
       weights_initializer: *initializer

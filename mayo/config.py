@@ -255,7 +255,7 @@ class Config(_DotDict):
         return yaml.dump(self.unified, file, **kwargs)
 
     def image_shape(self):
-        params = self.dataset.shape
+        params = self.dataset.preprocessed_shape
         return (params.height, params.width, params.channels)
 
     def label_offset(self):
