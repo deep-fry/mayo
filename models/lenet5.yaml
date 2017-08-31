@@ -11,13 +11,14 @@ preprocess:
     final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
 hyper:
-    - &initializer
-      type: tensorflow.truncated_normal_initializer
-      stddev: 0.1
+    - &init
+      weights_initializer:
+          type: tensorflow.truncated_normal_initializer
+          stddev: 0.09
     - &conv
       type: convolution
       kernel_size: 5
-      weights_initializer: *initializer
+      <<: init
     - &pool
       type: max_pool
       kernel_size: 2
@@ -25,7 +26,7 @@ hyper:
     - &dropout {type: dropout, keep_prob: 0.5}
     - &fc
       type: fully_connected
-      weights_initializer: *initializer
+      <<: init
 net:
     - {name: conv0, <<: *conv, num_outputs: 32}
     - {name: pool0, <<: *pool}
