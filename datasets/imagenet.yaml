@@ -3,7 +3,7 @@ dataset:
     name: imagenet
     path:
         train: imagenet/train-*
-        validate: imagenet/validation-* 
+        validate: imagenet/validation-*
     num_classes: 1001
     background_class: {has: true}
     num_examples_per_epoch:
