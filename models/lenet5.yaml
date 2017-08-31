@@ -18,7 +18,7 @@ hyper:
     - &conv
       type: convolution
       kernel_size: 5
-      <<: init
+      <<: *init
     - &pool
       type: max_pool
       kernel_size: 2
@@ -26,7 +26,7 @@ hyper:
     - &dropout {type: dropout, keep_prob: 0.5}
     - &fc
       type: fully_connected
-      <<: init
+      <<: *init
 net:
     - {name: conv0, <<: *conv, num_outputs: 32}
     - {name: pool0, <<: *pool}
