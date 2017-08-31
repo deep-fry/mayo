@@ -78,7 +78,6 @@ class Train(object):
         if config.batch_size % config.num_gpus != 0:
             raise ValueError(
                 'Batch size must be divisible by number of devices')
-
         # initialize images and labels
         images_splits, labels_splits = self._preprocessor.preprocess_train()
         # for each gpu
@@ -110,8 +109,6 @@ class Train(object):
         self._summary_op = tf.summary.merge(summaries)
 
     def _setup_train_operation(self):
-        app_grad_op = self.optimizer.apply_gradients(
-            self._gradients, global_step=self.global_step)
         app_grad_op = self.optimizer.apply_gradients(
             self._gradients, global_step=self.global_step)
         var_avgs = tf.train.ExponentialMovingAverage(

@@ -1,25 +1,17 @@
 from contextlib import contextmanager
 from collections import OrderedDict
 
-import sys
-import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.util import object_from_params, tabular
 
-from tensorflow.python.ops import array_ops
-from tensorflow.python.ops import gen_array_ops
-from tensorflow.python.ops import gen_math_ops
-from tensorflow.python.ops import math_ops
 
 class BaseNet(object):
     def __init__(
             self, config, images, labels, is_training,
             graph=None, reuse=None):
         super().__init__()
-        #testing quantized ops, now instantiate multiple times
-        self.test_list = []
         self.graph = graph or tf.Graph()
         self.config = config
         self.is_training = is_training
@@ -28,7 +20,6 @@ class BaseNet(object):
         self.end_points['images'] = images
         self.end_points['labels'] = labels
         self.instantiate()
-        # self.change_vars()
 
     @contextmanager
     def context(self):
@@ -52,7 +43,6 @@ class BaseNet(object):
             raise KeyError(
                 'layer {!r} already exists in end_points.'.format(layer))
         self.end_points[key] = layer
-
 
     def _instantiation_params(self, params):
         def create(params, key):
