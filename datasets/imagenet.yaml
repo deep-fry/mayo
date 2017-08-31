@@ -10,8 +10,6 @@ dataset:
         train: 1281167
         validate: 50000
     shape:
-        height: 224
-        width: 224
         channels: 3
     channel_means:
         - 0.485019607843137
