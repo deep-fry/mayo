@@ -2,11 +2,15 @@
 name: vgg16
 dataset:
     background_class: {use: false}
-preprocess:
-    validate: []
-    final:
-        - {type: subtract_channel_means}
-        - {type: linear_map, scale: 255.0}
+    preprocess:
+        shape:
+            height: 224
+            width: 224
+            channels: 3
+        validate: []
+        final:
+            - {type: subtract_channel_means}
+            - {type: linear_map, scale: 255.0}
 logits: logits
 hyper:
     - &pickle_initializer

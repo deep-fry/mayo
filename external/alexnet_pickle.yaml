@@ -2,12 +2,16 @@
 name: alexnet
 dataset:
     background_class: {use: false}
-preprocess:
-    validate: []
-    final:
-        - {type: subtract_image_mean}
-        - {type: permute_channels, order: [2, 1, 0]}
-        - {type: linear_map, scale: 255.0}
+    shape:
+        height: 227
+        width: 227
+        channels: 3
+    preprocess:
+        validate: []
+        final:
+            - {type: subtract_image_mean}
+            - {type: permute_channels, order: [2, 1, 0]}
+            - {type: linear_map, scale: 255.0}
 logits: logits
 hyper:
     - &pickle_initializer
@@ -31,7 +35,7 @@ hyper:
       kernel_size: [3, 3]
       stride: 2
       padding: valid
-    - &dropout {type: dropout, keep_prob: 0.999}
+    - &dropout {type: dropout, keep_prob: 0.5}
     - &fc
       <<: *pickle_initializer
       type: fully_connected

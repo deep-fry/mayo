@@ -2,13 +2,13 @@
 name: cifarnet
 dataset:
     background_class: {use: false}
-    preprocessed_shape:
-        height: 32
-        width: 32
-        channels: 3
-preprocess:
-    validate: []
-    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
+    preprocess:
+        shape:
+            height: 32
+            width: 32
+            channels: 3
+        validate: []
+        final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
 hyper:
     - &conv

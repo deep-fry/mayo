@@ -13,7 +13,7 @@ dataset:
         height: 32
         width: 32
         channels: 3
-preprocess:
-    train:
-        - {type: distort_color}
-        - {type: random_flip}
+    preprocess:
+        train:
+            - {type: distort_color}
+            - {type: random_flip}

@@ -15,8 +15,8 @@ dataset:
         - 0.485019607843137
         - 0.4579607843
         - 0.407607843137255
-preprocess:
-    train:
-        - {type: distort_bbox}
-        - {type: distort_color}
-        - {type: random_flip}
+    preprocess:
+        train:
+            - {type: distort_bbox}
+            - {type: distort_color}
+            - {type: random_flip}
