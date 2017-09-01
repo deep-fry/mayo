@@ -11,7 +11,7 @@ dataset:
         validate: 350
     shape:
         channels: 3
-preprocess:
-    train:
-        - {type: distort_color}
-        - {type: random_flip}
+    preprocess:
+        train:
+            - {type: distort_color}
+            - {type: random_flip}

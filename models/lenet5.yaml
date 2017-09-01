@@ -2,13 +2,13 @@
 name: lenet5
 dataset:
     background_class: {use: false}
-    preprocessed_shape:
-        height: 28
-        width: 28
-        channels: 1
-preprocess:
-    validate: []
-    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
+    preprocess:
+        shape:
+            height: 28
+            width: 28
+            channels: 1
+        validate: []
+        final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
 hyper:
     - &init
