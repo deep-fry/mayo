@@ -57,12 +57,17 @@ def import_from_string(string):
 def object_from_params(params, import_from=None, import_from_prefix=''):
     """
     import an object or get an object from <import_from> for <params>
-    with format:
-        {'type': <some importable object>, ...}
-    or exec code for <params> with format:
-        {'type': inline,
-         '_code': <some python code>,
-         '_object': <existing object from the above code>, ...}
+    with YAML format:
+        type: <some importable object>
+        <argument>: <value>
+        ...
+    or exec code for <params> with:
+        type: inline
+        _code: !(eval | exec) |
+            <some python eval/exec code>
+        _object: <existing object from the above code>
+        <argument>: <value>
+        ...
     """
     params = dict(params)
     otype = params.pop('type')
