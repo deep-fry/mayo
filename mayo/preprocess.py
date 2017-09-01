@@ -1,5 +1,6 @@
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.util import memoize, object_from_params
 
 
@@ -21,6 +22,9 @@ class _ImagePreprocess(object):
         # distorted image
         i = tf.slice(i, bbox_begin, bbox_size)
         height, width, _ = self.shape
+        # we resize to the final preprocessed shape in distort bbox
+        # because we can use different methods randomly, which _ensure_shape()
+        # cannot do
         i = tf.image.resize_images(i, [height, width], method=(self.tid % 4))
         i.set_shape(self.shape)
         return i
@@ -69,6 +73,11 @@ class _ImagePreprocess(object):
         return i
 
     def subtract_channel_means(self, i):
+        if not self.means:
+            log.warn(
+                'Channel means not found in "dataset.channel_means", '
+                'defaulting to 0.5 for each channel.')
+            self.means = [0.5] * i.shape[2]
         shape = [1, 1, len(self.means)]
         means = tf.constant(self.means, shape=shape, name='image_means')
         return i - means
@@ -76,14 +85,27 @@ class _ImagePreprocess(object):
     def subtract_image_mean(self, i):
         return i - tf.reduce_mean(i)
 
+    def permute_channels(self, i, order):
+        channels = len(order)
+        channel_splits = tf.split(i, channels, axis=-1)
+        permuted_splits = [channel_splits[o] for o in order]
+        return tf.concat(permuted_splits, -1)
+
     def _ensure_shape(self, i):
         # ensure image is the correct shape
         ph, pw, pc = i.shape.as_list()
         h, w, c = self.shape
         if pc != c:
-            raise ValueError(
-                'Curious, preprocessed channel size is not the same '
-                'as the one expected by us.')
+            # convert channels
+            if pc == 3 and c == 1:
+                i = tf.image.rgb_to_grayscale(i)
+            elif pc == 1:
+                # duplicate image channel
+                i = tf.concat([i] * c, axis=-1)
+            else:
+                raise ValueError(
+                    'We do not know how to convert an image with {} channels '
+                    'into one with {} channels.'.format(pc, c))
         if ph == h or pw == w:
             return i
         # rescale image
@@ -94,6 +116,7 @@ class _ImagePreprocess(object):
     def preprocess(self, image, actions):
         with tf.name_scope(values=[image], name='preprocess_image'):
             for params in actions:
+                log.debug('Preprocess: {}'.format(params))
                 func, params = object_from_params(params, self)
                 image = func(image, **params)
         return self._ensure_shape(image)
@@ -118,7 +141,7 @@ class Preprocess(object):
         channels = self.config.image_shape()[-1]
         image = self._decode_jpeg(buffer, channels)
         shape = self.config.image_shape()
-        means = self.config.dataset.get('channel_means', [0.5] * channels)
+        means = self.config.dataset.get('channel_means', None)
         image_preprocess = _ImagePreprocess(shape, means, bbox, tid)
         actions_map = self.config.preprocess
         actions = actions_map[mode] + actions_map['final']

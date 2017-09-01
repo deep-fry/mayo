@@ -1,0 +1,64 @@
+---
+name: alexnet
+dataset:
+    background_class: {use: false}
+preprocess:
+    validate: []
+    final:
+        - {type: subtract_image_mean}
+        - {type: permute_channels, order: [2, 1, 0]}
+        - {type: linear_map, scale: 255.0}
+logits: logits
+hyper:
+    - &pickle_initializer
+      weights_initializer: &weights_initializer
+          type: external/pickle_initializer.py:initializer
+          path: external/$(name)_pickle.pkl
+          net: $(name)
+          base: weights
+          perturb: 0.0
+          _inherit: [name]
+      biases_initializer: {<<: *weights_initializer, base: biases}
+    - &conv
+      <<: *pickle_initializer
+      type: convolution_split
+      kernel_size: [11, 11]
+      stride: 4
+      padding: same
+    - &conv_repeat {<<: *conv, kernel_size: [3, 3], stride: 1}
+    - &pool
+      type: max_pool
+      kernel_size: [3, 3]
+      stride: 2
+      padding: valid
+    - &dropout {type: dropout, keep_prob: 0.999}
+    - &fc
+      <<: *pickle_initializer
+      type: fully_connected
+    - &lrn
+      type: local_response_normalization
+      depth_radius: 2
+      alpha: 0.00002
+      beta: 0.75
+      bias: 1.0
+net:
+    - {name: conv1, <<: *conv, padding: same, num_outputs: 96, groups: 1}
+    - {name: lrn1, <<: *lrn}
+    - {name: pool1, <<: *pool}
+    - {name: conv2, <<: *conv,
+       kernel_size: [5, 5], stride: 1, num_outputs: 256, groups: 2}
+    - {name: lrn2, <<: *lrn}
+    - {name: pool2, <<: *pool}
+    - {name: conv3, <<: *conv_repeat, num_outputs: 384, groups: 1}
+    - {name: conv4, <<: *conv_repeat, num_outputs: 384, groups: 2}
+    - {name: conv5, <<: *conv_repeat, num_outputs: 256, groups: 2}
+    - {name: pool5, <<: *pool}
+    - {name: flatten5, type: flatten}
+    - {name: fc6, <<: *fc, num_outputs: 4096}
+    - {name: dropout6, <<: *dropout}
+    - {name: fc7, <<: *fc, num_outputs: 4096}
+    - {name: dropout7, <<: *dropout}
+    - name: logits
+      <<: *fc
+      num_outputs: num_classes
+      activation_fn: null
