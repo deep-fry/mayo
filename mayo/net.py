@@ -1,3 +1,4 @@
+import functools
 import itertools
 from contextlib import contextmanager
 from collections import OrderedDict
@@ -14,8 +15,9 @@ class _InstantiationParamTransformer(object):
         super().__init__()
         self.num_classes = num_classes
         self.is_training = is_training
+        self.overridden = {}
 
-    def _create_hyperparam_objects(self, params):
+    def _create_hyperobjects(self, params):
         def _create_object_for_key(params, key):
             p = params.get(key, None)
             if p is None:
@@ -74,7 +76,9 @@ class _InstantiationParamTransformer(object):
             else:
                 return v
             log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
-            return overrider(v)
+            v = overrider(v)
+            self.overridden[name] = v
+            return v
 
         # we do not have direct access to slim.model_variable creation,
         # so arg_scope must be used
@@ -84,7 +88,7 @@ class _InstantiationParamTransformer(object):
     def transform(self, params):
         params = dict(params)
         # weight and bias hyperparams
-        self._create_hyperparam_objects(params)
+        self._create_hyperobjects(params)
         # layer configs
         self._config_layer(params)
         # normalization arg_scope
@@ -123,8 +127,9 @@ class BaseNet(object):
         self.end_points[key] = layer
 
     def _instantiate(self):
-        transform = _InstantiationParamTransformer(
-            self.config.num_classes(), self.is_training).transform
+        transformer = _InstantiationParamTransformer(
+            self.config.num_classes(), self.is_training)
+        transform = transformer.transform
         net = self.end_points['images']
         for params in self.config.net:
             name = params['name']
@@ -139,6 +144,8 @@ class BaseNet(object):
             self._add_end_point(name, net)
             if name != 'logits' and name == self.config.logits:
                 self._add_end_point('logits', net)
+        # overridden variables
+        self.overridden = transformer.overridden
 
     def instantiate(self):
         # force all Variables to reside on the CPU
