@@ -2,8 +2,13 @@
 train:
     moving_average_decay: 0.9999
     learning_rate:
-        initial: 0.1
-        decay_factor: 0.16
-        num_epochs_per_decay: 20.0
+        type: tensorflow.train.exponential_decay
+        learning_rate: 0.1
+        decay_rate: 0.16
+        _num_epochs_per_decay: 20.0
+        decay_steps: !arith >
+            $(dataset.num_examples_per_epoch.train) / $(system.batch_size) *
+            $(train.learning_rate._num_epochs_per_decay)
+        staircase: true
     optimizer:
         type: tensorflow.train.GradientDescentOptimizer

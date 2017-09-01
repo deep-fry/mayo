@@ -2,6 +2,10 @@
 name: mobilenet_v1
 dataset:
     background_class: {use: true}
+    preprocessed_shape:
+        height: 224
+        width: 224
+        channels: 3
 preprocess:
     validate: [{type: central_crop, central_fraction: 0.875}]
     final: [{type: linear_map, scale: 2.0, shift: -1.0}]
@@ -54,9 +58,9 @@ net:
     - {name: conv5, <<: *dsconv, stride: 1, num_outputs: 256}
     - {name: conv6, <<: *dsconv, stride: 2, num_outputs: 512}
     - {name: conv7, <<: *dsconv, stride: 1, num_outputs: 512}
-    - {name: conv8, <<: *dsconv, stride: 2, num_outputs: 512}
+    - {name: conv8, <<: *dsconv, stride: 1, num_outputs: 512}
     - {name: conv9, <<: *dsconv, stride: 1, num_outputs: 512}
-    - {name: conv10, <<: *dsconv, stride: 2, num_outputs: 512}
+    - {name: conv10, <<: *dsconv, stride: 1, num_outputs: 512}
     - {name: conv11, <<: *dsconv, stride: 1, num_outputs: 512}
     - {name: conv12, <<: *dsconv, stride: 2, num_outputs: 1024}
     - {name: conv13, <<: *dsconv, stride: 1, num_outputs: 1024}

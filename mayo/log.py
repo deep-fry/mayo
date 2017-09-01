@@ -1,6 +1,10 @@
 import os
 import sys
+import shutil
+import itertools
 from contextlib import contextmanager
+
+from termcolor import colored
 
 
 class Logger(object):
@@ -12,12 +16,19 @@ class Logger(object):
         'off': 4,
     }
     _colors = {
-        'debug': '\033[100m',
-        'info': '\033[44m',
-        'warn': '\033[43m',
-        'error': '\033[41m',
+        'debug': 'white',
+        'info': 'blue',
+        'warn': 'yellow',
+        'error': 'red',
     }
-    _colors_end = '\033[0m'
+    _signs = {
+        'debug': '·',
+        'info': '-',
+        'warn': '!',
+        'error': '‼',
+    }
+    _spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
+    _spinner_done = '⣿'
 
     def __init__(self):
         super().__init__()
@@ -26,6 +37,28 @@ class Logger(object):
         self.color = 'color' in os.environ['TERM']
         self.width = 80
         self._last_is_update = False
+        self._last_level = self._level
+
+    @property
+    def width(self):
+        width, _ = shutil.get_terminal_size((self._width, 24))
+        return width
+
+    @width.setter
+    def width(self, value):
+        self._width = value
+
+    @property
+    def level(self):
+        for k, v in self._levels.items():
+            if v == self._level:
+                return v
+        raise ValueError('Unrecognized log level.')
+
+    @level.setter
+    def level(self, value):
+        self._level = self._levels[value]
+        self.debug('Log level: {}'.format(value))
 
     def debug(self, text, update=False):
         return self.log(text, 'debug', update)
@@ -40,19 +73,18 @@ class Logger(object):
         return self.log(text, 'error', update)
 
     @contextmanager
-    def level(self, level):
+    def use_level(self, level):
         self._prev_level = self._level
         self._level = self._levels[level]
         yield
         self._level = self._prev_level
 
-    def _header(self, text, level):
-        if not self.color:
-            color = colors_end = ''
+    def _header(self, text, level, update):
+        if update:
+            sign = next(self._spinner)
         else:
-            color = self._colors[level] + '\033[97m'
-            colors_end = self._colors_end
-        return '{}{}{} {}'.format(color, level[0], colors_end, text)
+            sign = self._signs[level]
+        return '{} {}'.format(colored(sign, self._colors[level]), text)
 
     def log(self, text, level='info', update=False):
         num_level = self._levels[level]
@@ -61,16 +93,20 @@ class Logger(object):
         if update:
             begin = '\r'
             end = ''
-            header_len = 2
-            text = text[:min(self.width - header_len, len(text))]
+            header_len = 4
+            width = self.width - header_len
+            text += ' ' * width
+            text = text[:width]
         else:
             begin = ''
             end = '\n'
-        text = self._header(text, level)
+        text = self._header(text, level, update)
         if not update and self._last_is_update:
-            begin = '\n' + begin
+            tick = colored(self._spinner_done, self._colors[self._last_level])
+            begin = '\r{}\n{}'.format(tick, begin)
         print(begin + text, end=end)
         self._last_is_update = update
+        self._last_level = level
         while num_level >= self.pause_level:
             r = input(
                 'Continue [Return], Stack trace [t], '

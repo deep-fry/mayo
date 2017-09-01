@@ -4,6 +4,7 @@ from collections import OrderedDict
 import tensorflow as tf
 from tensorflow.contrib import slim
 
+from mayo.log import log
 from mayo.util import object_from_params, tabular
 
 
@@ -52,9 +53,9 @@ class BaseNet(object):
             if p is None:
                 return
             p = dict(p)
-            cls, p = object_from_params(p)
-            for k in p.pop('_inherit', []):
+            for k in p.get('_inherit', []):
                 p[k] = params[k]
+            cls, p = object_from_params(p)
             params[key] = cls(**p)
 
         params = dict(params)
@@ -72,22 +73,22 @@ class BaseNet(object):
         for name in param_names:
             create(params, name)
         # layer configs
-        layer_name = params.pop('name')
         # num outputs
         if params.get('num_outputs', None) == 'num_classes':
             params['num_outputs'] = self.config.num_classes()
         # set up parameters
-        params['scope'] = layer_name
+        params['scope'] = params.pop('name')
         try:
             params['padding'] = params['padding'].upper()
         except KeyError:
             pass
-        return layer_name, params, norm_params
+        return params, norm_params
 
     def _instantiate(self):
         net = self.end_points['images']
         for params in self.config.net:
-            name, params, norm_params = self._instantiation_params(params)
+            name = params['name']
+            params, norm_params = self._instantiation_params(params)
             # we do not have direct access to normalizer instantiation,
             # so arg_scope must be used
             if norm_params:
@@ -98,6 +99,7 @@ class BaseNet(object):
             # get method by its name to instantiate a layer
             func, params = object_from_params(params, self, 'instantiate_')
             # instantiation
+            log.debug('Instantiating {!r} with params {}'.format(name, params))
             with norm_scope:
                 net = func(net, params)
             # save end points
@@ -132,14 +134,24 @@ class BaseNet(object):
         self._add_end_point('loss', loss)
         return loss
 
+    def accuracy(self):
+        try:
+            return self.end_points['accuracy']
+        except KeyError:
+            pass
+        logits = self.end_points['logits']
+        labels = self.end_points['labels']
+        acc = tf.nn.in_top_k(logits, labels, 1)
+        self._add_end_point('accuracy', acc)
+        return acc
+
     def save_graph(self):
         writer = tf.summary.FileWriter(self.config['name'], self.graph)
         writer.close()
 
     def info(self):
         def format_shape(shape):
-            return ' x '.join(
-                '?' if s is None else str(s) for s in shape.as_list())
+            return ' x '.join(str(s or '?') for s in shape.as_list())
 
         param_table = [('Param', 'Shape', 'Count'), '-']
         total = 0
@@ -191,6 +203,8 @@ class Net(BaseNet):
         if shape[1] is None or shape[2] is None:
             return
         kernel = params['kernel_size']
+        if isinstance(kernel, int):
+            kernel = [kernel, kernel]
         stride = params.get('stride', 1)
         params['kernel_size'] = [
             min(shape[1], kernel[0]), min(shape[2], kernel[1])]
@@ -222,6 +236,41 @@ class Net(BaseNet):
     def instantiate_flatten(self, net, params):
         return slim.flatten(net, **params)
 
-    def instantiate_lrn(self, net, params):
+    def instantiate_local_response_normalization(self, net, params):
         params['name'] = params.pop('scope')
         return tf.nn.local_response_normalization(net, **params)
+
+    def instantiate_convolution_split(self, net, params):
+        inputs_shape = int(net.get_shape()[-1])
+        groups = params['groups']
+        #  if groups <= 1:
+        #      raise ValueError('Number of groups must be greater than 1.')
+        if inputs_shape % groups:
+            raise ValueError(
+                'Shape of convolution input should be divisible by the '
+                'number of groups.')
+        weights_shape = params['kernel_size'] + [
+            inputs_shape / params['groups'], params['num_outputs']]
+        with tf.variable_scope(params['scope']), tf.device('/cpu:0'):
+            weights = tf.get_variable(
+                'weights', shape=weights_shape,
+                initializer=params['weights_initializer'])
+            biases = tf.get_variable(
+                'biases', shape=[params['num_outputs']],
+                initializer=params['biases_initializer'])
+            strides = [1, params['stride'], params['stride'], 1]
+            convolve = lambda i, k: tf.nn.conv2d(
+                i, k, strides=strides, padding=params['padding'])
+            # no grouping
+            if groups == 1:
+                return tf.nn.relu(convolve(net, weights) + biases)
+            # split input and weights and convolve them separately
+            input_groups = tf.split(
+                axis=3, num_or_size_splits=params['groups'], value=net)
+            weight_groups = tf.split(
+                axis=3, num_or_size_splits=params['groups'], value=weights)
+            output_groups = [
+                convolve(i, k) for i, k in zip(input_groups, weight_groups)]
+            # concat the convolved output together again
+            conv = tf.concat(axis=3, values=output_groups)
+            return tf.nn.relu(conv + biases)
