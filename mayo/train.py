@@ -147,14 +147,14 @@ class Train(object):
         epoch = self._to_epoch(step)
         if not isinstance(cp_step, str):
             cp_step = '{:.2f}'.format(self._to_epoch(cp_step))
-        info = 'epoch: {:.2f} | loss: {:>10.5}±{:<3}%'
+        info = 'epoch: {:.2f} | loss: {:10f}{:5}'
         info += ' | acc: {:5.2f}% | ckpt: {}'
         loss_mean, loss_std = self._moving_average('loss', loss)
         acc_percentage = np.sum(accuracy) / self.config.system.batch_size
         acc_percentage *= self.config.system.num_gpus * 100
         accuracy_mean, _ = self._moving_average('accuracy', acc_percentage)
         info = info.format(
-            epoch, loss_mean, int(loss_std / loss_mean * 100),
+            epoch, loss_mean, '±{}%'.format(int(loss_std / loss_mean * 100)),
             accuracy_mean, cp_step)
         # performance
         now = time.time()
