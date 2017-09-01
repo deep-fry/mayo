@@ -1,47 +1,74 @@
-class Surgery(object):
-    def __init__(self):
-        pass
+import functools
+import tensorflow as tf
 
-    def prune(self, x, mask):
-        return x * mask
 
-    def quantize_fixed_point(self, x, n, f):
-        '''
-        1 bit sign, n bit int and f bit frac
-        ref:
-        https://github.com/tensorflow/tensorflow/blob/r1.3/tensorflow/python/ops/array_grad.py
-        '''
-        G = tf.get_default_graph()
-        # shift left f bits
-        x = x * (2**f)
+class SurgeryFunctionCollection(object):
+    """
+    A collection of functions that can perform surgery on network.
+    """
+    @staticmethod
+    def pruner(value, mask):
+        return value * mask
+
+    @staticmethod
+    def rounder(value):
+        omap = {'Round': 'Identity'}
+        with tf.get_default_graph().gradient_override_map(omap):
+            return tf.round(value)
+
+    @classmethod
+    def dynamic_fixed_point_quantizer(
+            cls, value,
+            integer_width=None, fractional_width=8, dynamic_range=0):
+        """
+        Quantize inputs into fixed-point values with 1-bit sign, an n-bit
+        integer part and an f-bit fractional part with d-bit dynamic range.
+
+        args:
+            integer_width:
+                the number of bits to use in integer part.  If not specified
+                (None), then we do not restrict the value bound.
+            fractional_width:
+                the number of bits to use in fractional part.
+
+        references:
+            - https://arxiv.org/pdf/1604.03168
+        """
+        # x = f - d bits
+        value *= 2 ** (fractional_width - dynamic_range)
         # quantize
-        with G.gradient_override_map({"Round":"Identity"}):
-            x = tf.round(x)
-        # shift right f bits
-        x = tf.div(x, 2 ** f)
+        value = cls.rounder(value)
+        # >> f
+        value = tf.div(value, 2 ** fractional_width)
+        # ensure number is representable without overflow
+        if integer_width is not None:
+            max_value = 2 ** (integer_width - dynamic_range)
+            value = tf.clip_by_value(value, -max_value, max_value)
+        # restore shift by dynamic range
+        if dynamic_range != 0:
+            value *= 2 ** dynamic_range
+        return value
 
-        # cap int
-        int_max = 2 ** n
-        x = tf.clip_by_value(x, -int_max, int_max)
-        # x = x * 0
-        return x
+    @classmethod
+    def fixed_point_quantizer(
+            cls, value, integer_width=None, fractional_width=8):
+        """
+        Quantize inputs into fixed-point values with 1-bit sign, an n-bit
+        integer part and an f-bit fractional part.
+        """
+        return cls.dynamic_fixed_point_quantizer(
+            value, integer_width, fractional_width, 0)
 
-    def quantize_dynamic_fixed_point(self, x, n, f, dr):
-        '''
-        1 bit sign, n bit int, f bit fraction, dr bit dynamic range
-        Ref:
-        https://arxiv.org/pdf/1604.03168
-        '''
-        G = tf.get_default_graph()
-        # shift left f + dr bits
-        x = x * (2**f) * (2**(-dr))
-        # quantize
-        with G.gradient_override_map({"Round":"Identity"}):
-            x = tf.round(x)
-        x = tf.div(x, 2 ** f)
-        x_max = 2 ** (n - dr)
-        x = tf.clip_by_value(x, -x_max, x_max)
-        # put back dynmaic range
-        x = x * (2 ** dr)
-        # x = x * 0
-        return x
+
+def _create_object(func):
+    def obj(**kwargs):
+        return functools.partial(func, **kwargs)
+    return obj
+
+
+def _register_surgery_objects(module):
+    for name in dir(SurgeryFunctionCollection):
+        func = getattr(SurgeryFunctionCollection, name)
+        if not callable(func) or name.startswith("__"):
+            continue
+        setattr(module, name, _create_object(func))
