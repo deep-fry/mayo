@@ -43,7 +43,7 @@ class SurgeryFunctionCollection(object):
         # ensure number is representable without overflow
         if integer_width is not None:
             max_value = 2 ** (integer_width - dynamic_range)
-            value = tf.clip_by_value(value, -max_value, max_value)
+            value = tf.clip_by_value(value, -max_value-1, max_value)
         # restore shift by dynamic range
         if dynamic_range != 0:
             value *= 2 ** dynamic_range
