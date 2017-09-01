@@ -21,7 +21,7 @@ class SurgeryFunctionCollection(object):
             cls, value,
             integer_width=None, fractional_width=8, dynamic_range=0):
         """
-        Quantize inputs into fixed-point values with 1-bit sign, an n-bit
+        Quantize inputs into 2's compliment fixed-point values with an n-bit
         integer part and an f-bit fractional part with d-bit dynamic range.
 
         args:
@@ -43,7 +43,7 @@ class SurgeryFunctionCollection(object):
         # ensure number is representable without overflow
         if integer_width is not None:
             max_value = 2 ** (integer_width - dynamic_range)
-            value = tf.clip_by_value(value, -max_value-1, max_value)
+            value = tf.clip_by_value(value, -max_value, max_value - 1)
         # restore shift by dynamic range
         if dynamic_range != 0:
             value *= 2 ** dynamic_range
@@ -53,7 +53,7 @@ class SurgeryFunctionCollection(object):
     def fixed_point_quantizer(
             cls, value, integer_width=None, fractional_width=8):
         """
-        Quantize inputs into fixed-point values with 1-bit sign, an n-bit
+        Quantize inputs into 2's compliment fixed-point values with an n-bit
         integer part and an f-bit fractional part.
         """
         return cls.dynamic_fixed_point_quantizer(
