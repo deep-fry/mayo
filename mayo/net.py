@@ -15,27 +15,25 @@ class _InstantiationParamTransformer(object):
         self.num_classes = num_classes
         self.is_training = is_training
 
-    @staticmethod
-    def _create_object_for_key(params, key):
-        p = params.get(key, None)
-        if p is None:
-            return
-        p = dict(p)
-        for k in p.get('_inherit', []):
-            p[k] = params[k]
-        cls, p = object_from_params(p)
-        params[key] = cls(**p)
-
     def _create_hyperparam_objects(self, params):
+        def _create_object_for_key(params, key):
+            p = params.get(key, None)
+            if p is None:
+                return
+            p = dict(p)
+            for k in p.get('_inherit', []):
+                p[k] = params[k]
+            cls, p = object_from_params(p)
+            params[key] = cls(**p)
+
         var_names = ['weights', 'biases']
         obj_names = ['regularizer', 'initializer', 'overrider']
         param_names = [
             '{}_{}'.format(v, o)
             for v, o in itertools.product(var_names, obj_names)]
-        param_names += [
-            'pointwise_regularizer', 'depthwise_regularizer']
+        param_names += ['pointwise_regularizer', 'depthwise_regularizer']
         for name in param_names:
-            self._create_object_for_key(params, name)
+            _create_object_for_key(params, name)
 
     def _config_layer(self, params):
         # num outputs
@@ -66,22 +64,22 @@ class _InstantiationParamTransformer(object):
         biases_overrider = params.pop('biases_overrider', None) or identity
         weights_overrider = params.pop('weights_overrider', None) or identity
 
-        def custom_getter(self, getter, *args, **kwargs):
+        def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
-            if 'bias' in v.op.name:
+            name = v.op.name
+            if 'bias' in name:
                 overrider = biases_overrider
-            elif 'weights' in v.op.name:
+            elif 'weights' in name:
                 overrider = weights_overrider
             else:
                 return v
-            log.debug('Overriding {!r} with {!r}'.format(
-                v.op.name, overrider.__qualname__))
+            log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
             return overrider(v)
 
         # we do not have direct access to slim.model_variable creation,
         # so arg_scope must be used
-        return slim.arg_scope(
-            [slim.model_variable], custom_getter=custom_getter)
+        scope = tf.get_variable_scope()
+        return tf.variable_scope(scope, custom_getter=custom_getter)
 
     def transform(self, params):
         params = dict(params)
