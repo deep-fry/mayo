@@ -143,7 +143,7 @@ class Preprocess(object):
         shape = self.config.image_shape()
         means = self.config.dataset.get('channel_means', None)
         image_preprocess = _ImagePreprocess(shape, means, bbox, tid)
-        actions_map = self.config.preprocess
+        actions_map = self.config.dataset.preprocess
         actions = actions_map[mode] + actions_map['final']
         return image_preprocess.preprocess(image, actions)
 

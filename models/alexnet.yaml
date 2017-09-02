@@ -2,15 +2,15 @@
 name: alexnet
 dataset:
     background_class: {use: false}
-    preprocessed_shape:
-        height: 224
-        width: 224
-        channels: 3
-preprocess:
-    validate: []
-    final:
-        - {type: subtract_image_mean}
-        - {type: linear_map, scale: 255.0}
+    preprocess:
+        shape:
+            height: 224
+            width: 224
+            channels: 3
+        validate: []
+        final:
+            - {type: subtract_image_mean}
+            - {type: linear_map, scale: 255.0}
 hyper:
     - &init
       biases_initializer:

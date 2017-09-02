@@ -13,5 +13,5 @@ dataset:
         height: 28
         width: 28
         channels: 1
-preprocess:
-    train: []
+    preprocess:
+        train: []
