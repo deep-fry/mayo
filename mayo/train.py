@@ -10,6 +10,7 @@ from mayo.net import Net
 from mayo.util import memoize, object_from_params
 from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
+from mayo.surgery import Pruner
 
 
 def _average_gradients(tower_grads):
@@ -67,6 +68,7 @@ class Train(object):
         params = self.config.train.optimizer
         optimizer_class, params = object_from_params(params)
         return optimizer_class(self.learning_rate, **params)
+
 
     def tower_loss(self, images, labels, reuse):
         net = Net(
@@ -182,6 +184,18 @@ class Train(object):
         summary = self._session.run(self._summary_op)
         self._summary_writer.add_summary(summary, step)
 
+    def _set_pruner(self):
+        net_params = {}
+        for key,item in self._nets[0].overridden.items():
+            net_params[key] = item.eval(session = self._session)
+
+        params = self.config.train.pruner
+        prune_method = params.pop('type')
+
+        self.pruner = Pruner(net_params)
+        self.pruner.generate_masks(prune_method, params)
+        print(self.pruner.masks['lenet5/conv0/weights_mask'])
+
     def _train(self):
         log.info('Instantiating...')
         self._setup_gradients()
@@ -198,6 +212,9 @@ class Train(object):
         curr_step = 0
         tf.train.start_queue_runners(sess=self._session)
         self._nets[0].save_graph()
+
+        # if self.config.pruner
+        self._set_pruner()
         log.info('Training start.')
         # train iterations
         max_steps = self.config.system.max_steps

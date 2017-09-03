@@ -12,3 +12,6 @@ train:
         staircase: true
     optimizer:
         type: tensorflow.train.GradientDescentOptimizer
+    pruner:
+        type: mean_std_based
+        alpha: 0.001

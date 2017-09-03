@@ -1,14 +1,54 @@
 import functools
 import tensorflow as tf
+import numpy as np
 
+class Pruner(object):
+    def __init__(self, net_params, masks):
+        self.net_params = net_params
+        self.masks = masks
+
+    @staticmethod
+    def threshold_based(x, params):
+        if params['threshold']:
+            threshold = params['threshold']
+        else:
+            raise ValueError('threshold based pruning requires a threshold value')
+        mask = np.absolute(x) > threshold
+        mask.astype(int)
+        return mask
+
+    @staticmethod
+    def mean_std_based(x, params):
+        if params['alpha']:
+            alpha = params['alpha']
+        else:
+            raise ValueError('mean std based pruning requires an alpha value')
+        threshold = np.mean(x) + alpha * np.std(x)
+        mask = np.absolute(x) > threshold
+        mask.astype(int)
+        return mask
+
+
+    def update_masks(self, prune_method, params):
+        update_ops = []
+        for key, item in self.net_params.items():
+            func = getattr(self, prune_method)
+            np_mask_value = func(item, params)
+            update_op = tf.assign(self.masks[key+'_mask'], np_mask_value)
+            update_ops.append(update_op)
+        return tf.group(*update_ops)
 
 class SurgeryFunctionCollection(object):
     """
     A collection of functions that can perform surgery on network.
     """
     @staticmethod
-    def pruner(value, mask):
-        return value * mask
+    def prune(value, name):
+        shape = value.get_shape()
+        mask_ini = tf.constant(np.ones(shape))
+        mask = tf.get_variable(name + '_mask', initialier = mask_ini, trainable = False)
+        value = value * mask
+        return (value, mask)
 
     @staticmethod
     def rounder(value):
