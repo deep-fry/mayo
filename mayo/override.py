@@ -1,5 +1,4 @@
 import tensorflow as tf
-import numpy as np
 
 
 class BaseOverrider(object):
@@ -39,20 +38,28 @@ class BaseOverrider(object):
             .format(self.__class__))
 
     def update(self):
-        if getattr(self, '_applied', False):
+        if not getattr(self, '_applied', False):
             raise self.__class__.OverrideNotAppliedError(
                 '"apply" must be invoked before call "update".')
         return self._update()
+
+
+class ThresholdBinarizer(BaseOverrider):
+    def __init__(self, threshold):
+        super().__init__()
+        self.threshold = threshold
+
+    def _apply(self, _, value):
+        return tf.cast(tf.abs(value) > self.threshold, tf.float32)
 
 
 class BasePruner(BaseOverrider):
     def _apply(self, getter, value):
         shape = value.get_shape()
         name = '{}/mask'.format(value.op.name)
-        ones = tf.constant(np.ones(shape))
         self._mask = getter(
-            name, shape=shape, dtype=tf.int32,
-            initialier=ones, trainable=False)
+            name, dtype=tf.float32, shape=shape,
+            initializer=tf.ones_initializer(), trainable=False)
         return value * self._mask
 
     def _updated_mask(self):
@@ -67,21 +74,22 @@ class ThresholdPruner(BasePruner):
     def __init__(self, threshold):
         super().__init__()
         self.threshold = threshold
+        self._binarizer = ThresholdBinarizer(threshold)
 
     def _updated_mask(self):
-        mask = np.absolute(self._before) > self.threshold
-        mask.astype(int)
-        return mask
+        return self._binarizer.apply(None, self._before)
 
 
-class MeanStdThresholdPruner(ThresholdPruner):
+class MeanStdPruner(BasePruner):
     def __init__(self, alpha):
-        super.__init__()
+        super().__init__()
         self.alpha = alpha
 
     def _updated_mask(self):
-        threshold = np.mean(self._before) + self.alpha * np.std(self._before)
-        return super().threshold(self._before, threshold)
+        axes = list(range(len(self._before.get_shape())))
+        mean, var = tf.nn.moments(self._before, axes=axes)
+        threshold = mean + self.alpha * tf.sqrt(var)
+        return ThresholdBinarizer(threshold).apply(None, self._before)
 
 
 class Rounder(BaseOverrider):
