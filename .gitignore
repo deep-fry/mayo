@@ -1,4 +1,5 @@
 checkpoints/
 summaries/
+datasets/imagenet/
 __pycache__
 .DS_Store
