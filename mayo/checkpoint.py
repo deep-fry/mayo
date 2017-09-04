@@ -21,9 +21,26 @@ class CheckpointHandler(object):
         self._load_latest = not isinstance(self._load, int)
         self._search_paths = search_paths
 
-    def _variables(self):
+    def _variables(self, path=None):
         with self._session.as_default():
-            return tf.global_variables()
+            global_vars = tf.global_variables()
+        if not path:
+            return global_vars
+        reader = tf.train.NewCheckpointReader(path)
+        var_shape_map = reader.get_variable_to_shape_map()
+        restore_vars = []
+        for v in global_vars:
+            base_name = v.name.split(':')[0]
+            if base_name not in var_shape_map:
+                log.warn(
+                    'Variable named {!r} does not exist in checkpoint.'
+                    .format(base_name))
+                continue
+            restore_vars.append(v)
+        log.debug(
+            'Checkpoint variables to restore: {}.'
+            .format(', '.join(v.name for v in restore_vars)))
+        return restore_vars
 
     def _directory(self):
         try:
@@ -76,7 +93,7 @@ class CheckpointHandler(object):
         step, path = self._load_path()
         if not path:
             return step
-        restorer = tf.train.Saver(self._variables())
+        restorer = tf.train.Saver(self._variables(path))
         restorer.restore(self._session, path)
         log.info('Pre-trained model restored from {}'.format(path))
         return step
