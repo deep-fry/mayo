@@ -58,23 +58,21 @@ def object_from_params(params, import_from=None, import_from_prefix=''):
     """
     import an object or get an object from <import_from> for <params>
     with YAML format:
-        type: <some importable object>
+        type: <importable object>
+        # followed by arguments to create the object
         <argument>: <value>
         ...
-    or exec code for <params> with:
-        type: inline
-        _code: !(eval | exec) |
-            <some python eval/exec code>
-        _object: <existing object from the above code>
-        <argument>: <value>
-        ...
+
+    returns the imported object and params to create it with, which you can
+    modify before using it as key-word arguments.
     """
     params = dict(params)
-    otype = params.pop('type')
-    if otype == 'inline':
-        code = params.pop('_code')
-        obj = params.pop('_object')
-        return code.value()[obj], params
+    try:
+        otype = params.pop('type')
+    except KeyError:
+        raise KeyError(
+            'Type of the object to create is missing '
+            'from the parameter dictionary.')
     if import_from is not None:
         otype = import_from_prefix + otype
         try:
@@ -107,8 +105,7 @@ def tabular(data):
         for width, x in zip(widths, row):
             if x is None:
                 x = ''
-            align = '' if isinstance(x, str) else '>'
-            col = "{:{align}{width}}".format(x, width=width, align=align)
+            col = "{:{width}}".format(x, width=width)
             cols.append(col)
         table.append("| {} |".format(" | ".join(cols)))
     return '\n'.join(table)
