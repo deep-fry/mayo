@@ -2,13 +2,13 @@
 name: lenet5
 dataset:
     background_class: {use: false}
-preprocess:
-    shape:
-        height: 28
-        width: 28
-        channels: 1
-    validate: []
-    final: [{type: linear_map, scale: 2.0, shift: -1.0}]
+    preprocess:
+        shape:
+            height: 28
+            width: 28
+            channels: 1
+        validate: []
+        final: [{type: linear_map, scale: 2.0, shift: -1.0}]
 logits: logits
 hyper:
     - &common
@@ -16,7 +16,7 @@ hyper:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
       weights_overrider: &overrider
-          type: mayo.surgery.fixed_point_quantizer
+          type: mayo.override.FixedPointQuantizer
           integer_width: 1
           fractional_width: 4
       biases_overrider: *overrider

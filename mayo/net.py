@@ -1,4 +1,3 @@
-import functools
 import itertools
 from contextlib import contextmanager
 from collections import OrderedDict
@@ -15,7 +14,7 @@ class _InstantiationParamTransformer(object):
         super().__init__()
         self.num_classes = num_classes
         self.is_training = is_training
-        self.overridden = {}
+        self.overriders = []
 
     def _create_hyperobjects(self, params):
         def _create_object_for_key(params, key):
@@ -69,16 +68,16 @@ class _InstantiationParamTransformer(object):
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
             name = v.op.name
-            if 'bias' in name:
+            if 'biases' in name:
                 overrider = biases_overrider
             elif 'weights' in name:
                 overrider = weights_overrider
             else:
                 return v
             log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
-            v = overrider(v)
-            self.overridden[name] = v
-            return v
+            ov = overrider.apply(getter, v)
+            self.overriders.append(overrider)
+            return ov
 
         # we do not have direct access to slim.model_variable creation,
         # so arg_scope must be used
@@ -144,8 +143,8 @@ class BaseNet(object):
             self._add_end_point(name, net)
             if name != 'logits' and name == self.config.logits:
                 self._add_end_point('logits', net)
-        # overridden variables
-        self.overridden = transformer.overridden
+        # overriders
+        self.overriders = transformer.overriders
 
     def instantiate(self):
         # force all Variables to reside on the CPU
