@@ -30,7 +30,7 @@ class CheckpointHandler(object):
         var_shape_map = reader.get_variable_to_shape_map()
         restore_vars = []
         for v in global_vars:
-            base_name = v.name.split(':')[0]
+            base_name, _ = v.name.split(':')
             if base_name not in var_shape_map:
                 log.warn(
                     'Variable named {!r} does not exist in checkpoint.'
