@@ -101,8 +101,9 @@ Arguments:
         import tensorflow as tf
         from mayo.net import Net
         config = self._config(args)
-        images_shape = (None, ) + config.image_shape()
-        labels_shape = (None, config.dataset.num_classes)
+        batch_size = config.system.get('batch_size', None)
+        images_shape = (batch_size, ) + config.image_shape()
+        labels_shape = (batch_size, config.dataset.num_classes)
         images = tf.placeholder(tf.float32, images_shape, 'images')
         labels = tf.placeholder(tf.int32, labels_shape, 'labels')
         print(Net(config, images, labels, False).info())
