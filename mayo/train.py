@@ -218,7 +218,6 @@ class Train(object):
         log.info('Training start.')
         # train iterations
         max_steps = self.config.system.max_steps
-        self.update_overriders()
         try:
             while step < max_steps or max_steps <= 0:
                 loss, acc = self.once()
