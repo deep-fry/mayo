@@ -16,7 +16,6 @@ hyper:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
       weights_overrider: &overrider
-          # TODO FIXME add chainable hyperobject support
           - type: mayo.override.MeanStdPruner
             alpha: 0.1
           - type: mayo.override.FixedPointQuantizer
