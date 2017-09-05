@@ -5,6 +5,7 @@ import yaml
 import tensorflow as tf
 
 from mayo.log import log
+from mayo.util import format_shape
 
 
 class CheckpointHandler(object):
@@ -22,7 +23,7 @@ class CheckpointHandler(object):
         self._search_paths = search_paths
 
     def _variables(self, path=None):
-        with self._session.as_default():
+        with self._session.graph.as_default():
             global_vars = tf.global_variables()
         if not path:
             return global_vars
@@ -31,10 +32,19 @@ class CheckpointHandler(object):
         restore_vars = []
         for v in global_vars:
             base_name, _ = v.name.split(':')
-            if base_name not in var_shape_map:
+            shape = var_shape_map.get(base_name, None)
+            if shape is None:
                 log.warn(
                     'Variable named {!r} does not exist in checkpoint.'
                     .format(base_name))
+                continue
+            v_shape = v.shape.as_list()
+            if shape != v_shape:
+                msg = ('Variable named {!r} has shape ({}) mismatch with the '
+                       'shape ({}) in checkpoint, not loading it.')
+                msg = msg.format(
+                    base_name, format_shape(v_shape), format_shape(shape))
+                log.warn(msg)
                 continue
             restore_vars.append(v)
         log.debug(
