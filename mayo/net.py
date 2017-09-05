@@ -66,17 +66,15 @@ class _InstantiationParamTransformer(object):
             pass
 
     def _norm_scope(self, params):
-        norm_params = params.pop('normalizer_fn', None)
-        if norm_params:
-            obj, norm_params = object_from_params(norm_params)
-            norm_params['is_training'] = self.is_training
-            params['normalizer_fn'] = obj
         # we do not have direct access to normalizer instantiation,
         # so arg_scope must be used
-        if norm_params:
-            return slim.arg_scope([params['normalizer_fn']], **norm_params)
-        else:
+        norm_params = params.pop('normalizer_fn', None)
+        if not norm_params:
             return slim.arg_scope([])
+        obj, norm_params = object_from_params(norm_params)
+        norm_params['is_training'] = self.is_training
+        params['normalizer_fn'] = obj
+        return slim.arg_scope([params['normalizer_fn']], **norm_params)
 
     def _overrider_scope(self, params):
         biases_overrider = params.pop('biases_overrider', None)
