@@ -1,5 +1,4 @@
 import os
-import sys
 import time
 
 import numpy as np
@@ -12,24 +11,6 @@ from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
 
 
-def _average_gradients(tower_grads):
-    average_grads = []
-    for grad_and_vars in zip(*tower_grads):
-        grads = []
-        for g, _ in grad_and_vars:
-            # add 0 dimension to the gradients to represent the tower
-            g = tf.expand_dims(g, 0)
-            grads.append(g)
-        # average over the 'tower' dimension.
-        grad = tf.concat(axis=0, values=grads)
-        grad = tf.reduce_mean(grad, 0)
-        # simply return the first tower's pointer to the Variable
-        v = grad_and_vars[0][1]
-        grad_and_var = (grad, v)
-        average_grads.append(grad_and_var)
-    return average_grads
-
-
 class Train(object):
     average_count = 100
 
@@ -39,6 +20,7 @@ class Train(object):
         self._graph = tf.Graph()
         self._nets = []
         self._preprocessor = Preprocess(self.config)
+        self._init()
 
     @property
     @memoize
@@ -74,6 +56,24 @@ class Train(object):
         self._nets.append(net)
         return net.loss(), net.accuracy()
 
+    @staticmethod
+    def _average_gradients(tower_grads):
+        average_grads = []
+        for grad_and_vars in zip(*tower_grads):
+            grads = []
+            for g, _ in grad_and_vars:
+                # add 0 dimension to the gradients to represent the tower
+                g = tf.expand_dims(g, 0)
+                grads.append(g)
+            # average over the 'tower' dimension.
+            grad = tf.concat(axis=0, values=grads)
+            grad = tf.reduce_mean(grad, 0)
+            # simply return the first tower's pointer to the Variable
+            v = grad_and_vars[0][1]
+            grad_and_var = (grad, v)
+            average_grads.append(grad_and_var)
+        return average_grads
+
     def _setup_gradients(self):
         config = self.config.system
         # ensure batch size is divisible by number of gpus
@@ -104,7 +104,7 @@ class Train(object):
                 # gradients from all towers
                 grads = self.optimizer.compute_gradients(self._loss)
                 tower_grads.append(grads)
-        self._gradients = _average_gradients(tower_grads)
+        self._gradients = self._average_gradients(tower_grads)
         # summaries
         summaries += [
             tf.summary.scalar('learning_rate', self.learning_rate),
@@ -127,6 +127,24 @@ class Train(object):
         config = tf.ConfigProto(allow_soft_placement=True)
         self._session = tf.Session(config=config)
         self._session.run(init)
+
+    def _init(self):
+        log.info('Instantiating...')
+        with self._graph.as_default():
+            self._setup_gradients()
+            self._setup_train_operation()
+            log.info('Initializing session...')
+            self._init_session()
+            # checkpoint
+            system = self.config.system
+            self._checkpoint = CheckpointHandler(
+                self._session, self.config.name, self.config.dataset.name,
+                system.checkpoint.load, system.checkpoint.save,
+                system.search_paths.checkpoints)
+            step = self._checkpoint.load()
+            tf.train.start_queue_runners(sess=self._session)
+            self._nets[0].save_graph()
+        self._step = step
 
     def _to_epoch(self, step):
         epoch = step * self.config.system.batch_size
@@ -183,30 +201,29 @@ class Train(object):
         summary = self._session.run(self._summary_op)
         self._summary_writer.add_summary(summary, step)
 
-    def _train(self):
-        log.info('Instantiating...')
-        self._setup_gradients()
-        self._setup_train_operation()
-        log.info('Initializing session...')
-        self._init_session()
-        # checkpoint
-        system = self.config.system
-        checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name,
-            system.checkpoint.load, system.checkpoint.save,
-            system.search_paths.checkpoints)
-        cp_step = step = checkpoint.load()
+    def once(self):
+        _, loss, acc = self._session.run(
+            [self._train_op, self._loss, self._acc])
+        return loss, acc
+
+    def update_overriders(self):
+        with self._graph.as_default():
+            ops = []
+            for n in self._nets:
+                ops += n.update_overriders()
+            log.info('Updating overrider variables...')
+            self._session.run(ops)
+
+    def train(self):
+        cp_step = step = self._step
         curr_step = 0
-        tf.train.start_queue_runners(sess=self._session)
-        self._nets[0].save_graph()
+        # training start
         log.info('Training start.')
         # train iterations
         max_steps = self.config.system.max_steps
-        max_steps = sys.maxsize if max_steps <= 0 else max_steps
         try:
-            while step < max_steps:
-                _, loss, acc = self._session.run(
-                    [self._train_op, self._loss, self._acc])
+            while step < max_steps or max_steps <= 0:
+                loss, acc = self.once()
                 if np.isnan(loss):
                     raise ValueError('Model diverged with a nan-valued loss.')
                 self._update_progress(step, loss, acc, cp_step)
@@ -217,7 +234,7 @@ class Train(object):
                     if self.config.system.checkpoint.save:
                         self._update_progress(step, loss, acc, 'saving')
                         with log.use_level('warn'):
-                            checkpoint.save(step)
+                            self._checkpoint.save(step)
                         cp_step = step
                 step += 1
         except KeyboardInterrupt:
@@ -226,8 +243,4 @@ class Train(object):
             time.sleep(3)
         except KeyboardInterrupt:
             return
-        checkpoint.save(step)
-
-    def train(self):
-        with self._graph.as_default(), tf.device('/cpu:0'):
-            self._train()
+        self._checkpoint.save(step)

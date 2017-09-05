@@ -89,8 +89,8 @@ class ArithTag(YamlScalarTag):
         return op(self._eval(n.left), self._eval(n.right))
 
 
-class CodeTag(YamlScalarTag):
-    tag = '!code'
+class ExecTag(YamlScalarTag):
+    tag = '!exec'
 
     def value(self):
         try:
@@ -103,8 +103,22 @@ class CodeTag(YamlScalarTag):
         return variables
 
 
+class EvalTag(YamlScalarTag):
+    tag = '!eval'
+
+    def value(self):
+        try:
+            return self._value
+        except AttributeError:
+            pass
+        import tensorflow as tf
+        import mayo
+        self._value = eval(self.content, {'tf': tf, 'mayo': mayo})
+        return self._value
+
+
 ArithTag.register()
-CodeTag.register()
+ExecTag.register()
 
 
 def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):

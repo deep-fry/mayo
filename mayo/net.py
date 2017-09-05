@@ -1,3 +1,4 @@
+import itertools
 from contextlib import contextmanager
 from collections import OrderedDict
 
@@ -5,7 +6,112 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import object_from_params, tabular
+from mayo.util import object_from_params, multi_objects_from_params, tabular
+from mayo.override import ChainOverrider
+
+
+class _InstantiationParamTransformer(object):
+    def __init__(self, num_classes, is_training):
+        super().__init__()
+        self.num_classes = num_classes
+        self.is_training = is_training
+        self.overriders = []
+
+    def _create_hyperobjects(self, params):
+        def _create_object_for_key(params, key):
+            p = params.get(key, None)
+            if p is None:
+                return
+            if 'overrider' in key:
+                overriders = [
+                    cls(**p) for cls, p in multi_objects_from_params(p)]
+                if len(overriders) == 1:
+                    params[key] = overriders[0]
+                else:
+                    params[key] = ChainOverrider(overriders)
+            else:
+                # FIXME '_inherit' is pickle-initializier specific
+                p = dict(p)
+                for k in p.get('_inherit', []):
+                    p[k] = params[k]
+                cls, p = object_from_params(p)
+                params[key] = cls(**p)
+
+        var_names = ['weights', 'biases']
+        obj_names = ['regularizer', 'initializer', 'overrider']
+        param_names = [
+            '{}_{}'.format(v, o)
+            for v, o in itertools.product(var_names, obj_names)]
+        param_names += [
+            'pointwise_regularizer', 'depthwise_regularizer',
+            'activation_overrider']
+        for name in param_names:
+            _create_object_for_key(params, name)
+
+    def _config_layer(self, params):
+        # activation
+        activation_overrider = params.pop('activation_overrider', None)
+        if activation_overrider:
+            fn = params.get('activation_fn', tf.nn.relu) or (lambda x: x)
+            params['activation_fn'] = lambda x: fn(
+                activation_overrider.apply(tf.get_variable, x))
+        # num outputs
+        if params.get('num_outputs', None) == 'num_classes':
+            params['num_outputs'] = self.num_classes
+        # set up parameters
+        params['scope'] = params.pop('name')
+        try:
+            params['padding'] = params['padding'].upper()
+        except KeyError:
+            pass
+
+    def _norm_scope(self, params):
+        norm_params = params.pop('normalizer_fn', None)
+        if norm_params:
+            obj, norm_params = object_from_params(norm_params)
+            norm_params['is_training'] = self.is_training
+            params['normalizer_fn'] = obj
+        # we do not have direct access to normalizer instantiation,
+        # so arg_scope must be used
+        if norm_params:
+            return slim.arg_scope([params['normalizer_fn']], **norm_params)
+        else:
+            return slim.arg_scope([])
+
+    def _overrider_scope(self, params):
+        biases_overrider = params.pop('biases_overrider', None)
+        weights_overrider = params.pop('weights_overrider', None)
+
+        def custom_getter(getter, *args, **kwargs):
+            v = getter(*args, **kwargs)
+            name = v.op.name
+            if 'biases' in name:
+                overrider = biases_overrider
+            elif 'weights' in name:
+                overrider = weights_overrider
+            else:
+                return v
+            log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
+            ov = overrider.apply(getter, v)
+            self.overriders.append(overrider)
+            return ov
+
+        # we do not have direct access to slim.model_variable creation,
+        # so arg_scope must be used
+        scope = tf.get_variable_scope()
+        return tf.variable_scope(scope, custom_getter=custom_getter)
+
+    def transform(self, params):
+        params = dict(params)
+        # weight and bias hyperparams
+        self._create_hyperobjects(params)
+        # layer configs
+        self._config_layer(params)
+        # normalization arg_scope
+        norm_scope = self._norm_scope(params)
+        # overrider arg_scope
+        overrider_scope = self._overrider_scope(params)
+        return params, norm_scope, overrider_scope
 
 
 class BaseNet(object):
@@ -36,65 +142,26 @@ class BaseNet(object):
                 'layer {!r} already exists in end_points.'.format(layer))
         self.end_points[key] = layer
 
-    def _instantiation_params(self, params):
-        def create(params, key):
-            p = params.get(key, None)
-            if p is None:
-                return
-            p = dict(p)
-            for k in p.get('_inherit', []):
-                p[k] = params[k]
-            cls, p = object_from_params(p)
-            params[key] = cls(**p)
-
-        params = dict(params)
-        # batch norm
-        norm_params = params.pop('normalizer_fn', None)
-        if norm_params:
-            obj, norm_params = object_from_params(norm_params)
-            norm_params['is_training'] = self.is_training
-            params['normalizer_fn'] = obj
-        # weight and bias hyperparams
-        param_names = [
-            'weights_regularizer', 'biases_regularizer',
-            'weights_initializer', 'biases_initializer',
-            'pointwise_regularizer', 'depthwise_regularizer']
-        for name in param_names:
-            create(params, name)
-        # layer configs
-        # num outputs
-        if params.get('num_outputs', None) == 'num_classes':
-            params['num_outputs'] = self.config.num_classes()
-        # set up parameters
-        params['scope'] = params.pop('name')
-        try:
-            params['padding'] = params['padding'].upper()
-        except KeyError:
-            pass
-        return params, norm_params
-
     def _instantiate(self):
+        transformer = _InstantiationParamTransformer(
+            self.config.num_classes(), self.is_training)
+        transform = transformer.transform
         net = self.end_points['images']
         for params in self.config.net:
             name = params['name']
-            params, norm_params = self._instantiation_params(params)
-            # we do not have direct access to normalizer instantiation,
-            # so arg_scope must be used
-            if norm_params:
-                norm_scope = slim.arg_scope(
-                    [params['normalizer_fn']], **norm_params)
-            else:
-                norm_scope = slim.arg_scope([])
+            params, norm_scope, overrider_scope = transform(params)
             # get method by its name to instantiate a layer
             func, params = object_from_params(params, self, 'instantiate_')
             # instantiation
             log.debug('Instantiating {!r} with params {}'.format(name, params))
-            with norm_scope:
+            with norm_scope, overrider_scope:
                 net = func(net, params)
             # save end points
             self._add_end_point(name, net)
             if name != 'logits' and name == self.config.logits:
                 self._add_end_point('logits', net)
+        # overriders
+        self.overriders = transformer.overriders
 
     def instantiate(self):
         # force all Variables to reside on the CPU
@@ -103,6 +170,15 @@ class BaseNet(object):
 
     def generic_instantiate(self, net, params):
         raise NotImplementedError
+
+    def update_overriders(self):
+        ops = []
+        for o in self.overriders:
+            try:
+                ops.append(o.update())
+            except NotImplementedError:
+                pass
+        return ops
 
     def logits(self):
         return self.end_points['logits']
@@ -140,8 +216,7 @@ class BaseNet(object):
 
     def info(self):
         def format_shape(shape):
-            return ' x '.join(
-                '?' if s is None else str(s) for s in shape.as_list())
+            return ' x '.join(str(s or '?') for s in shape.as_list())
 
         param_table = [('Param', 'Shape', 'Count'), '-']
         total = 0
