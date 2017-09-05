@@ -43,6 +43,9 @@ class Evaluate(object):
         top1_op = tf.nn.in_top_k(logits, labels, 1)
         top5_op = tf.nn.in_top_k(logits, labels, 5)
 
+        # initialization
+        self._session.run(tf.global_variables_initializer())
+
         # load checkpoint
         system = self.config.system
         if system.checkpoint.load:
@@ -85,17 +88,17 @@ class Evaluate(object):
                 step += 1
                 self._update_progress(step, top1_acc, top5_acc, num_iterations)
         except KeyboardInterrupt as e:
-            log.info('Evaluation aborted')
+            log.info('Evaluation aborted.')
             coord.request_stop(e)
         else:
-            log.info('Evaluation complete')
+            log.info('Evaluation complete.')
             log.info('\ttop1: {:.2f}%, top5: {:.2f}% [{} images]'.format(
                 top1_acc * 100, top5_acc * 100, total))
             coord.request_stop()
             coord.join(threads, stop_grace_period_secs=10)
 
     def eval(self):
+        log.info('Initializing...')
         with self._graph.as_default():
             self._session = tf.Session(graph=self._graph)
-            with self._session:
-                self._eval()
+            self._eval()
