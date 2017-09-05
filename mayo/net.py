@@ -41,8 +41,6 @@ class BaseNet(object):
             p = params.get(key, None)
             if p is None:
                 return
-            if p is None:
-                return
             p = dict(p)
             for k in p.get('_inherit', []):
                 p[k] = params[k]

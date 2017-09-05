@@ -87,6 +87,7 @@ class Train(object):
         tower_grads = []
         reuse = None
         for i, (images_split, label_split) in iterator:
+            log.debug('Instantiating loss for GPU #{}.'.format(i))
             # loss with the proper nested contexts
             name = 'tower_{}'.format(i)
             with tf.device('/gpu:{}'.format(i)), tf.name_scope(name):
