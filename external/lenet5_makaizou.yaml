@@ -21,6 +21,10 @@ hyper:
           - type: mayo.override.FixedPointQuantizer
             integer_width: 1
             fractional_width: 4
+      activation_overrider:
+          type: mayo.override.FixedPointQuantizer
+          integer_width: 1
+          fractional_width: 4
       biases_overrider: *overrider
     - &conv
       type: convolution

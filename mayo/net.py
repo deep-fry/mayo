@@ -42,11 +42,19 @@ class _InstantiationParamTransformer(object):
         param_names = [
             '{}_{}'.format(v, o)
             for v, o in itertools.product(var_names, obj_names)]
-        param_names += ['pointwise_regularizer', 'depthwise_regularizer']
+        param_names += [
+            'pointwise_regularizer', 'depthwise_regularizer',
+            'activation_overrider']
         for name in param_names:
             _create_object_for_key(params, name)
 
     def _config_layer(self, params):
+        # activation
+        activation_overrider = params.pop('activation_overrider', None)
+        if activation_overrider:
+            fn = params.get('activation_fn', tf.nn.relu) or (lambda x: x)
+            params['activation_fn'] = lambda x: fn(
+                activation_overrider.apply(tf.get_variable, x))
         # num outputs
         if params.get('num_outputs', None) == 'num_classes':
             params['num_outputs'] = self.num_classes
@@ -71,9 +79,8 @@ class _InstantiationParamTransformer(object):
             return slim.arg_scope([])
 
     def _overrider_scope(self, params):
-        identity = lambda x: x
-        biases_overrider = params.pop('biases_overrider', None) or identity
-        weights_overrider = params.pop('weights_overrider', None) or identity
+        biases_overrider = params.pop('biases_overrider', None)
+        weights_overrider = params.pop('weights_overrider', None)
 
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
