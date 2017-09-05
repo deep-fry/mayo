@@ -6,7 +6,8 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import object_from_params, tabular
+from mayo.util import object_from_params, multi_objects_from_params, tabular
+from mayo.override import ChainOverrider
 
 
 class _InstantiationParamTransformer(object):
@@ -21,11 +22,20 @@ class _InstantiationParamTransformer(object):
             p = params.get(key, None)
             if p is None:
                 return
-            p = dict(p)
-            for k in p.get('_inherit', []):
-                p[k] = params[k]
-            cls, p = object_from_params(p)
-            params[key] = cls(**p)
+            if 'overrider' in key:
+                overriders = [
+                    cls(**p) for cls, p in multi_objects_from_params(p)]
+                if len(overriders) == 1:
+                    params[key] = overriders[0]
+                else:
+                    params[key] = ChainOverrider(overriders)
+            else:
+                # FIXME '_inherit' is pickle-initializier specific
+                p = dict(p)
+                for k in p.get('_inherit', []):
+                    p[k] = params[k]
+                cls, p = object_from_params(p)
+                params[key] = cls(**p)
 
         var_names = ['weights', 'biases']
         obj_names = ['regularizer', 'initializer', 'overrider']
@@ -155,11 +165,13 @@ class BaseNet(object):
         raise NotImplementedError
 
     def update_overriders(self):
+        ops = []
         for o in self.overriders:
             try:
-                o.update()
+                ops.append(o.update())
             except NotImplementedError:
                 pass
+        return ops
 
     def logits(self):
         return self.end_points['logits']

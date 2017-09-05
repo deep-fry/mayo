@@ -44,6 +44,26 @@ class BaseOverrider(object):
         return self._update()
 
 
+class ChainOverrider(BaseOverrider):
+    def __init__(self, overriders):
+        super().__init__()
+        self._overriders = overriders
+
+    def _apply(self, getter, value):
+        for o in self._overriders:
+            value = o.apply(getter, value)
+        return value
+
+    def _update(self):
+        ops = []
+        for o in self._overriders:
+            try:
+                ops.append(o.update())
+            except NotImplementedError:
+                pass
+        return tf.group(*ops)
+
+
 class ThresholdBinarizer(BaseOverrider):
     def __init__(self, threshold):
         super().__init__()

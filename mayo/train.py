@@ -20,6 +20,7 @@ class Train(object):
         self._graph = tf.Graph()
         self._nets = []
         self._preprocessor = Preprocess(self.config)
+        self._init()
 
     @property
     @memoize
@@ -127,6 +128,24 @@ class Train(object):
         self._session = tf.Session(config=config)
         self._session.run(init)
 
+    def _init(self):
+        log.info('Instantiating...')
+        with self._graph.as_default():
+            self._setup_gradients()
+            self._setup_train_operation()
+            log.info('Initializing session...')
+            self._init_session()
+            # checkpoint
+            system = self.config.system
+            self._checkpoint = CheckpointHandler(
+                self._session, self.config.name, self.config.dataset.name,
+                system.checkpoint.load, system.checkpoint.save,
+                system.search_paths.checkpoints)
+            step = self._checkpoint.load()
+            tf.train.start_queue_runners(sess=self._session)
+            self._nets[0].save_graph()
+        self._step = step
+
     def _to_epoch(self, step):
         epoch = step * self.config.system.batch_size
         return epoch / float(self.config.dataset.num_examples_per_epoch.train)
@@ -182,38 +201,21 @@ class Train(object):
         summary = self._session.run(self._summary_op)
         self._summary_writer.add_summary(summary, step)
 
-    @memoize
-    def _init(self):
-        log.info('Instantiating...')
-        self._setup_gradients()
-        self._setup_train_operation()
-        log.info('Initializing session...')
-        self._init_session()
-        # checkpoint
-        system = self.config.system
-        self._checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name,
-            system.checkpoint.load, system.checkpoint.save,
-            system.search_paths.checkpoints)
-        step = self._checkpoint.load()
-        tf.train.start_queue_runners(sess=self._session)
-        self._nets[0].save_graph()
-        return step
-
     def once(self):
-        with self._graph.as_default():
-            self._init()
-            _, loss, acc = self._session.run(
-                [self._train_op, self._loss, self._acc])
-            return loss, acc
+        _, loss, acc = self._session.run(
+            [self._train_op, self._loss, self._acc])
+        return loss, acc
 
     def update_overriders(self):
-        for n in self._nets:
-            n.update_overriders()
+        with self._graph.as_default():
+            ops = []
+            for n in self._nets:
+                ops += n.update_overriders()
+            log.info('Updating overrider variables...')
+            self._session.run(ops)
 
     def train(self):
-        with self._graph.as_default():
-            cp_step = step = self._init()
+        cp_step = step = self._step
         curr_step = 0
         # training start
         log.info('Training start.')
