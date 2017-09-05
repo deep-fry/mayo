@@ -1,7 +1,9 @@
+import collections
+
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize, object_from_params
+from mayo.util import memoize, multi_objects_from_params
 
 
 class _ImagePreprocess(object):
@@ -115,9 +117,10 @@ class _ImagePreprocess(object):
 
     def preprocess(self, image, actions):
         with tf.name_scope(values=[image], name='preprocess_image'):
-            for params in actions:
-                log.debug('Preprocess: {}'.format(params))
-                func, params = object_from_params(params, self)
+            for func, params in multi_objects_from_params(actions, self):
+                log.debug(
+                    'Preprocessing using {!r} with params {}'
+                    .format(func.__name__, params))
                 image = func(image, **params)
         return self._ensure_shape(image)
 
@@ -144,8 +147,13 @@ class Preprocess(object):
         means = self.config.dataset.get('channel_means', None)
         image_preprocess = _ImagePreprocess(shape, means, bbox, tid)
         actions_map = self.config.dataset.preprocess
-        actions = actions_map[mode] + actions_map['final']
-        return image_preprocess.preprocess(image, actions)
+        mode_actions = actions_map[mode] or []
+        if not isinstance(mode_actions, collections.Sequence):
+            mode_actions = [mode_actions]
+        final_actions = actions_map['final'] or []
+        if not isinstance(final_actions, collections.Sequence):
+            final_actions = [final_actions]
+        return image_preprocess.preprocess(image, mode_actions + final_actions)
 
     def _filename_queue(self, mode):
         """
@@ -241,6 +249,7 @@ class Preprocess(object):
             raise ValueError('Expect number of threads to be a multiple of 4.')
         images_labels = []
         for tid in range(num_threads):
+            log.debug('Preprocessing thread #{}'.format(tid))
             buffer, label, bbox, _ = self._parse_proto(serialized)
             image = self._preprocess(buffer, bbox, mode, tid)
             label += self.config.label_offset()

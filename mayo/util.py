@@ -1,5 +1,6 @@
 import os
 import functools
+import collections
 from importlib.util import spec_from_file_location, module_from_spec
 
 
@@ -90,6 +91,14 @@ def object_from_params(params, import_from=None, import_from_prefix=''):
         if key.startswith('_'):
             params.pop(key)
     return cls, params
+
+
+def multi_objects_from_params(params, import_from=None, import_from_prefix=''):
+    if not isinstance(params, collections.Sequence):
+        params = [params]
+    return [
+        object_from_params(p, import_from, import_from_prefix)
+        for p in params]
 
 
 def tabular(data):
