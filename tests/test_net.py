@@ -95,11 +95,10 @@ class TestTransformer(unittest.TestCase):
             'weights_overrider': Rounder(),
         }
         scope = self.transformer._overrider_scope(params)
-        with scope as s:
-            getter = s._custom_getter
-        v = getter(tf.get_variable, 'test', [1])
-        b = getter(tf.get_variable, 'biases', [1])
-        w = getter(tf.get_variable, 'weights', [1])
+        with scope:
+            v = tf.get_variable('test', [1])
+            b = tf.get_variable('biases', [1])
+            w = tf.get_variable('weights', [1])
         self.assertIsInstance(v, tf.Variable)
         self.assertEqual(v.op.name, 'test')
         self.assertEqual(len(self.transformer.overriders), 2)
