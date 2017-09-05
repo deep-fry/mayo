@@ -238,9 +238,15 @@ class Train(object):
                         cp_step = step
                 step += 1
         except KeyboardInterrupt:
-            log.info('Stopped, saving checkpoint in 3 seconds.')
+            pass
         try:
-            time.sleep(3)
+            timeout_secs = 3
+            for i in range(timeout_secs):
+                log.info(
+                    'Stopped, saving checkpoint in {} seconds.'
+                    .format(timeout_secs - i), update=True)
+                time.sleep(1)
         except KeyboardInterrupt:
+            log.info('We give up.')
             return
         self._checkpoint.save(step)

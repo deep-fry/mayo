@@ -101,6 +101,10 @@ def multi_objects_from_params(params, import_from=None, import_from_prefix=''):
         for p in params]
 
 
+def format_shape(shape):
+    return ' x '.join(str(s) if s else '?' for s in shape)
+
+
 def tabular(data):
     data = ['-'] + data + ['-']
     valid_rows = [row for row in data if row != '-']
