@@ -114,12 +114,18 @@ class Train(object):
     def _setup_train_operation(self):
         app_grad_op = self.optimizer.apply_gradients(
             self._gradients, global_step=self.global_step)
-        var_avgs = tf.train.ExponentialMovingAverage(
-            self.config.train.moving_average_decay, self.global_step)
-        var_avgs_op = var_avgs.apply(
-            tf.trainable_variables() + tf.moving_average_variables())
+        ops = [app_grad_op]
+        decay = self.config.train.get('moving_average_decay', 0)
+        if decay:
+            # instantiate moving average if moving_average_decay is supplied
+            var_avgs = tf.train.ExponentialMovingAverage(
+                self.config.train.moving_average_decay, self.global_step)
+            var_avgs_op = var_avgs.apply(
+                tf.trainable_variables() + tf.moving_average_variables())
+            ops.append(var_avgs_op)
         bn_op = tf.group(*self._batch_norm_updates)
-        self._train_op = tf.group(app_grad_op, var_avgs_op, bn_op)
+        ops.append(bn_op)
+        self._train_op = tf.group(*ops)
 
     def _init_session(self):
         # build an initialization operation to run below
