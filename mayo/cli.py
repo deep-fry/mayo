@@ -67,11 +67,13 @@ Options:
 """
 
     def _commands(self):
+        prefix = 'cli_'
         commands = {}
         for method in dir(self):
-            if not method.startswith('cli_'):
+            if not method.startswith(prefix):
                 continue
-            commands[method[4:]] = getattr(self, method)
+            name = method[len(prefix):].replace('_', '-')
+            commands[name] = getattr(self, method)
         return commands
 
     def doc(self):
@@ -80,7 +82,9 @@ Options:
     def usage(self):
         usage_meta = meta()
         commands = []
-        for k in self._commands().keys():
+        for k in self._commands():
+            if 'checkpoint' in k:
+                continue
             command = '{__executable__} {command} [<anything>...]'
             commands.append(command.format(command=k, **usage_meta))
         usage_meta['commands'] = '\n    '.join(commands)
@@ -143,15 +147,10 @@ Options:
         print(yaml.dump(surgeon.var_to_shape_map()))
 
     def main(self, args=None):
-        prefix = 'cli_'
         if args is None:
             args = docopt(self.usage(), version=meta()['__version__'])
-        for name in dir(self):
-            if not name.startswith(prefix):
+        for name, func in self._commands().items():
+            if not args[name]:
                 continue
-            command_name = name[len(prefix):].replace('_', '-')
-            if not args[command_name]:
-                continue
-            func = getattr(self, name)
             return func(args)
         raise NotImplementedError('Command not found')
