@@ -105,7 +105,7 @@ class CheckpointHandler(object):
             return step
         restorer = tf.train.Saver(self._variables(path))
         restorer.restore(self._session, path)
-        log.info('Pre-trained model restored from {}'.format(path))
+        log.info('Pre-trained model restored.')
         return step
 
     def save(self, step):
