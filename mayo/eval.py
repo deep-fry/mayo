@@ -49,8 +49,7 @@ class Evaluate(object):
         # load checkpoint
         system = self.config.system
         checkpoint = CheckpointHandler(
-            self._session, self.config.name, self.config.dataset.name,
-            system.checkpoint.load, system.checkpoint.save,
+            self._session, system.checkpoint.load, system.checkpoint.save,
             system.search_paths.checkpoints)
         checkpoint.load()
 

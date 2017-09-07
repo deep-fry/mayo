@@ -144,8 +144,7 @@ class Train(object):
             # checkpoint
             system = self.config.system
             self._checkpoint = CheckpointHandler(
-                self._session, self.config.name, self.config.dataset.name,
-                system.checkpoint.load, system.checkpoint.save,
+                self._session, system.checkpoint.load, system.checkpoint.save,
                 system.search_paths.checkpoints)
             step = self._checkpoint.load()
             tf.train.start_queue_runners(sess=self._session)
@@ -199,9 +198,7 @@ class Train(object):
     @memoize
     def _summary_writer(self):
         path = self.config.system.search_paths.summaries[0]
-        directory = os.path.join(
-            path, self.config.name, self.config.dataset.name)
-        return tf.summary.FileWriter(directory, graph=self._graph)
+        return tf.summary.FileWriter(path, graph=self._graph)
 
     def _save_summary(self, step):
         summary = self._session.run(self._summary_op)

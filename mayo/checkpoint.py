@@ -1,5 +1,6 @@
 import os
 import re
+import glob
 
 import yaml
 import tensorflow as tf
@@ -11,16 +12,13 @@ from mayo.util import format_shape
 class CheckpointHandler(object):
     _checkpoint_basename = 'checkpoint'
 
-    def __init__(
-            self, session, net_name, dataset_name,
-            load, save, search_paths):
+    def __init__(self, session, load, save, search_paths):
         super().__init__()
         self._session = session
-        self._net = net_name
-        self._dataset = dataset_name
         self._load, self._save = load, save
         self._load_latest = not isinstance(self._load, int)
         self._search_paths = search_paths
+        self._checkpoint_directories = {}
 
     def _variables(self, path=None):
         with self._session.graph.as_default():
@@ -52,23 +50,28 @@ class CheckpointHandler(object):
             .format(', '.join(v.name for v in restore_vars)))
         return restore_vars
 
-    def _directory(self):
+    def _directory(self, is_saving):
         try:
-            return self._checkpoint_directory
-        except AttributeError:
+            return self._checkpoint_directories[is_saving]
+        except KeyError:
             pass
         first_directory = None
-        for path in self._search_paths:
-            directory = os.path.join(path, self._net, self._dataset)
-            first_directory = first_directory or directory
-            if os.path.isdir(directory):
-                self._checkpoint_directory = directory
-                return directory
-        self._checkpoint_directory = first_directory
+        paths = self._search_paths
+        paths = paths.save if is_saving else paths.load
+        for path in paths:
+            first_directory = first_directory or path
+            has = os.path.isdir(path)
+            if has:
+                cp_path = os.path.join(path, self._checkpoint_basename + '-*')
+                if glob.glob(cp_path):
+                    self._checkpoint_directory = path
+                    return path
+        self._checkpoint_directories[is_saving] = first_directory
         return first_directory
 
     def _path(self, is_saving):
-        directory = self._directory()
+        directory = self._directory(is_saving)
+        log.debug('Using {!r} for checkpoints.'.format(directory))
         if is_saving:
             # ensure directory exists
             os.makedirs(directory, exist_ok=True)

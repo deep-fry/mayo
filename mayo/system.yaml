@@ -9,9 +9,16 @@ system:
     batch_size: 128
     max_steps: 10000000
     search_paths:
-        datasets: [datasets]
-        checkpoints: [checkpoints]
-        summaries: [summaries]
+        datasets:
+            - datasets
+        checkpoints:
+            save:
+                - checkpoints/$(name)/$(dataset.name)
+            load:
+                - checkpoints/pretrained/$(name)/$(dataset.name)
+                - checkpoints/$(name)/$(dataset.name)
+        summaries:
+            - summaries/$(name)/$(dataset.name)
     checkpoint:
         load: latest
         save: true

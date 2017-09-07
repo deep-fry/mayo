@@ -244,14 +244,20 @@ class Config(_DotDict):
         _dict_merge(dictionary, system)
 
     def _init_search_paths(self, unified, dictionary, yaml_files):
-        default = {'datasets': [os.path.dirname(f) for f in yaml_files]}
         for d in (dictionary, unified):
             search_paths = d['system']['search_paths']
-            for key, paths in default.items():
-                paths = search_paths.get(key, paths)
+            keys = [
+                'datasets', 'summaries',
+                'checkpoints.load', 'checkpoints.save']
+            for k in keys:
+                curr_paths, final_key = _dot_path(search_paths, k)
+                paths = curr_paths[final_key]
                 if isinstance(paths, str):
                     paths = (p.strip() for p in ';'.split(paths))
-                search_paths[key] = _unique(paths)
+                curr_paths[final_key] = _unique(paths)
+        # update defaults
+        default_datasets = [os.path.dirname(f) for f in yaml_files]
+        search_paths['datasets'] = default_datasets + search_paths['datasets']
 
     @staticmethod
     def _override(dictionary, overrides):
