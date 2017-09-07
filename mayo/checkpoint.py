@@ -115,3 +115,68 @@ class CheckpointHandler(object):
         cp_path = self._path(True)
         saver = tf.train.Saver(self._variables())
         saver.save(self._session, cp_path, global_step=step)
+
+
+class CheckpointSurgeon(object):
+    def __init__(self, ckpt):
+        super().__init__()
+        self.ckpt = ckpt
+        self._session = tf.Session()
+
+    def var_to_shape_map(self, ckpt=None):
+        return dict(tf.contrib.framework.list_variables(ckpt or self.ckpt))
+
+    def var_to_var_map(self, rules):
+        vvmap = {}
+        for v in self.var_to_shape_map(self.ckpt):
+            nv = v
+            for pattern, replacement in rules.items():
+                if replacement is None:
+                    if re.findall(pattern, nv):
+                        break
+                else:
+                    nv = re.sub(pattern, replacement, nv)
+            else:
+                vvmap[v] = nv
+        return vvmap
+
+    def _check_unassigned(self, renamed_vars, match_ckpt):
+        if not match_ckpt:
+            return
+        log.info('Checking for unassigned variables...')
+        to_vars = self.var_to_shape_map(match_ckpt)
+        uninit_vars = [v for v in to_vars if v not in renamed_vars]
+        if not uninit_vars:
+            log.info('All variables are assigned.')
+            return
+        log.warn('Variables below will not be assigned:')
+        for v in uninit_vars:
+            log.warn('    - {}'.format(uninit_vars))
+
+    def rename(self, to_ckpt, match_ckpt, rules, dry_run=False):
+        log.info('Renaming variables...')
+        vvmap = self.var_to_var_map(rules)
+        new_vars = []
+        for var_name, shape in self.var_to_shape_map(self.ckpt).items():
+            try:
+                new_var_name = vvmap[var_name]
+            except KeyError:
+                log.debug(
+                    'Skipping {!r} as it is not required'.format(var_name))
+                continue
+            if new_var_name != var_name:
+                log.debug(
+                    'Renamed {!r} as {!r}.'.format(var_name, new_var_name))
+            else:
+                log.debug('{!r} is not renamed.'.format(var_name))
+            with self._session.as_default():
+                var = tf.contrib.framework.load_variable(self.ckpt, var_name)
+                new_vars.append(tf.Variable(var, name=new_var_name))
+        self._check_unassigned(vvmap.values(), match_ckpt)
+        if dry_run:
+            log.info('Dry run, not actually saving.')
+            return
+        log.info('Saving checkpoint with renamed variables...')
+        saver = tf.train.Saver()
+        self._session.run(tf.variables_initializer(new_vars))
+        saver.save(self._session, to_ckpt)

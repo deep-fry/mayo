@@ -47,11 +47,23 @@ class CLI(object):
     _USAGE = """
 Usage:
     {commands}
+    {__executable__} checkpoint-info <ckpt>
+    {__executable__} checkpoint-rename <ckpt> <to_ckpt> [<match_ckpt>] \
+ --rules=<yaml> [--dry-run]
     {__executable__} (-h | --help)
 
 Arguments:
     <anything> can either be a YAML file or an override command
     formatted as <dot_key_path>=<yaml_value>
+
+Options:
+    --dry-run           Performs a dry run, not actually changing anything
+                        but shows things to be changed.
+    --rules=<yaml>      Replaces keys with new keys given in the specified YAML
+                        file using `re.sub`.  The YAML file should be written
+                        as ordered mappings with `<pattern>: <replacement>`,
+                        which we will apply the substitution in the order of
+                        mapping.
 """
 
     def _commands(self):
@@ -108,11 +120,38 @@ Arguments:
         labels = tf.placeholder(tf.int32, labels_shape, 'labels')
         print(Net(config, images, labels, False).info())
 
+    def _disable_tensorflow_logger(self):
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+    def cli_checkpoint_rename(self, args):
+        from mayo.checkpoint import CheckpointSurgeon
+        self._disable_tensorflow_logger()
+        from_ckpt = args['<ckpt>']
+        to_ckpt = args['<to_ckpt>']
+        match_ckpt = args['<match_ckpt>']
+        dry = ['--dry-run']
+        rules = args['--rules']
+        with open(rules, 'r') as f:
+            rules = yaml.load(f)
+        surgeon = CheckpointSurgeon(from_ckpt)
+        return surgeon.rename(to_ckpt, match_ckpt, rules, dry)
+
+    def cli_checkpoint_info(self, args):
+        from mayo.checkpoint import CheckpointSurgeon
+        self._disable_tensorflow_logger()
+        surgeon = CheckpointSurgeon(args['<ckpt>'])
+        print(yaml.dump(surgeon.var_to_shape_map()))
+
     def main(self, args=None):
+        prefix = 'cli_'
         if args is None:
             args = docopt(self.usage(), version=meta()['__version__'])
-        for name, func in self._commands().items():
-            if not args[name]:
+        for name in dir(self):
+            if not name.startswith(prefix):
                 continue
+            command_name = name[len(prefix):].replace('_', '-')
+            if not args[command_name]:
+                continue
+            func = getattr(self, name)
             return func(args)
         raise NotImplementedError('Command not found')
