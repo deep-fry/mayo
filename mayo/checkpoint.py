@@ -98,7 +98,7 @@ class CheckpointHandler(object):
         return step, path
 
     def load(self):
-        if not self._load:
+        if not self._load and not isinstance(self._load, int):
             return 0
         step, path = self._load_path()
         if not path:

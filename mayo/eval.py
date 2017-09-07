@@ -48,14 +48,11 @@ class Evaluate(object):
 
         # load checkpoint
         system = self.config.system
-        if system.checkpoint.load:
-            checkpoint = CheckpointHandler(
-                self._session, self.config.name, self.config.dataset.name,
-                system.checkpoint.load, system.checkpoint.save,
-                system.search_paths.checkpoints)
-            checkpoint.load()
-        else:
-            self._session.run(tf.global_variables_initializer())
+        checkpoint = CheckpointHandler(
+            self._session, self.config.name, self.config.dataset.name,
+            system.checkpoint.load, system.checkpoint.save,
+            system.search_paths.checkpoints)
+        checkpoint.load()
 
         # queue runners
         coord = tf.train.Coordinator()

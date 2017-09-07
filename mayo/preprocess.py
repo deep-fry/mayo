@@ -252,7 +252,9 @@ class Preprocess(object):
             log.debug('Preprocessing thread #{}'.format(tid))
             buffer, label, bbox, _ = self._parse_proto(serialized)
             image = self._preprocess(buffer, bbox, mode, tid)
-            label += self.config.label_offset()
+            offset = self.config.label_offset()
+            log.debug('Incrementing label by offset {}'.format(offset))
+            label += offset
             images_labels.append((image, label))
         batch_size = self.config.system.batch_size
         capacity = 2 * num_threads * batch_size
