@@ -83,11 +83,12 @@ class _InstantiationParamTransformer(object):
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
             name = v.op.name
+            overrider = None
             if 'biases' in name:
                 overrider = biases_overrider
             elif 'weights' in name:
                 overrider = weights_overrider
-            else:
+            if overrider is None:
                 return v
             log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
             ov = overrider.apply(getter, v)
