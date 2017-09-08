@@ -195,6 +195,16 @@ class _DotDict(dict):
         }
         return self._recursive_apply(obj, link_map)
 
+    _magic = object()
+
+    def get(self, key, default=_magic):
+        try:
+            return self[key]
+        except KeyError:
+            if default is self._magic:
+                raise
+        return default
+
     def __getitem__(self, key):
         obj, key = _dot_path(self, key)
         return super(_DotDict, obj).__getitem__(key)
