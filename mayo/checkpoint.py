@@ -20,15 +20,15 @@ class CheckpointHandler(object):
         self._search_paths = search_paths
         self._checkpoint_directories = {}
 
-    def _variables(self, path=None):
+    def _variables(self, vars_to_restore=None, path=None):
         with self._session.graph.as_default():
-            global_vars = tf.global_variables()
+            vars_to_restore = vars_to_restore or tf.global_variables()
         if not path:
-            return global_vars
+            return vars_to_restore
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
         restore_vars = []
-        for v in global_vars:
+        for v in vars_to_restore:
             base_name, _ = v.name.split(':')
             shape = var_shape_map.get(base_name, None)
             if shape is None:
@@ -100,13 +100,14 @@ class CheckpointHandler(object):
                 'Checkpoint named {!r} not found.'.format(path))
         return step, path
 
-    def load(self):
+    def load(self, vars_to_restore=None):
         if not self._load and not isinstance(self._load, int):
             return 0
         step, path = self._load_path()
         if not path:
             return step
-        restorer = tf.train.Saver(self._variables(path))
+        vars_to_restore = self._variables(vars_to_restore, path)
+        restorer = tf.train.Saver(vars_to_restore)
         restorer.restore(self._session, path)
         log.info('Pre-trained model restored.')
         return step
