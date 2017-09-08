@@ -8,7 +8,7 @@ from mayo.log import log
 from mayo.net import Net
 from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
-from mayo.train import global_step
+from mayo.train import _global_step
 
 
 class Evaluate(object):
@@ -47,7 +47,7 @@ class Evaluate(object):
         decay = self.config.get('train.moving_average_decay', None)
         if decay:
             log.debug('Using exponential moving average.')
-            var_avgs = tf.train.ExponentialMovingAverage(decay, global_step())
+            var_avgs = tf.train.ExponentialMovingAverage(decay, _global_step())
             var_avgs.apply(
                 tf.trainable_variables() + tf.moving_average_variables())
         else:
