@@ -1,4 +1,3 @@
-import os
 import time
 
 import numpy as np
@@ -9,6 +8,12 @@ from mayo.net import Net
 from mayo.util import memoize, object_from_params
 from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
+
+
+def _global_step(dtype=tf.int32):
+    return tf.get_variable(
+        'global_step', [], initializer=tf.constant_initializer(0),
+        trainable=False, dtype=dtype)
 
 
 class Train(object):
@@ -25,9 +30,7 @@ class Train(object):
     @property
     @memoize
     def global_step(self):
-        return tf.get_variable(
-            'global_step', [], initializer=tf.constant_initializer(0),
-            trainable=False, dtype=tf.int32)
+        return _global_step()
 
     @property
     @memoize
