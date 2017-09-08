@@ -25,11 +25,9 @@ class Train(object):
     @property
     @memoize
     def global_step(self):
-        initializer = tf.constant_initializer(0)
-        global_step = tf.get_variable(
-            'global_step', [], initializer=initializer, trainable=False,
-            dtype=tf.int32)
-        return global_step
+        return tf.get_variable(
+            'global_step', [], initializer=tf.constant_initializer(0),
+            trainable=False, dtype=tf.int32)
 
     @property
     @memoize
