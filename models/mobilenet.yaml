@@ -7,8 +7,10 @@ dataset:
             height: 224
             width: 224
             channels: 3
-        validate: [{type: central_crop, central_fraction: 0.875}]
-        final: [{type: linear_map, scale: 2.0, shift: -1.0}]
+        validate:
+            - {type: central_crop, central_fraction: 0.875}
+        final:
+            - {type: linear_map, scale: 2.0, shift: -1.0}
 logits: logits
 depth_multiplier: &depth_multiplier 1
 hyper:
@@ -28,6 +30,7 @@ hyper:
       weights_initializer:
           type: tensorflow.truncated_normal_initializer
           stddev: 0.09
+      activation_fn: tensorflow.nn.relu6
     - &dsconv
       <<: *conv
       type: depthwise_separable_convolution
