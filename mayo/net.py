@@ -6,7 +6,8 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import object_from_params, multi_objects_from_params, tabular
+from mayo.util import (
+    import_from_string, object_from_params, multi_objects_from_params, tabular)
 from mayo.override import ChainOverrider
 
 
@@ -50,11 +51,15 @@ class _InstantiationParamTransformer(object):
 
     def _config_layer(self, params):
         # activation
+        fn = params.get('activation_fn', None)
+        if fn is not None:
+            fn = import_from_string(fn)
+            params['activation_fn'] = fn
         activation_overrider = params.pop('activation_overrider', None)
         if activation_overrider:
-            fn = params.get('activation_fn', tf.nn.relu) or (lambda x: x)
-            params['activation_fn'] = lambda x: fn(
+            params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
                 activation_overrider.apply(tf.get_variable, x))
+
         # num outputs
         if params.get('num_outputs', None) == 'num_classes':
             params['num_outputs'] = self.num_classes
