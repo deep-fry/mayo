@@ -38,8 +38,24 @@ class Evaluate(object):
         self._prev_step = step
 
     def _eval(self):
-        images, labels = self._preprocessor.inputs(mode='validate')
+        # network
+        images, labels = self._preprocessor.preprocess_validate()
         logits = self.logits(images, labels, False)
+
+        # moving average decay
+        decay = self.config.get('train.moving_average_decay', None)
+        if decay:
+            log.debug('Using exponential moving average.')
+            global_step = tf.get_variable(
+                'global_step', [], initializer=tf.constant_initializer(0),
+                trainable=False, dtype=tf.int32)
+            var_avgs = tf.train.ExponentialMovingAverage(decay, global_step)
+            var_avgs.apply(
+                tf.trainable_variables() + tf.moving_average_variables())
+        else:
+            log.debug('Not using exponential moving average.')
+
+        # metrics
         top1_op = tf.nn.in_top_k(logits, labels, 1)
         top5_op = tf.nn.in_top_k(logits, labels, 5)
 

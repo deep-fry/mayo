@@ -282,4 +282,4 @@ class Preprocess(object):
 
     @memoize
     def preprocess_validate(self):
-        return self.split_inputs('validate')
+        return self.inputs('validate')
