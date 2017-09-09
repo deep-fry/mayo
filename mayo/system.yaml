@@ -12,11 +12,9 @@ system:
         datasets:
             - datasets
         checkpoints:
-            save:
+            save: &cp_paths
                 - checkpoints/$(name)/$(dataset.name)
-            load:
-                - checkpoints/pretrained/$(name)/$(dataset.name)
-                - checkpoints/$(name)/$(dataset.name)
+            load: *cp_paths
         summaries:
             - summaries/$(name)/$(dataset.name)
     checkpoint:

@@ -16,7 +16,6 @@ class CheckpointHandler(object):
         super().__init__()
         self._session = session
         self._load, self._save = load, save
-        self._load_latest = not isinstance(self._load, int)
         self._search_paths = search_paths
         self._checkpoint_directories = {}
 
@@ -79,7 +78,7 @@ class CheckpointHandler(object):
 
     def _load_path(self):
         cp_path = self._path(False)
-        if self._load_latest:
+        if self._load == 'latest':
             try:
                 with open(cp_path, 'r') as f:
                     manifest = yaml.load(f)
@@ -88,13 +87,18 @@ class CheckpointHandler(object):
             cp_name = manifest['model_checkpoint_path']
             step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
             step = int(step[0])
+        if self._load == 'pretrained':
+            cp_name = 'pretrained'
+            step = 0
         else:
             cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
             step = self._load
         cp_dir = os.path.dirname(cp_path)
         path = os.path.join(cp_dir, cp_name)
-        log.info('Loading {}checkpoint from {!r}...'.format(
-            'latest ' if self._load_latest else '', path))
+        load_name = ''
+        if not isinstance(self._load, int):
+            load_name = self._load + ' '
+        log.info('Loading {}checkpoint from {!r}...'.format(load_name, path))
         if not os.path.exists(path + '.index'):
             raise FileNotFoundError(
                 'Checkpoint named {!r} not found.'.format(path))

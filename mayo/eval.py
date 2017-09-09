@@ -31,7 +31,7 @@ class Evaluate(object):
             imgs_per_sec = self.config.system.batch_size * num_steps
             imgs_per_sec /= float(duration)
             percentage = step / num_iterations * 100
-            info = '[{:.2f}%] top1: {:.2f}%, top5: {:.2f}% ({:.1f} imgs/sec)'
+            info = 'eval: {:.2f}% | top1: {:.2f}% | top5: {:.2f}% | {:.1f}/s'
             info = info.format(
                 percentage, top1 * 100, top5 * 100, imgs_per_sec)
             log.info(info, update=True)
