@@ -1,4 +1,5 @@
-checkpoints/
+checkpoints/*/*/*
+!checkpoints/*/*/pretrained.*
 summaries/
 datasets/imagenet/
 __pycache__
