@@ -8,6 +8,7 @@ system:
     num_preprocess_threads: 8
     batch_size: 128
     max_steps: 10000000
+    max_epochs: 90
     search_paths:
         datasets:
             - datasets

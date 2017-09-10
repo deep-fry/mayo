@@ -2,6 +2,7 @@ import time
 
 import numpy as np
 import tensorflow as tf
+import sys
 
 from mayo.log import log
 from mayo.net import Net
@@ -75,6 +76,15 @@ class Train(object):
             average_grads.append(grad_and_var)
         return average_grads
 
+    def _setup_epoch(self):
+        with self._graph.as_default():
+            self._num_imgs_seen = tf.get_variable(
+                'num_imgs_seen', shape=[],
+                initializer=tf.constant_initializer(0),
+                trainable=False, dtype=tf.int64)
+            self._epoch = self._num_imgs_seen / \
+                self.config.dataset.num_examples_per_epoch.train
+
     def _setup_gradients(self):
         config = self.config.system
         # ensure batch size is divisible by number of gpus
@@ -106,6 +116,9 @@ class Train(object):
                 grads = self.optimizer.compute_gradients(self._loss)
                 tower_grads.append(grads)
         self._gradients = self._average_gradients(tower_grads)
+        # update num imgs
+        self.update_num_imgs_op = tf.assign_add(self._num_imgs_seen,
+                                                config.batch_size)
         # summaries
         summaries += [
             tf.summary.scalar('learning_rate', self.learning_rate),
@@ -136,6 +149,7 @@ class Train(object):
         self._session.run(init)
 
     def _init(self):
+        self._setup_epoch()
         log.info('Instantiating...')
         with self._graph.as_default():
             self._setup_gradients()
@@ -152,9 +166,10 @@ class Train(object):
             self._nets[0].save_graph()
         self._step = step
 
-    def _to_epoch(self, step):
-        epoch = step * self.config.system.batch_size
-        return epoch / float(self.config.dataset.num_examples_per_epoch.train)
+    def _to_epoch(self, imgs_seen):
+        self._epoch = imgs_seen / \
+            float(self.config.dataset.num_examples_per_epoch.train)
+        return self._epoch
 
     def _moving_average(self, name, value, std=True):
         name = '_ma_{}'.format(name)
@@ -168,10 +183,10 @@ class Train(object):
             return mean
         return mean, np.std(history)
 
-    def _update_progress(self, step, loss, accuracy, cp_step):
-        epoch = self._to_epoch(step)
+    def _update_progress(self, step, imgs_seen,
+                         loss, accuracy, epoch, cp_step):
         if not isinstance(cp_step, str):
-            cp_step = '{:.2f}'.format(self._to_epoch(cp_step))
+            cp_step = '{:.2f}'.format(cp_step)
         info = 'epoch: {:.2f} | loss: {:10f}{:5}'
         info += ' | acc: {:5.2f}% | ckpt: {}'
         loss_mean, loss_std = self._moving_average('loss', loss)
@@ -185,7 +200,7 @@ class Train(object):
         now = time.time()
         duration = now - getattr(self, '_prev_time', now)
         if duration != 0:
-            num_steps = step - getattr(self, '_prev_step', step)
+            num_steps = step - getattr(self, '_prev_step', )
             imgs_per_sec = num_steps * self.config.system.batch_size
             imgs_per_sec /= float(duration)
             imgs_per_sec = self._moving_average(
@@ -194,6 +209,8 @@ class Train(object):
         log.info(info, update=True)
         self._prev_time = now
         self._prev_step = step
+        epoch = self._to_epoch(imgs_seen)
+        return epoch
 
     @property
     @memoize
@@ -206,9 +223,9 @@ class Train(object):
         self._summary_writer.add_summary(summary, step)
 
     def once(self):
-        _, loss, acc = self._session.run(
-            [self._train_op, self._loss, self._acc])
-        return loss, acc
+        _, loss, acc, num_imgs_seen = self._session.run(
+            [self._train_op, self._loss, self._acc, self.update_num_imgs_op])
+        return loss, acc, num_imgs_seen
 
     def update_overriders(self):
         with self._graph.as_default():
@@ -219,24 +236,27 @@ class Train(object):
             self._session.run(ops)
 
     def train(self):
-        cp_step = step = self._step
+        epoch = self._epoch.eval(session=self._session)
+        step = cp_step = self._step
         curr_step = 0
+        self.prev_epoch = epoch
         # training start
         log.info('Training start.')
         # train iterations
-        max_steps = self.config.system.max_steps
+        max_epochs = self.config.system.max_epochs
         try:
-            while step < max_steps or max_steps <= 0:
-                loss, acc = self.once()
+            while epoch <= max_epochs:
+                loss, acc, imgs_seen = self.once()
                 if np.isnan(loss):
                     raise ValueError('Model diverged with a nan-valued loss.')
-                self._update_progress(step, loss, acc, cp_step)
-                if curr_step % 1000 == 0:
-                    self._save_summary(step)
+                epoch = self._update_progress(step, imgs_seen, loss,
+                                              acc, epoch, cp_step)
                 curr_step += 1
-                if curr_step % 5000 == 0 or curr_step == max_steps:
+                if int(self.prev_epoch) != int(epoch) or epoch == max_epochs:
+                    self._save_summary(step)
                     if self.config.system.checkpoint.save:
-                        self._update_progress(step, loss, acc, 'saving')
+                        epoch = self._update_progress(step, imgs_seen, loss,
+                                                      acc, epoch, cp_step)
                         with log.use_level('warn'):
                             self._checkpoint.save(step)
                         cp_step = step
