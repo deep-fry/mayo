@@ -21,3 +21,4 @@ system:
         load: latest
         save: true
     save_summary: true
+    metrics_history_count: 200

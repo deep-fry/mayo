@@ -9,6 +9,14 @@ from mayo.log import log
 from mayo.util import format_shape
 
 
+class CheckpointNotFoundError(FileNotFoundError):
+    pass
+
+
+class CheckpointManifestNotFoundError(FileNotFoundError):
+    pass
+
+
 class CheckpointHandler(object):
     _checkpoint_basename = 'checkpoint'
 
@@ -19,15 +27,75 @@ class CheckpointHandler(object):
         self._search_paths = search_paths
         self._checkpoint_directories = {}
 
-    def _variables(self, vars_to_restore=None, path=None):
+    def _directory(self, is_saving):
+        try:
+            return self._checkpoint_directories[is_saving]
+        except KeyError:
+            pass
+        paths = self._search_paths.get('save' if is_saving else 'load')
+        path = paths[0]
+        for each in paths:
+            if not os.path.isdir(each):
+                continue
+            cp_path = os.path.join(each, self._checkpoint_basename + '-*')
+            if glob.glob(cp_path):
+                path = each
+                break
+        self._checkpoint_directories[is_saving] = path
+        return path
+
+    def _path(self, is_saving):
+        directory = self._directory(is_saving)
+        log.debug('Using {!r} for checkpoints.'.format(directory))
+        if is_saving:
+            # ensure directory exists
+            os.makedirs(directory, exist_ok=True)
+            return os.path.join(directory, self._checkpoint_basename)
+        # loading
+        if self._load == 'latest':
+            manifest_file = os.path.join(directory, 'checkpoint')
+            try:
+                with open(manifest_file, 'r') as f:
+                    manifest = yaml.load(f)
+            except FileNotFoundError:
+                raise CheckpointManifestNotFoundError(
+                    'Manifest for the latest checkpoint cannot be found.')
+            cp_name = manifest['model_checkpoint_path']
+        elif self._load == 'pretrained':
+            cp_name = self._load
+        elif isinstance(self._load, int):
+            cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
+        else:
+            raise ValueError(
+                '"system.checkpoint.load" accepts either "latest", '
+                '"pretrained" or an epoch number.')
+        path = os.path.join(directory, cp_name)
+        load_name = ''
+        if not isinstance(self._load, int):
+            load_name = self._load + ' '
+        log.info('Loading {}checkpoint from {!r}...'.format(load_name, path))
+        if not os.path.exists(path + '.index'):
+            raise CheckpointNotFoundError(
+                'Checkpoint named {!r} not found.'.format(path))
+        return path
+
+    def _global_variables(self):
         with self._session.graph.as_default():
-            vars_to_restore = vars_to_restore or tf.global_variables()
-        if not path:
-            return vars_to_restore
+            return tf.global_variables()
+
+    def load(self):
+        if not self._load and not isinstance(self._load, int):
+            log.debug('Checkpoint loading disabled.')
+            return
+        try:
+            path = self._path(False)
+        except CheckpointManifestNotFoundError as e:
+            log.warn('{}, abort load.'.format(e))
+            return
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
         restore_vars = []
-        for v in vars_to_restore:
+        for v in self._global_variables():
             base_name, _ = v.name.split(':')
             shape = var_shape_map.get(base_name, None)
             if shape is None:
@@ -47,79 +115,21 @@ class CheckpointHandler(object):
         log.debug(
             'Checkpoint variables to restore: {}.'
             .format(', '.join(v.name for v in restore_vars)))
-        return restore_vars
-
-    def _directory(self, is_saving):
-        try:
-            return self._checkpoint_directories[is_saving]
-        except KeyError:
-            pass
-        first_directory = None
-        paths = self._search_paths
-        paths = paths.save if is_saving else paths.load
-        for path in paths:
-            first_directory = first_directory or path
-            has = os.path.isdir(path)
-            if has:
-                cp_path = os.path.join(path, self._checkpoint_basename + '-*')
-                if glob.glob(cp_path):
-                    self._checkpoint_directory = path
-                    return path
-        self._checkpoint_directories[is_saving] = first_directory
-        return first_directory
-
-    def _path(self, is_saving):
-        directory = self._directory(is_saving)
-        log.debug('Using {!r} for checkpoints.'.format(directory))
-        if is_saving:
-            # ensure directory exists
-            os.makedirs(directory, exist_ok=True)
-        return os.path.join(directory, self._checkpoint_basename)
-
-    def _load_path(self):
-        cp_path = self._path(False)
-        if self._load == 'latest':
-            try:
-                with open(cp_path, 'r') as f:
-                    manifest = yaml.load(f)
-            except FileNotFoundError:
-                return None
-            cp_name = manifest['model_checkpoint_path']
-        elif self._load == 'pretrained':
-            cp_name = self._load
-        else:
-            cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
-        cp_dir = os.path.dirname(cp_path)
-        path = os.path.join(cp_dir, cp_name)
-        load_name = ''
-        if not isinstance(self._load, int):
-            load_name = self._load + ' '
-        log.info('Loading {}checkpoint from {!r}...'.format(load_name, path))
-        if not os.path.exists(path + '.index'):
-            raise FileNotFoundError(
-                'Checkpoint named {!r} not found.'.format(path))
-        return path
-
-    def load(self, vars_to_restore=None):
-        if not self._load and not isinstance(self._load, int):
-            return 0
-        path = self._load_path()
-        if not path:
-            return
-        vars_to_restore = self._variables(vars_to_restore, path)
-        restorer = tf.train.Saver(vars_to_restore)
+        restorer = tf.train.Saver(restore_vars)
         restorer.restore(self._session, path)
-        log.info('Pre-trained model restored.')
+        log.info('Checkpoint restored.')
 
     def save(self, epoch):
         if not self._save:
             return
-        if epoch == 'latest':
-            log.info('Saving latest checkpoint...')
-        else:
-            log.info('Saving checkpoint at epoch {}...'.format(epoch))
         cp_path = self._path(True)
-        saver = tf.train.Saver(self._variables())
+        if epoch == 'latest':
+            log.info('Saving latest checkpoint to {!r}...'.format(cp_path))
+        else:
+            log.info(
+                'Saving checkpoint at epoch {} to {!r}...'
+                .format(epoch, cp_path))
+        saver = tf.train.Saver(self._global_variables())
         step = 0 if epoch == 'latest' else epoch
         saver.save(self._session, cp_path, global_step=step)
 

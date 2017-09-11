@@ -17,8 +17,6 @@ def _global_step(dtype=tf.int32):
 
 
 class Train(object):
-    average_count = 100
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -162,18 +160,19 @@ class Train(object):
             self._nets[0].save_graph()
 
     def _update_progress(self, epoch, loss, accuracy, cp_epoch):
+        metric_count = self.config.system.metrics_history_count
         if not isinstance(cp_epoch, str):
-            ckpt = '{:.2f}'.format(cp_epoch)
+            cp_epoch = '{:.2f}'.format(cp_epoch)
         info = 'epoch: {:.2f} | loss: {:10f}{:5}'
         info += ' | acc: {:5.2f}% | ckpt: {}'
         loss_mean, loss_std = moving_metrics(
-            'train.loss', loss, over=self.average_count)
+            'train.loss', loss, over=metric_count)
         loss_std = '±{}%'.format(int(loss_std / loss_mean * 100))
         acc_percent = sum(accuracy) / self.config.system.batch_size
         acc_percent *= self.config.system.num_gpus * 100
         acc_mean = moving_metrics(
-            'train.accuracy', acc_percent, std=False, over=self.average_count)
-        info = info.format(epoch, loss_mean, loss_std, acc_mean, ckpt)
+            'train.accuracy', acc_percent, std=False, over=metric_count)
+        info = info.format(epoch, loss_mean, loss_std, acc_mean, cp_epoch)
         # performance
         interval = delta('train.duration', time.time())
         if interval != 0:
@@ -182,7 +181,7 @@ class Train(object):
             imgs_per_sec = imgs_per_step / float(interval)
             imgs_per_sec = moving_metrics(
                 'train.imgs_per_sec', imgs_per_sec,
-                std=False, over=self.average_count)
+                std=False, over=metric_count)
             info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
         log.info(info, update=True)
 
@@ -212,12 +211,10 @@ class Train(object):
 
     def train(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-
-        # training start
+        # init
         log.info('Training start.')
         epoch = self._session.run(self.imgs_seen) / imgs_per_epoch
         cp_epoch = math.floor(epoch)
-
         # train iterations
         system = self.config.system
         max_epochs = system.max_epochs
@@ -238,6 +235,7 @@ class Train(object):
                         self._checkpoint.save(cp_epoch)
         except KeyboardInterrupt:
             pass
+        # interrupt
         try:
             log.info('Stopped.')
             timeout_secs = 3
