@@ -32,6 +32,15 @@ def delta(name, value):
     return value - prev_value
 
 
+def every(name, value, interval):
+    name = name + '.every'
+    prev_value = _delta_dict.get(name, value)
+    if value - prev_value < interval:
+        return False
+    _delta_dict[name] = value
+    return True
+
+
 def moving_metrics(name, value, std=True, over=100):
     history = _moving_history_dict.setdefault(name, [])
     while len(history) >= over:

@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.net import Net
-from mayo.util import delta, moving_metrics, memoize, object_from_params
+from mayo.util import delta, every, moving_metrics, memoize, object_from_params
 from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
 
@@ -218,6 +218,7 @@ class Train(object):
         # train iterations
         system = self.config.system
         max_epochs = system.max_epochs
+        cp_interval = system.checkpoint.save.get('interval', 0)
         try:
             while epoch <= max_epochs:
                 loss, acc, imgs_seen = self.once()
@@ -229,10 +230,11 @@ class Train(object):
                 if system.save_summary and summary_delta >= 0.1:
                     self._save_summary(epoch)
                 cp_epoch = math.floor(epoch)
-                if delta('train.checkpoint.epoch', cp_epoch) >= 1:
-                    self._update_progress(epoch, loss, acc, 'saving')
-                    with log.use_level('warn'):
-                        self._checkpoint.save(cp_epoch)
+                if cp_interval > 0:
+                    if every('train.checkpoint.epoch', cp_epoch, cp_interval):
+                        self._update_progress(epoch, loss, acc, 'saving')
+                        with log.use_level('warn'):
+                            self._checkpoint.save(cp_epoch)
         except KeyboardInterrupt:
             pass
         # interrupt
