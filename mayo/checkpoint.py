@@ -67,7 +67,7 @@ class CheckpointHandler(object):
             cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
         else:
             raise ValueError(
-                '"system.checkpoint.load" accepts either "latest", '
+                'Key "system.checkpoint.load" accepts either "latest", '
                 '"pretrained" or an epoch number.')
         path = os.path.join(directory, cp_name)
         load_name = ''
@@ -90,7 +90,7 @@ class CheckpointHandler(object):
         try:
             path = self._path(False)
         except CheckpointManifestNotFoundError as e:
-            log.warn('{}, abort load.'.format(e))
+            log.warn('{} Abort load.'.format(e))
             return
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
