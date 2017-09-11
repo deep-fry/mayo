@@ -3,6 +3,8 @@ import functools
 import collections
 from importlib.util import spec_from_file_location, module_from_spec
 
+import numpy as np
+
 
 def memoize(func):
     """
@@ -18,6 +20,27 @@ def memoize(func):
             setattr(self, name, result)
             return result
     return wrapped
+
+
+_delta_dict = {}
+_moving_history_dict = {}
+
+
+def delta(name, value):
+    prev_value = _delta_dict.get(name, value)
+    _delta_dict[name] = value
+    return value - prev_value
+
+
+def moving_metrics(name, value, std=True, over=100):
+    history = _moving_history_dict.setdefault(name, [])
+    while len(history) >= over:
+        history.pop(0)
+    history.append(value)
+    mean = np.mean(history)
+    if not std:
+        return mean
+    return mean, np.std(history)
 
 
 @functools.lru_cache(maxsize=None)

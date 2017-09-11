@@ -83,16 +83,12 @@ class CheckpointHandler(object):
                 with open(cp_path, 'r') as f:
                     manifest = yaml.load(f)
             except FileNotFoundError:
-                return 0, None
+                return None
             cp_name = manifest['model_checkpoint_path']
-            step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
-            step = int(step[0])
         elif self._load == 'pretrained':
-            cp_name = 'pretrained'
-            step = 0
+            cp_name = self._load
         else:
             cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
-            step = self._load
         cp_dir = os.path.dirname(cp_path)
         path = os.path.join(cp_dir, cp_name)
         load_name = ''
@@ -102,26 +98,29 @@ class CheckpointHandler(object):
         if not os.path.exists(path + '.index'):
             raise FileNotFoundError(
                 'Checkpoint named {!r} not found.'.format(path))
-        return step, path
+        return path
 
     def load(self, vars_to_restore=None):
         if not self._load and not isinstance(self._load, int):
             return 0
-        step, path = self._load_path()
+        path = self._load_path()
         if not path:
-            return step
+            return
         vars_to_restore = self._variables(vars_to_restore, path)
         restorer = tf.train.Saver(vars_to_restore)
         restorer.restore(self._session, path)
         log.info('Pre-trained model restored.')
-        return step
 
-    def save(self, step):
+    def save(self, epoch):
         if not self._save:
             return
-        log.info('Saving checkpoint at step {}...'.format(step))
+        if epoch == 'latest':
+            log.info('Saving latest checkpoint...')
+        else:
+            log.info('Saving checkpoint at epoch {}...'.format(epoch))
         cp_path = self._path(True)
         saver = tf.train.Saver(self._variables())
+        step = 0 if epoch == 'latest' else epoch
         saver.save(self._session, cp_path, global_step=step)
 
 
