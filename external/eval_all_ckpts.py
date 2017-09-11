@@ -21,8 +21,8 @@ for f in files:
     step = int(re.findall(r'checkpoint-(\d+).index', f)[0])
     steps.append(step)
 
-command = './my eval {} {} system.checkpoint.load={}'
-for step in steps:
+command = './my eval {} {} system.checkpoint.load={} system.use_pdb=false'
+for step in sorted(steps):
     proc = subprocess.Popen(
         command.format(net_yaml, dataset_yaml, step).split(' '),
         stdout=subprocess.PIPE)
