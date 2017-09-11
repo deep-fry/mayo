@@ -87,7 +87,7 @@ class CheckpointHandler(object):
             cp_name = manifest['model_checkpoint_path']
             step = re.findall(self._checkpoint_basename + '-(\d+)', cp_name)
             step = int(step[0])
-        if self._load == 'pretrained':
+        elif self._load == 'pretrained':
             cp_name = 'pretrained'
             step = 0
         else:
