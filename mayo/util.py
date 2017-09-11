@@ -53,7 +53,7 @@ def import_from_file(path):
     spec = spec_from_file_location(name, path)
     if spec is None:
         raise ImportError(
-            'Unable to find module "{}" in path "{}".'.format(name, path))
+            'Unable to find module {!r} in path {!r}.'.format(name, path))
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
