@@ -22,27 +22,28 @@ def memoize(func):
     return wrapped
 
 
-_delta_dict = {}
-_moving_history_dict = {}
+_persistent_dict = {}
 
 
 def delta(name, value):
-    prev_value = _delta_dict.get(name, value)
-    _delta_dict[name] = value
+    name += '.delta'
+    prev_value = _persistent_dict.get(name, value)
+    _persistent_dict[name] = value
     return value - prev_value
 
 
 def every(name, value, interval):
-    name = name + '.every'
-    prev_value = _delta_dict.get(name, value)
+    name += '.every'
+    prev_value = _persistent_dict.get(name, value)
     if value - prev_value < interval:
         return False
-    _delta_dict[name] = value
+    _persistent_dict[name] = value
     return True
 
 
 def moving_metrics(name, value, std=True, over=100):
-    history = _moving_history_dict.setdefault(name, [])
+    name += '.moving'
+    history = _persistent_dict.setdefault(name, [])
     while len(history) >= over:
         history.pop(0)
     history.append(value)
