@@ -3,6 +3,8 @@ import functools
 import collections
 from importlib.util import spec_from_file_location, module_from_spec
 
+import numpy as np
+
 
 def memoize(func):
     """
@@ -20,6 +22,37 @@ def memoize(func):
     return wrapped
 
 
+_persistent_dict = {}
+
+
+def delta(name, value):
+    name += '.delta'
+    prev_value = _persistent_dict.get(name, value)
+    _persistent_dict[name] = value
+    return value - prev_value
+
+
+def every(name, value, interval):
+    name += '.every'
+    prev_value = _persistent_dict.get(name, value)
+    if value - prev_value < interval:
+        return False
+    _persistent_dict[name] = value
+    return True
+
+
+def moving_metrics(name, value, std=True, over=100):
+    name += '.moving'
+    history = _persistent_dict.setdefault(name, [])
+    while len(history) >= over:
+        history.pop(0)
+    history.append(value)
+    mean = np.mean(history)
+    if not std:
+        return mean
+    return mean, np.std(history)
+
+
 @functools.lru_cache(maxsize=None)
 def import_from_file(path):
     """
@@ -30,7 +63,7 @@ def import_from_file(path):
     spec = spec_from_file_location(name, path)
     if spec is None:
         raise ImportError(
-            'Unable to find module "{}" in path "{}".'.format(name, path))
+            'Unable to find module {!r} in path {!r}.'.format(name, path))
     module = module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

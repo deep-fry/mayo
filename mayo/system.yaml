@@ -20,4 +20,6 @@ system:
             - summaries/$(name)/$(dataset.name)
     checkpoint:
         load: latest
-        save: true
+        save: {interval: 1}
+    save_summary: true
+    metrics_history_count: 200

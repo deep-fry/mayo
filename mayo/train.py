@@ -1,12 +1,11 @@
 import time
+import math
 
-import numpy as np
 import tensorflow as tf
-import sys
 
 from mayo.log import log
 from mayo.net import Net
-from mayo.util import memoize, object_from_params
+from mayo.util import delta, every, moving_metrics, memoize, object_from_params
 from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
 
@@ -18,8 +17,6 @@ def _global_step(dtype=tf.int32):
 
 
 class Train(object):
-    average_count = 100
-
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -32,6 +29,14 @@ class Train(object):
     @memoize
     def global_step(self):
         return _global_step()
+
+    @property
+    @memoize
+    def imgs_seen(self):
+        return tf.get_variable(
+            'imgs_seen', shape=[],
+            initializer=tf.constant_initializer(0),
+            trainable=False, dtype=tf.int64)
 
     @property
     @memoize
@@ -76,15 +81,6 @@ class Train(object):
             average_grads.append(grad_and_var)
         return average_grads
 
-    def _setup_epoch(self):
-        with self._graph.as_default():
-            self._num_imgs_seen = tf.get_variable(
-                'num_imgs_seen', shape=[],
-                initializer=tf.constant_initializer(0),
-                trainable=False, dtype=tf.int64)
-            self._epoch = self._num_imgs_seen / \
-                self.config.dataset.num_examples_per_epoch.train
-
     def _setup_gradients(self):
         config = self.config.system
         # ensure batch size is divisible by number of gpus
@@ -117,8 +113,7 @@ class Train(object):
                 tower_grads.append(grads)
         self._gradients = self._average_gradients(tower_grads)
         # update num imgs
-        self.update_num_imgs_op = tf.assign_add(self._num_imgs_seen,
-                                                config.batch_size)
+        self._imgs_seen_op = tf.assign_add(self.imgs_seen, config.batch_size)
         # summaries
         summaries += [
             tf.summary.scalar('learning_rate', self.learning_rate),
@@ -149,7 +144,6 @@ class Train(object):
         self._session.run(init)
 
     def _init(self):
-        self._setup_epoch()
         log.info('Instantiating...')
         with self._graph.as_default():
             self._setup_gradients()
@@ -161,56 +155,35 @@ class Train(object):
             self._checkpoint = CheckpointHandler(
                 self._session, system.checkpoint.load, system.checkpoint.save,
                 system.search_paths.checkpoints)
-            step = self._checkpoint.load()
+            self._checkpoint.load()
             tf.train.start_queue_runners(sess=self._session)
             self._nets[0].save_graph()
-        self._step = step
 
-    def _to_epoch(self, imgs_seen):
-        self._epoch = imgs_seen / \
-            float(self.config.dataset.num_examples_per_epoch.train)
-        return self._epoch
-
-    def _moving_average(self, name, value, std=True):
-        name = '_ma_{}'.format(name)
-        history = getattr(self, name, [])
-        if len(history) == self.average_count:
-            history.pop(0)
-        history.append(value)
-        setattr(self, name, history)
-        mean = np.mean(history)
-        if not std:
-            return mean
-        return mean, np.std(history)
-
-    def _update_progress(self, step, imgs_seen,
-                         loss, accuracy, epoch, cp_step):
-        if not isinstance(cp_step, str):
-            cp_step = '{:.2f}'.format(cp_step)
+    def _update_progress(self, epoch, loss, accuracy, cp_epoch):
+        metric_count = self.config.system.metrics_history_count
+        if not isinstance(cp_epoch, str):
+            cp_epoch = '{:.2f}'.format(cp_epoch)
         info = 'epoch: {:.2f} | loss: {:10f}{:5}'
         info += ' | acc: {:5.2f}% | ckpt: {}'
-        loss_mean, loss_std = self._moving_average('loss', loss)
-        acc_percentage = np.sum(accuracy) / self.config.system.batch_size
-        acc_percentage *= self.config.system.num_gpus * 100
-        accuracy_mean, _ = self._moving_average('accuracy', acc_percentage)
-        info = info.format(
-            epoch, loss_mean, '±{}%'.format(int(loss_std / loss_mean * 100)),
-            accuracy_mean, cp_step)
+        loss_mean, loss_std = moving_metrics(
+            'train.loss', loss, over=metric_count)
+        loss_std = '±{}%'.format(int(loss_std / loss_mean * 100))
+        acc_percent = sum(accuracy) / self.config.system.batch_size
+        acc_percent *= self.config.system.num_gpus * 100
+        acc_mean = moving_metrics(
+            'train.accuracy', acc_percent, std=False, over=metric_count)
+        info = info.format(epoch, loss_mean, loss_std, acc_mean, cp_epoch)
         # performance
-        now = time.time()
-        duration = now - getattr(self, '_prev_time', now)
-        if duration != 0:
-            num_steps = step - getattr(self, '_prev_step', )
-            imgs_per_sec = num_steps * self.config.system.batch_size
-            imgs_per_sec /= float(duration)
-            imgs_per_sec = self._moving_average(
-                'imgs_per_sec', imgs_per_sec, std=False)
+        interval = delta('train.duration', time.time())
+        if interval != 0:
+            imgs = epoch * self.config.dataset.num_examples_per_epoch.train
+            imgs_per_step = delta('train.step.imgs', imgs)
+            imgs_per_sec = imgs_per_step / float(interval)
+            imgs_per_sec = moving_metrics(
+                'train.imgs_per_sec', imgs_per_sec,
+                std=False, over=metric_count)
             info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
         log.info(info, update=True)
-        self._prev_time = now
-        self._prev_step = step
-        epoch = self._to_epoch(imgs_seen)
-        return epoch
 
     @property
     @memoize
@@ -218,14 +191,15 @@ class Train(object):
         path = self.config.system.search_paths.summaries[0]
         return tf.summary.FileWriter(path, graph=self._graph)
 
-    def _save_summary(self, step):
+    def _save_summary(self, epoch):
         summary = self._session.run(self._summary_op)
-        self._summary_writer.add_summary(summary, step)
+        self._summary_writer.add_summary(summary, epoch)
 
     def once(self):
-        _, loss, acc, num_imgs_seen = self._session.run(
-            [self._train_op, self._loss, self._acc, self.update_num_imgs_op])
-        return loss, acc, num_imgs_seen
+        tasks = [
+            self._train_op, self._loss, self._acc, self._imgs_seen_op]
+        _, loss, acc, imgs_seen = self._session.run(tasks)
+        return loss, acc, imgs_seen
 
     def update_overriders(self):
         with self._graph.as_default():
@@ -236,44 +210,43 @@ class Train(object):
             self._session.run(ops)
 
     def train(self):
-        epoch = self._epoch.eval(session=self._session)
-        step = cp_step = self._step
-        curr_step = 0
-        prev_epoch = epoch
-        saving_interval = self.config.system.saving_interval
-        # training start
+        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
+        # init
         log.info('Training start.')
+        epoch = self._session.run(self.imgs_seen) / imgs_per_epoch
+        cp_epoch = math.floor(epoch)
         # train iterations
-        max_epochs = self.config.system.max_epochs
+        system = self.config.system
+        max_epochs = system.max_epochs
+        cp_interval = system.checkpoint.save.get('interval', 0)
         try:
             while epoch <= max_epochs:
                 loss, acc, imgs_seen = self.once()
-                if np.isnan(loss):
+                epoch = imgs_seen / imgs_per_epoch
+                if math.isnan(loss):
                     raise ValueError('Model diverged with a nan-valued loss.')
-                epoch = self._update_progress(step, imgs_seen, loss,
-                                              acc, epoch, cp_step)
-                curr_step += 1
-                if ((int(prev_epoch) != int(epoch)) and
-                        (epoch % saving_interval == 0)) or epoch == max_epochs:
-                    self._save_summary(step)
-                    if self.config.system.checkpoint.save:
-                        epoch = self._update_progress(step, imgs_seen, loss,
-                                                      acc, epoch, cp_step)
+                self._update_progress(epoch, loss, acc, cp_epoch)
+                summary_delta = delta('train.summary.epoch', epoch)
+                if system.save_summary and summary_delta >= 0.1:
+                    self._save_summary(epoch)
+                cp_epoch = math.floor(epoch)
+                if cp_interval > 0:
+                    if every('train.checkpoint.epoch', cp_epoch, cp_interval):
+                        self._update_progress(epoch, loss, acc, 'saving')
                         with log.use_level('warn'):
-                            self._checkpoint.save(step)
-                        cp_step = step
-                step += 1
-                prev_epoch = epoch
+                            self._checkpoint.save(cp_epoch)
         except KeyboardInterrupt:
             pass
+        # interrupt
         try:
+            log.info('Stopped.')
             timeout_secs = 3
             for i in range(timeout_secs):
                 log.info(
-                    'Stopped, saving checkpoint in {} seconds.'
+                    'Saving checkpoint in {} seconds...'
                     .format(timeout_secs - i), update=True)
                 time.sleep(1)
         except KeyboardInterrupt:
             log.info('We give up.')
             return
-        self._checkpoint.save(step)
+        self._checkpoint.save('latest')
