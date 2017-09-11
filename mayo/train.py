@@ -239,7 +239,8 @@ class Train(object):
         epoch = self._epoch.eval(session=self._session)
         step = cp_step = self._step
         curr_step = 0
-        self.prev_epoch = epoch
+        prev_epoch = epoch
+        saving_interval = self.config.system.saving_interval
         # training start
         log.info('Training start.')
         # train iterations
@@ -252,7 +253,8 @@ class Train(object):
                 epoch = self._update_progress(step, imgs_seen, loss,
                                               acc, epoch, cp_step)
                 curr_step += 1
-                if int(self.prev_epoch) != int(epoch) or epoch == max_epochs:
+                if ((int(prev_epoch) != int(epoch)) and
+                        (epoch % saving_interval == 0)) or epoch == max_epochs:
                     self._save_summary(step)
                     if self.config.system.checkpoint.save:
                         epoch = self._update_progress(step, imgs_seen, loss,
@@ -261,6 +263,7 @@ class Train(object):
                             self._checkpoint.save(step)
                         cp_step = step
                 step += 1
+                prev_epoch = epoch
         except KeyboardInterrupt:
             pass
         try:
