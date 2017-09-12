@@ -3,7 +3,7 @@ import collections
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize, multi_objects_from_params
+from mayo.util import memoize_method, multi_objects_from_params
 
 
 class _ImagePreprocess(object):
@@ -130,9 +130,30 @@ class Preprocess(object):
     queue_memory_factor = 16
     num_readers = 4
 
-    def __init__(self, config):
+    def __init__(self, session, config):
         super().__init__()
+        self.session = session
         self.config = config
+        self._coord = tf.train.Coordinator()
+        self.is_started = False
+
+    def __del__(self):
+        self.stop()
+
+    def start(self):
+        if self.is_started:
+            return
+        # queue runners
+        self._threads = tf.train.start_queue_runners(
+            sess=self.session, coord=self._coord)
+        self.is_started = True
+
+    def stop(self):
+        if not self.is_started:
+            return
+        self._coord.request_stop()
+        self._coord.join(self._threads, stop_grace_period_secs=5)
+        self.is_started = False
 
     @staticmethod
     def _decode_jpeg(buffer, channels):
@@ -268,7 +289,9 @@ class Preprocess(object):
     def inputs(self, mode):
         with tf.name_scope('batch_processing'):
             serialized = self._serialized_inputs(mode)
-            return self._unserialize(serialized, mode)
+            preprocessed = self._unserialize(serialized, mode)
+        self.start()
+        return preprocessed
 
     def split_inputs(self, mode):
         images, labels = self.inputs(mode)
@@ -276,10 +299,10 @@ class Preprocess(object):
         split = lambda t: tf.split(axis=0, num_or_size_splits=num, value=t)
         return split(images), split(labels)
 
-    @memoize
+    @memoize_method
     def preprocess_train(self):
         return self.split_inputs('train')
 
-    @memoize
+    @memoize_method
     def preprocess_validate(self):
         return self.inputs('validate')

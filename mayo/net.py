@@ -120,10 +120,8 @@ class _InstantiationParamTransformer(object):
 
 class BaseNet(object):
     def __init__(
-            self, config, images, labels, is_training,
-            graph=None, reuse=None):
+            self, config, images, labels, is_training, reuse=None):
         super().__init__()
-        self.graph = graph or tf.Graph()
         self.config = config
         self.is_training = is_training
         self._reuse = reuse
@@ -134,10 +132,9 @@ class BaseNet(object):
 
     @contextmanager
     def context(self):
-        graph_ctx = self.graph.as_default()
         var_ctx = tf.variable_scope(self.config['name'], reuse=self._reuse)
         cpu_ctx = slim.arg_scope([slim.model_variable], device='/cpu:0')
-        with graph_ctx, var_ctx, cpu_ctx as scope:
+        with var_ctx, cpu_ctx as scope:
             yield scope
 
     def _add_end_point(self, key, layer):
@@ -213,10 +210,6 @@ class BaseNet(object):
         acc = tf.nn.in_top_k(logits, labels, 1)
         self._add_end_point('accuracy', acc)
         return acc
-
-    def save_graph(self):
-        writer = tf.summary.FileWriter(self.config['name'], self.graph)
-        writer.close()
 
     def info(self):
         def format_shape(shape):

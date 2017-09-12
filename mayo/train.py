@@ -5,51 +5,20 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.net import Net
-from mayo.util import delta, every, moving_metrics, memoize, object_from_params
-from mayo.preprocess import Preprocess
-from mayo.checkpoint import CheckpointHandler
+from mayo.util import (
+    delta, every, moving_metrics, memoize_method, object_from_params)
+from mayo.session import Session
 
 
-def tf_int(name, dtype=tf.int64):
-    return tf.get_variable(
-        name, [], initializer=tf.constant_initializer(0),
-        trainable=False, dtype=dtype)
-
-
-def _global_step(dtype=tf.int32):
-    return tf_int('global_step', dtype)
-
-
-def _imgs_seen():
-    return tf_int('imgs_seen')
-
-
-class Train(object):
+class Train(Session):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.config = config
-        self._session = tf.Session(
-            config=tf.ConfigProto(allow_soft_placement=True))
-        self._graph = self._session.graph
         self._nets = []
-        self._preprocessor = Preprocess(self.config)
         self._init()
 
-    def __del__(self):
-        self._session.close()
-
     @property
-    @memoize
-    def global_step(self):
-        return _global_step()
-
-    @property
-    @memoize
-    def imgs_seen(self):
-        return _imgs_seen()
-
-    @property
-    @memoize
+    @memoize_method
     def learning_rate(self):
         params = self.config.train.learning_rate
         lr_class, params = object_from_params(params)
@@ -63,15 +32,14 @@ class Train(object):
         return lr_class(**params)
 
     @property
-    @memoize
+    @memoize_method
     def optimizer(self):
         params = self.config.train.optimizer
         optimizer_class, params = object_from_params(params)
         return optimizer_class(self.learning_rate, **params)
 
     def tower_loss(self, images, labels, reuse):
-        net = Net(
-            self.config, images, labels, True, graph=self._graph, reuse=reuse)
+        net = Net(self.config, images, labels, True, reuse=reuse)
         self._nets.append(net)
         return net.loss(), net.accuracy()
 
@@ -100,7 +68,7 @@ class Train(object):
             raise ValueError(
                 'Batch size must be divisible by number of devices')
         # initialize images and labels
-        images_splits, labels_splits = self._preprocessor.preprocess_train()
+        images_splits, labels_splits = self.preprocessor.preprocess_train()
         # for each gpu
         iterator = enumerate(zip(images_splits, labels_splits))
         tower_grads = []
@@ -115,11 +83,10 @@ class Train(object):
                     images_split, label_split, reuse)
                 reuse = True
                 # batch norm updates from the final tower
-                with self._graph.as_default():
-                    # summaries from the final tower
-                    summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
-                    self._batch_norm_updates = tf.get_collection(
-                        tf.GraphKeys.UPDATE_OPS, name)
+                # summaries from the final tower
+                summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
+                self._batch_norm_updates = tf.get_collection(
+                    tf.GraphKeys.UPDATE_OPS, name)
                 # gradients from all towers
                 grads = self.optimizer.compute_gradients(self._loss)
                 tower_grads.append(grads)
@@ -148,23 +115,13 @@ class Train(object):
         ops.append(bn_op)
         self._train_op = tf.group(*ops)
 
-    def _load_checkpoint(self):
-        system = self.config.system
-        self._checkpoint = CheckpointHandler(
-            self._session, system.checkpoint.load, system.checkpoint.save,
-            system.search_paths.checkpoints)
-        self._checkpoint.load()
-
     def _init(self):
         log.info('Instantiating...')
-        with self._graph.as_default():
-            self._setup_gradients()
-            self._setup_train_operation()
-            log.info('Initializing session...')
-            self._session.run(tf.global_variables_initializer())
-            self._load_checkpoint()
-            tf.train.start_queue_runners(sess=self._session)
-            self._nets[0].save_graph()
+        self._setup_gradients()
+        self._setup_train_operation()
+        log.info('Initializing session...')
+        self.session.run(tf.global_variables_initializer())
+        self.checkpoint.load()
 
     def _update_progress(self, epoch, loss, accuracy, cp_epoch):
         metric_count = self.config.system.metrics_history_count
@@ -193,34 +150,33 @@ class Train(object):
         log.info(info, update=True)
 
     @property
-    @memoize
+    @memoize_method
     def _summary_writer(self):
         path = self.config.system.search_paths.summaries[0]
-        return tf.summary.FileWriter(path, graph=self._graph)
+        return tf.summary.FileWriter(path, graph=self.session.graph)
 
     def _save_summary(self, epoch):
-        summary = self._session.run(self._summary_op)
+        summary = self.session.run(self._summary_op)
         self._summary_writer.add_summary(summary, epoch)
 
     def once(self):
         tasks = [
             self._train_op, self._loss, self._acc, self._imgs_seen_op]
-        _, loss, acc, imgs_seen = self._session.run(tasks)
+        _, loss, acc, imgs_seen = self.session.run(tasks)
         return loss, acc, imgs_seen
 
     def update_overriders(self):
-        with self._graph.as_default():
-            ops = []
-            for n in self._nets:
-                ops += n.update_overriders()
-            log.info('Updating overrider variables...')
-            self._session.run(ops)
+        ops = []
+        for n in self._nets:
+            ops += n.update_overriders()
+        log.info('Updating overrider variables...')
+        self.session.run(ops)
 
     def train(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
         # init
         log.info('Training start.')
-        epoch = self._session.run(self.imgs_seen) / imgs_per_epoch
+        epoch = self.session.run(self.imgs_seen) / imgs_per_epoch
         cp_epoch = math.floor(epoch)
         # train iterations
         system = self.config.system
