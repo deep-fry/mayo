@@ -80,7 +80,7 @@ class Logger(object):
         self._level = prev_level
 
     @contextmanager
-    def force_info_to_debug(self):
+    def force_info_as_debug(self):
         _info = self.info
         self.info = self.debug
         yield

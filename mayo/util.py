@@ -6,7 +6,7 @@ from importlib.util import spec_from_file_location, module_from_spec
 import numpy as np
 
 
-def memoize(func):
+def memoize_method(func):
     """
     A decorator to remember the result of the method call
     """
