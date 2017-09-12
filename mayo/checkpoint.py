@@ -44,6 +44,17 @@ class CheckpointHandler(object):
         self._checkpoint_directories[is_saving] = path
         return path
 
+    def list(self):
+        path = self._directory(False)
+        path = os.path.join(path, self._checkpoint_basename + '-*')
+        files = glob.glob(path)
+        checkpoints = []
+        for f in files:
+            c = os.path.splitext(f)[0]
+            if c not in checkpoints:
+                checkpoints.append(c)
+        return checkpoints
+
     def _path(self, is_saving):
         directory = self._directory(is_saving)
         log.debug('Using {!r} for checkpoints.'.format(directory))
@@ -67,7 +78,7 @@ class CheckpointHandler(object):
             cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
         else:
             raise ValueError(
-                '"system.checkpoint.load" accepts either "latest", '
+                'Key "system.checkpoint.load" accepts either "latest", '
                 '"pretrained" or an epoch number.')
         path = os.path.join(directory, cp_name)
         load_name = ''
@@ -83,14 +94,14 @@ class CheckpointHandler(object):
         with self._session.graph.as_default():
             return tf.global_variables()
 
-    def load(self):
+    def load(self, path=None):
         if not self._load and not isinstance(self._load, int):
             log.debug('Checkpoint loading disabled.')
             return
         try:
-            path = self._path(False)
+            path = path or self._path(False)
         except CheckpointManifestNotFoundError as e:
-            log.warn('{}, abort load.'.format(e))
+            log.warn('{} Abort load.'.format(e))
             return
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()

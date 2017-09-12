@@ -74,10 +74,17 @@ class Logger(object):
 
     @contextmanager
     def use_level(self, level):
-        self._prev_level = self._level
+        prev_level = self._level
         self._level = self._levels[level]
         yield
-        self._level = self._prev_level
+        self._level = prev_level
+
+    @contextmanager
+    def force_info_to_debug(self):
+        _info = self.info
+        self.info = self.debug
+        yield
+        self.info = _info
 
     def _header(self, text, level, update):
         if update:
