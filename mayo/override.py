@@ -90,6 +90,27 @@ class BasePruner(BaseOverrider):
         return tf.assign(self._mask, self._updated_mask())
 
 
+class DynamicNetworkSurgery(BasePruner):
+    def __init__(self, cRate, original_mask):
+        super().__init__()
+        self.cRate = cRate
+        self.original_mask = original_mask
+
+    def _updated_mask(self):
+        axis = list(range(len(self._before.get_shape()) - 1))
+        mean, var = tf.nn.moments(self._before, axis)
+        std = tf.sqrt(var)
+        off_threshold = 0.9 * (mean + self.cRate * std)
+        on_threshold = 1.1 * (mean + self.cRate * std)
+        # off mask indicates variables that should stay
+        off_mask = tf.cast(tf.abs(self._before) > off_threshold, tf.float32)
+        on_mask = tf.cast(tf.abs(self._before) > on_threshold, tf.float32)
+        mask = tf.logical_or(self.original_mask, on_mask)
+        mask = tf.logical_and(mask, tf.logical_not(off_mask))
+        mask = tf.cast(mask, tf.float32)
+        return mask
+
+
 class ThresholdPruner(BasePruner):
     def __init__(self, threshold):
         super().__init__()
