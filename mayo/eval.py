@@ -63,9 +63,9 @@ class Evaluate(object):
         self._prev_time = now
         self._prev_step = step
 
-    def _eval(self, checkpoint_path=None, keyboard_interrupt=True):
+    def _eval(self, epoch=None, keyboard_interrupt=True):
         # load checkpoint
-        self._checkpoint.load(checkpoint_path)
+        self._checkpoint.load(epoch)
         num_examples = self.config.dataset.num_examples_per_epoch.validate
         batch_size = self.config.system.batch_size
         num_iterations = math.ceil(num_examples / batch_size)
@@ -110,7 +110,7 @@ class Evaluate(object):
         for c in checkpoints:
             log.debug('    {}'.format(c))
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        results = [('Epoch', 'Top 1', 'Top 5'), '-']
+        results = []
         with self._graph.as_default():
             imgs_seen = _imgs_seen()
             try:
@@ -118,12 +118,15 @@ class Evaluate(object):
                     with log.force_info_to_debug():
                         top1, top5 = self._eval(c, keyboard_interrupt=False)
                     epoch = self._session.run(imgs_seen) / imgs_per_epoch
-                    epoch = '{:.3f}'.format(epoch)
+                    epoch_str = '{:.3f}'.format(epoch)
                     top1 = format_percent(top1)
                     top5 = format_percent(top5)
                     log.info('epoch: {}, top1: {}, top5: {}'.format(
-                        epoch, top1, top5))
-                    results.append((epoch, top1, top5))
+                        epoch_str, top1, top5))
+                    results.append((epoch, epoch_str, top1, top5))
             except KeyboardInterrupt:
                 pass
-        return tabular(results)
+        table = [('Epoch', 'Top 1', 'Top 5'), '-']
+        for epoch, *result in sorted(results):
+            table.append(result)
+        return tabular(table)
