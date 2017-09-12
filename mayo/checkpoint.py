@@ -37,14 +37,32 @@ class CheckpointHandler(object):
         for each in paths:
             if not os.path.isdir(each):
                 continue
-            cp_path = os.path.join(each, self._checkpoint_basename + '-*')
-            if glob.glob(cp_path):
+            if self._directory_glob(each):
                 path = each
                 break
         self._checkpoint_directories[is_saving] = path
         return path
 
-    def _path(self, is_saving):
+    def _directory_glob(self, directory=None):
+        directory = directory or self._directory(False)
+        return glob.glob(os.path.join(
+            directory, self._checkpoint_basename + '-*'))
+
+    def _epoch_path(self, epoch):
+        name = '{}-{}'.format(self._checkpoint_basename, epoch)
+        return os.path.join(self._directory(False), name)
+
+    def list(self):
+        files = self._directory_glob()
+        checkpoints = []
+        for f in files:
+            c = os.path.splitext(f)[0]
+            c = re.findall(self._checkpoint_basename + '-(\d+)', c)[0]
+            if c not in checkpoints:
+                checkpoints.append(c)
+        return checkpoints
+
+    def _path(self, is_saving, load=None):
         directory = self._directory(is_saving)
         log.debug('Using {!r} for checkpoints.'.format(directory))
         if is_saving:
@@ -83,15 +101,18 @@ class CheckpointHandler(object):
         with self._session.graph.as_default():
             return tf.global_variables()
 
-    def load(self):
+    def load(self, epoch=None):
         if not self._load and not isinstance(self._load, int):
             log.debug('Checkpoint loading disabled.')
             return
-        try:
-            path = self._path(False)
-        except CheckpointManifestNotFoundError as e:
-            log.warn('{} Abort load.'.format(e))
-            return
+        if epoch is not None:
+            path = self._epoch_path(epoch)
+        else:
+            try:
+                path = self._path(False)
+            except CheckpointManifestNotFoundError as e:
+                log.warn('{} Abort load.'.format(e))
+                return
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
         restore_vars = []
