@@ -15,8 +15,8 @@ class Evaluate(object):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self._graph = tf.Graph()
-        self._session = tf.Session(graph=self._graph)
+        self._session = tf.Session()
+        self._graph = self._session.graph
         self._preprocessor = Preprocess(self.config)
         system = self.config.system
         self._checkpoint = CheckpointHandler(
@@ -24,6 +24,9 @@ class Evaluate(object):
             system.search_paths.checkpoints)
         with self._graph.as_default():
             self._init()
+
+    def __del__(self):
+        self._session.close()
 
     def _init(self):
         log.info('Initializing...')
@@ -95,7 +98,7 @@ class Evaluate(object):
                 raise e
         else:
             log.info('Evaluation complete.')
-            log.info('\ttop1: {}, top5: {} [{} images]'.format(
+            log.info('    top1: {}, top5: {} [{} images]'.format(
                 format_percent(top1_acc), format_percent(top5_acc), total))
         return top1_acc, top5_acc
 
@@ -113,19 +116,19 @@ class Evaluate(object):
         results = []
         with self._graph.as_default():
             imgs_seen = _imgs_seen()
-            try:
-                for c in checkpoints:
-                    with log.force_info_to_debug():
-                        top1, top5 = self._eval(c, keyboard_interrupt=False)
-                    epoch = self._session.run(imgs_seen) / imgs_per_epoch
-                    epoch_str = '{:.3f}'.format(epoch)
-                    top1 = format_percent(top1)
-                    top5 = format_percent(top5)
-                    log.info('epoch: {}, top1: {}, top5: {}'.format(
-                        epoch_str, top1, top5))
-                    results.append((epoch, epoch_str, top1, top5))
-            except KeyboardInterrupt:
-                pass
+        try:
+            for c in checkpoints:
+                with log.force_info_to_debug():
+                    top1, top5 = self._eval(c, keyboard_interrupt=False)
+                epoch = self._session.run(imgs_seen) / imgs_per_epoch
+                epoch_str = '{:.3f}'.format(epoch)
+                top1 = format_percent(top1)
+                top5 = format_percent(top5)
+                log.info('epoch: {}, top1: {}, top5: {}'.format(
+                    epoch_str, top1, top5))
+                results.append((epoch, epoch_str, top1, top5))
+        except KeyboardInterrupt:
+            pass
         table = [('Epoch', 'Top 1', 'Top 5'), '-']
         for epoch, *result in sorted(results):
             table.append(result)

@@ -28,10 +28,15 @@ class Train(object):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self._graph = tf.Graph()
+        self._session = tf.Session(
+            config=tf.ConfigProto(allow_soft_placement=True))
+        self._graph = self._session.graph
         self._nets = []
         self._preprocessor = Preprocess(self.config)
         self._init()
+
+    def __del__(self):
+        self._session.close()
 
     @property
     @memoize
@@ -143,13 +148,6 @@ class Train(object):
         ops.append(bn_op)
         self._train_op = tf.group(*ops)
 
-    def _init_session(self):
-        # build an initialization operation to run below
-        init = tf.global_variables_initializer()
-        config = tf.ConfigProto(allow_soft_placement=True)
-        self._session = tf.Session(config=config)
-        self._session.run(init)
-
     def _load_checkpoint(self):
         system = self.config.system
         self._checkpoint = CheckpointHandler(
@@ -163,7 +161,7 @@ class Train(object):
             self._setup_gradients()
             self._setup_train_operation()
             log.info('Initializing session...')
-            self._init_session()
+            self._session.run(tf.global_variables_initializer())
             self._load_checkpoint()
             tf.train.start_queue_runners(sess=self._session)
             self._nets[0].save_graph()
