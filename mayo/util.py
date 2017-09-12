@@ -138,6 +138,10 @@ def format_shape(shape):
     return ' x '.join(str(s) if s else '?' for s in shape)
 
 
+def format_percent(value):
+    return '{:.2f}%'.format(value * 100)
+
+
 def tabular(data):
     data = ['-'] + data + ['-']
     valid_rows = [row for row in data if row != '-']

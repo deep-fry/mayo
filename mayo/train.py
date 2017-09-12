@@ -10,10 +10,18 @@ from mayo.preprocess import Preprocess
 from mayo.checkpoint import CheckpointHandler
 
 
-def _global_step(dtype=tf.int32):
+def tf_int(name, dtype=tf.int64):
     return tf.get_variable(
-        'global_step', [], initializer=tf.constant_initializer(0),
+        name, [], initializer=tf.constant_initializer(0),
         trainable=False, dtype=dtype)
+
+
+def _global_step(dtype=tf.int32):
+    return tf_int('global_step', dtype)
+
+
+def _imgs_seen():
+    return tf_int('imgs_seen')
 
 
 class Train(object):
@@ -33,10 +41,7 @@ class Train(object):
     @property
     @memoize
     def imgs_seen(self):
-        return tf.get_variable(
-            'imgs_seen', shape=[],
-            initializer=tf.constant_initializer(0),
-            trainable=False, dtype=tf.int64)
+        return _imgs_seen()
 
     @property
     @memoize
@@ -44,6 +49,8 @@ class Train(object):
         params = self.config.train.learning_rate
         lr_class, params = object_from_params(params)
         if lr_class is tf.train.piecewise_constant:
+            # tf.train.piecewise_constant uses argument name 'x' instead of
+            # 'global_step' just to make life more difficult
             step_name = 'x'
         else:
             step_name = 'global_step'
@@ -143,6 +150,13 @@ class Train(object):
         self._session = tf.Session(config=config)
         self._session.run(init)
 
+    def _load_checkpoint(self):
+        system = self.config.system
+        self._checkpoint = CheckpointHandler(
+            self._session, system.checkpoint.load, system.checkpoint.save,
+            system.search_paths.checkpoints)
+        self._checkpoint.load()
+
     def _init(self):
         log.info('Instantiating...')
         with self._graph.as_default():
@@ -150,12 +164,7 @@ class Train(object):
             self._setup_train_operation()
             log.info('Initializing session...')
             self._init_session()
-            # checkpoint
-            system = self.config.system
-            self._checkpoint = CheckpointHandler(
-                self._session, system.checkpoint.load, system.checkpoint.save,
-                system.search_paths.checkpoints)
-            self._checkpoint.load()
+            self._load_checkpoint()
             tf.train.start_queue_runners(sess=self._session)
             self._nets[0].save_graph()
 

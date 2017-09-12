@@ -44,6 +44,17 @@ class CheckpointHandler(object):
         self._checkpoint_directories[is_saving] = path
         return path
 
+    def list(self):
+        path = self._directory(False)
+        path = os.path.join(path, self._checkpoint_basename + '-*')
+        files = glob.glob(path)
+        checkpoints = []
+        for f in files:
+            c = os.path.splitext(f)[0]
+            if c not in checkpoints:
+                checkpoints.append(c)
+        return checkpoints
+
     def _path(self, is_saving):
         directory = self._directory(is_saving)
         log.debug('Using {!r} for checkpoints.'.format(directory))
@@ -83,12 +94,12 @@ class CheckpointHandler(object):
         with self._session.graph.as_default():
             return tf.global_variables()
 
-    def load(self):
+    def load(self, path=None):
         if not self._load and not isinstance(self._load, int):
             log.debug('Checkpoint loading disabled.')
             return
         try:
-            path = self._path(False)
+            path = path or self._path(False)
         except CheckpointManifestNotFoundError as e:
             log.warn('{} Abort load.'.format(e))
             return

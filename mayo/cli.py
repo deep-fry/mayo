@@ -110,6 +110,10 @@ Options:
         from mayo.eval import Evaluate
         return Evaluate(self._config(args)).eval()
 
+    def cli_eval_all(self, args):
+        from mayo.eval import Evaluate
+        print(Evaluate(self._config(args)).eval_all())
+
     def cli_export(self, args):
         print(self._config(args).to_yaml())
 
