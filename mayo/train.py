@@ -173,7 +173,7 @@ class Train(Session):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
         log.info('Training start.')
         epoch = self.run(self.imgs_seen) / imgs_per_epoch
-        cp_epoch = math.floor(epoch)
+        cp_epoch = epoch
         # train iterations
         system = self.config.system
         max_epochs = system.max_epochs
@@ -188,14 +188,12 @@ class Train(Session):
                 summary_delta = delta('train.summary.epoch', epoch)
                 if system.save_summary and summary_delta >= 0.1:
                     self._save_summary(epoch)
-                cp_epoch = math.floor(epoch)
-                if cp_interval > 0:
-                    if every('train.checkpoint.epoch', cp_epoch, cp_interval):
-                        self._update_progress(epoch, loss, acc, 'saving')
-                        with log.force_info_as_debug():
-                            import ipdb
-                            ipdb.set_trace()
-                            self.checkpoint.save(cp_epoch)
+                floor_epoch = math.floor(epoch)
+                if every('train.checkpoint.epoch', floor_epoch, cp_interval):
+                    self._update_progress(epoch, loss, acc, 'saving')
+                    with log.force_info_as_debug():
+                        self.checkpoint.save(floor_epoch)
+                    cp_epoch = floor_epoch
         except KeyboardInterrupt:
             pass
         # interrupt
