@@ -94,7 +94,7 @@ class Evaluate(Session):
         results = []
         try:
             for e in epochs:
-                with log.force_info_as_debug():
+                with log.demote():
                     top1, top5 = self.eval(e, keyboard_interrupt=False)
                 epoch = self.run(imgs_seen) / imgs_per_epoch
                 epoch_str = '{:.3f}'.format(epoch)

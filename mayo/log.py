@@ -12,19 +12,22 @@ class Logger(object):
     _levels = {
         'debug': 0,
         'info': 1,
-        'warn': 2,
-        'error': 3,
-        'off': 4,
+        'key': 2,
+        'warn': 3,
+        'error': 4,
+        'off': 5,
     }
     _colors = {
         'debug': 'white',
         'info': 'blue',
+        'key': 'green',
         'warn': 'yellow',
         'error': 'red',
     }
     _signs = {
         'debug': '·',
         'info': '-',
+        'key': '*',
         'warn': '!',
         'error': '‼',
     }
@@ -90,10 +93,13 @@ class Logger(object):
         self.pause_level = prev_level
 
     @contextmanager
-    def force_info_as_debug(self):
+    def demote(self):
+        _key = self.key
         _info = self.info
+        self.key = _info
         self.info = self.debug
         yield
+        self.key = _key
         self.info = _info
 
     def _header(self, text, level, spinner):
@@ -149,6 +155,9 @@ class Logger(object):
 
     def info(self, text, update=False, spinner=True):
         return self.log(text, 'info', update, spinner)
+
+    def key(self, text, update=False, spinner=True):
+        return self.log(text, 'key', update, spinner)
 
     def warn(self, text, update=False, spinner=True):
         return self.log(text, 'warn', update, spinner)

@@ -190,12 +190,12 @@ class Train(Session):
                 floor_epoch = math.floor(epoch)
                 if every('train.checkpoint.epoch', floor_epoch, cp_interval):
                     self._update_progress(epoch, loss, acc, 'saving')
-                    with log.force_info_as_debug():
+                    with log.demote():
                         self.checkpoint.save(floor_epoch)
                     cp_epoch = floor_epoch
                 if floor_epoch >= system.max_epochs:
                     log.info('Maximum epoch count reached.')
-                    if floor_epoch > cp_epoch:
+                    if cp_epoch and floor_epoch > cp_epoch:
                         log.info('Saving final checkpoint...')
                         self.checkpoint.save(floor_epoch)
                     return

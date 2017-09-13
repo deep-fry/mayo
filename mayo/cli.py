@@ -119,9 +119,12 @@ Arguments:
         for each in anything:
             if any(each.endswith(suffix) for suffix in ('.yaml', '.yml')):
                 self.config.yaml_update(each)
+                log.key('Using config yaml {!r}...'.format(each))
             elif '=' in each:
                 self.config.override_update(*each.split('='))
+                log.key('Overriding config with {!r}...'.format(each))
             elif each in commands:
+                log.key('Executing command {!r}...'.format(each))
                 commands[each]()
             else:
                 with log.use_pause_level('off'):
