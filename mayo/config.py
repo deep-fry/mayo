@@ -2,6 +2,7 @@ import re
 import os
 import ast
 import sys
+import copy
 import glob
 import operator
 import collections
@@ -145,6 +146,14 @@ class _DotDict(dict):
     def __init__(self, data):
         super().__init__(data)
 
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.items():
+            result[k] = copy.deepcopy(v, memo)
+        return result
+
     def _recursive_apply(self, obj, func_map):
         if isinstance(obj, dict):
             for k, v in obj.items():
@@ -202,6 +211,10 @@ class _DotDict(dict):
     def merge(self, md):
         self._merge(self, md)
 
+    def to_dict(self):
+        unwrap = lambda obj: dict(obj) if isinstance(obj, dict) else obj
+        return self._recursive_apply(copy.deepcopy(self), {dict: unwrap})
+
     _magic = object()
 
     def get(self, key, default=_magic):
@@ -251,7 +264,8 @@ class Config(_DotDict):
         super().merge(dictionary)
         self._wrap(self)
         self._link(self)
-        self._setup_log_level()
+        if dictionary.get('system', {}).get('log_level', None):
+            self._setup_log_level()
 
     def yaml_update(self, file):
         with open(file, 'r') as file:
@@ -261,12 +275,14 @@ class Config(_DotDict):
         if isinstance(value, str):
             value = yaml.load(value)
         self[key] = value
+        if 'system.log_level' in key:
+            self._setup_log_level()
 
     def to_yaml(self, file=None):
         if file is not None:
             file = open(file, 'w')
         kwargs = {'explicit_start': True, 'width': 70, 'indent': 4}
-        return yaml.dump(dict(self), file, **kwargs)
+        return yaml.dump(self.to_dict(), file, **kwargs)
 
     def image_shape(self):
         params = self.dataset.preprocess.shape
