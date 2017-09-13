@@ -3,7 +3,14 @@ import sys
 import base64
 
 import yaml
+import tensorflow as tf
 from docopt import docopt
+
+from mayo.config import Config
+from mayo.eval import Evaluate
+from mayo.net import Net
+from mayo.train import Train
+
 
 _root = os.path.dirname(__file__)
 
@@ -46,27 +53,27 @@ class CLI(object):
 """
     _USAGE = """
 Usage:
-    {commands}
-    {__executable__} checkpoint-info <ckpt>
-    {__executable__} checkpoint-rename <ckpt> <to_ckpt> [<match_ckpt>] \
- --rules=<yaml> [--dry-run]
+    {__executable__} <anything>...
     {__executable__} (-h | --help)
 
 Arguments:
-    <anything> can either be a YAML file or an override command
-    formatted as <dot_key_path>=<yaml_value>
-
-Options:
-    --dry-run           Performs a dry run, not actually changing anything
-                        but shows things to be changed.
-    --rules=<yaml>      Replaces keys with new keys given in the specified YAML
-                        file using `re.sub`.  The YAML file should be written
-                        as ordered mappings with `<pattern>: <replacement>`,
-                        which we will apply the substitution in the order of
-                        mapping.
+  <anything> can be one of the following:
+     * action, one of:
+         {commands};
+     * a YAML file; or
+     * an overrider argument, formatted as <dot_key_path>=<yaml_value>, e.g.:
+         "system.num_gpus=2".
 """
 
-    def _commands(self):
+    def __init__(self):
+        super().__init__()
+        self.config = Config()
+        self.session = None
+
+    def doc(self):
+        return self._DOC.format(**meta())
+
+    def commands(self):
         prefix = 'cli_'
         commands = {}
         for method in dir(self):
@@ -76,51 +83,26 @@ Options:
             commands[name] = getattr(self, method)
         return commands
 
-    def doc(self):
-        return self._DOC.format(**meta())
-
     def usage(self):
         usage_meta = meta()
-        commands = []
-        for k in self._commands():
-            if 'checkpoint' in k:
-                continue
-            command = '{__executable__} {command} [<anything>...]'
-            commands.append(command.format(command=k, **usage_meta))
-        usage_meta['commands'] = '\n    '.join(commands)
+        commands = (c for c in self.commands() if 'checkpoint' not in c)
+        usage_meta['commands'] = ', '.join(commands)
         return self.doc() + self._USAGE.format(**usage_meta)
 
-    def _config(self, args):
-        from importlib.util import spec_from_file_location, module_from_spec
-        path = os.path.join(_root, 'config.py')
-        spec = spec_from_file_location('mayo.config', path)
-        mod = module_from_spec(spec)
-        spec.loader.exec_module(mod)
-        anything = args['<anything>']
-        yamls, overrides = [], []
-        for each in anything:
-            (overrides if '=' in each else yamls).append(each)
-        return mod.Config(yamls, overrides=overrides)
+    def cli_train(self):
+        return Train(self.config).train()
 
-    def cli_train(self, args):
-        from mayo.train import Train
-        return Train(self._config(args)).train()
+    def cli_eval(self):
+        return Evaluate(self.config).eval()
 
-    def cli_eval(self, args):
-        from mayo.eval import Evaluate
-        return Evaluate(self._config(args)).eval()
+    def cli_eval_all(self):
+        print(Evaluate(self.config).eval_all())
 
-    def cli_eval_all(self, args):
-        from mayo.eval import Evaluate
-        print(Evaluate(self._config(args)).eval_all())
+    def cli_export(self):
+        print(self.config.to_yaml())
 
-    def cli_export(self, args):
-        print(self._config(args).to_yaml())
-
-    def cli_info(self, args):
-        import tensorflow as tf
-        from mayo.net import Net
-        config = self._config(args)
+    def cli_info(self):
+        config = self.config
         batch_size = config.system.get('batch_size', None)
         images_shape = (batch_size, ) + config.image_shape()
         labels_shape = (batch_size, config.dataset.num_classes)
@@ -128,33 +110,15 @@ Options:
         labels = tf.placeholder(tf.int32, labels_shape, 'labels')
         print(Net(config, images, labels, False).info())
 
-    def _disable_tensorflow_logger(self):
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
-
-    def cli_checkpoint_rename(self, args):
-        from mayo.checkpoint import CheckpointSurgeon
-        self._disable_tensorflow_logger()
-        from_ckpt = args['<ckpt>']
-        to_ckpt = args['<to_ckpt>']
-        match_ckpt = args['<match_ckpt>']
-        dry = ['--dry-run']
-        rules = args['--rules']
-        with open(rules, 'r') as f:
-            rules = yaml.load(f)
-        surgeon = CheckpointSurgeon(from_ckpt)
-        return surgeon.rename(to_ckpt, match_ckpt, rules, dry)
-
-    def cli_checkpoint_info(self, args):
-        from mayo.checkpoint import CheckpointSurgeon
-        self._disable_tensorflow_logger()
-        surgeon = CheckpointSurgeon(args['<ckpt>'])
-        print(yaml.dump(surgeon.var_to_shape_map()))
-
     def main(self, args=None):
         if args is None:
             args = docopt(self.usage(), version=meta()['__version__'])
-        for name, func in self._commands().items():
-            if not args[name]:
-                continue
-            return func(args)
-        raise NotImplementedError('Command not found')
+        anything = args['<anything>']
+        commands = self.commands()
+        for each in anything:
+            if any(each.endswith(suffix) for suffix in ('.yaml', '.yml')):
+                self.config.yaml_update(each)
+            elif '=' in each:
+                self.config.override_update(*each.split('='))
+            elif each in commands:
+                commands[each]()

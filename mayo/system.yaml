@@ -10,13 +10,13 @@ system:
     max_epochs: 90
     search_paths:
         datasets:
-            - datasets
+            - datasets/
         checkpoints:
             save: &cp_paths
-                - checkpoints/$(name)/$(dataset.name)
+                - checkpoints/$(name)/$(dataset.name)/
             load: *cp_paths
         summaries:
-            - summaries/$(name)/$(dataset.name)
+            - summaries/$(name)/$(dataset.name)/
     checkpoint:
         load: latest
         save: {interval: 1}

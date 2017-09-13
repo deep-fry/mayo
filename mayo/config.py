@@ -1,7 +1,7 @@
 import re
 import os
 import ast
-import copy
+import sys
 import glob
 import operator
 import collections
@@ -141,16 +141,6 @@ def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
     return keyable, final_key
 
 
-def _dict_merge(d, md):
-    for k, v in md.items():
-        can_merge = k in d and isinstance(d[k], dict)
-        can_merge = can_merge and isinstance(md[k], collections.Mapping)
-        if can_merge:
-            _dict_merge(d[k], md[k])
-        else:
-            d[k] = md[k]
-
-
 class _DotDict(dict):
     def __init__(self, data):
         super().__init__(data)
@@ -179,8 +169,13 @@ class _DotDict(dict):
             regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
             keys = re.findall(regex, string, re.MULTILINE)
             for k in keys:
-                d, fk = _dot_path(obj, k)
-                string = string.replace('$({})'.format(k), str(d[fk]))
+                try:
+                    d, fk = _dot_path(obj, k)
+                    value = d[fk]
+                except KeyError:
+                    # unable to link, key missing from self, bypassing
+                    continue
+                string = string.replace('$({})'.format(k), str(value))
             return string
 
         def link_tag(tag):
@@ -195,6 +190,18 @@ class _DotDict(dict):
         }
         return self._recursive_apply(obj, link_map)
 
+    def _merge(self, d, md):
+        for k, v in md.items():
+            can_merge = k in d and isinstance(d[k], dict)
+            can_merge = can_merge and isinstance(md[k], collections.Mapping)
+            if can_merge:
+                self._merge(d[k], md[k])
+            else:
+                d[k] = md[k]
+
+    def merge(self, md):
+        self._merge(self, md)
+
     _magic = object()
 
     def get(self, key, default=_magic):
@@ -207,15 +214,23 @@ class _DotDict(dict):
 
     def __getitem__(self, key):
         obj, key = _dot_path(self, key)
-        return super(_DotDict, obj).__getitem__(key)
+        if obj is self:
+            return super(_DotDict, obj).__getitem__(key)
+        return obj[key]
 
     def __setitem__(self, key, value):
         obj, key = _dot_path(self, key)
-        return super(_DotDict, obj).__setitem__(key, value)
+        if obj is self:
+            super(_DotDict, obj).__setitem__(key, value)
+        else:
+            obj[key] = value
 
     def __delitem__(self, key):
         obj, key = _dot_path(self, key)
-        return super(_DotDict, obj).__delitem__(key)
+        if obj is self:
+            super(_DotDict, obj).__delitem__(key)
+        else:
+            del obj[key]
 
     __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
@@ -223,66 +238,35 @@ class _DotDict(dict):
 
 
 class Config(_DotDict):
-    def __init__(self, yaml_files, overrides=None):
+    def __init__(self):
+        super().__init__({})
         self._setup_excepthook()
-        unified = {}
-        dictionary = {}
-        self._init_system_config(unified, dictionary)
-        for path in yaml_files:
-            with open(path, 'r') as file:
-                d = yaml.load(file)
-            _dict_merge(unified, copy.deepcopy(d))
-            _dict_merge(dictionary, d)
-        # init search paths
-        self._init_search_paths(unified, dictionary, yaml_files)
-        # finalize
-        self._override(dictionary, overrides)
-        self._link(dictionary)
-        self._wrap(dictionary)
-        super().__init__(dictionary)
-        self._override(unified, overrides)
-        self._link(unified)
-        self.unified = unified
+        self._init_system_config()
+
+    def _init_system_config(self):
+        root = os.path.dirname(__file__)
+        self.yaml_update(os.path.join(root, 'system.yaml'))
+
+    def merge(self, dictionary):
+        super().merge(dictionary)
+        self._wrap(self)
+        self._link(self)
         self._setup_log_level()
 
-    def _init_system_config(self, unified, dictionary):
-        root = os.path.dirname(__file__)
-        system_yaml = os.path.join(root, 'system.yaml')
-        with open(system_yaml, 'r') as file:
-            system = yaml.load(file)
-        _dict_merge(unified, copy.deepcopy(system))
-        _dict_merge(dictionary, system)
+    def yaml_update(self, file):
+        with open(file, 'r') as file:
+            self.merge(yaml.load(file))
 
-    def _init_search_paths(self, unified, dictionary, yaml_files):
-        for d in (dictionary, unified):
-            search_paths = d['system']['search_paths']
-            keys = [
-                'datasets', 'summaries',
-                'checkpoints.load', 'checkpoints.save']
-            for k in keys:
-                curr_paths, final_key = _dot_path(search_paths, k)
-                paths = curr_paths[final_key]
-                if isinstance(paths, str):
-                    paths = (p.strip() for p in ';'.split(paths))
-                curr_paths[final_key] = _unique(paths)
-        # update defaults
-        default_datasets = [os.path.dirname(f) for f in yaml_files]
-        search_paths['datasets'] = default_datasets + search_paths['datasets']
-
-    @staticmethod
-    def _override(dictionary, overrides):
-        if not overrides:
-            return
-        for override in overrides:
-            k_path, v = (o.strip() for o in override.split('='))
-            sub_dictionary, k = _dot_path(dictionary, k_path, True)
-            sub_dictionary[k] = yaml.load(v)
+    def override_update(self, key, value):
+        if isinstance(value, str):
+            value = yaml.load(value)
+        self[key] = value
 
     def to_yaml(self, file=None):
         if file is not None:
             file = open(file, 'w')
         kwargs = {'explicit_start': True, 'width': 70, 'indent': 4}
-        return yaml.dump(self.unified, file, **kwargs)
+        return yaml.dump(dict(self), file, **kwargs)
 
     def image_shape(self):
         params = self.dataset.preprocess.shape
@@ -299,34 +283,34 @@ class Config(_DotDict):
         try:
             path = self.dataset.path[mode]
         except KeyError:
-            raise KeyError('Mode {} not recognized.'.format(mode))
+            raise KeyError('Mode {!r} not recognized.'.format(mode))
         files = []
         search_paths = self.system.search_paths.datasets
-        for directory in search_paths:
-            files += glob.glob(os.path.join(directory, path))
+        paths = [path]
+        if not os.path.isabs(path):
+            paths = [os.path.join(d, path) for d in search_paths]
+        for p in paths:
+            files += glob.glob(p)
         if not files:
-            msg = 'No files found for dataset {} with mode {} at {!r}'
-            paths = '{{{}}}/{}'.format(','.join(search_paths), path)
-            raise FileNotFoundError(msg.format(self.name, mode, paths))
+            msg = 'No files found for dataset {!r} with mode {!r} at {!r}'
+            raise FileNotFoundError(msg.format(
+                self.name, mode, ', '.join(paths)))
         return files
 
     def _excepthook(self, etype, evalue, etb):
         if isinstance(etype, KeyboardInterrupt):
             return
         from IPython.core import ultratb
-        try:
-            use_pdb = self['system.use_pdb']
-        except KeyError:
-            use_pdb = True
+        use_pdb = self.get('system.use_pdb', True)
         return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
 
     def _setup_excepthook(self):
-        import sys
         sys.excepthook = self._excepthook
 
     def _setup_log_level(self):
-        level = self.system.log_level
+        level = self.get('system.log_level.mayo', 'info')
         if level != 'info':
             from mayo.log import log
-            log.level = level.mayo
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level.tensorflow)
+            log.level = level
+        level = self.get('system.log_level.tensorflow', 0)
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level)

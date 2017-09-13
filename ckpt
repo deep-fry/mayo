@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+import os
+
+import yaml
+from docopt import docopt
+
+import mayo
+from mayo.checkpoint import CheckpointSurgeon
+
+
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
+
+_USAGE = """
+The mayo checkpoint helper.
+Usage:
+    ckpt checkpoint-info <ckpt>
+    ckpt checkpoint-rename \
+<ckpt> <to_ckpt> [<match_ckpt>] --rules=<yaml> [--dry-run]
+
+Options:
+    --dry-run           Performs a dry run, not actually changing anything
+                        but shows things to be changed.
+    --rules=<yaml>      Replaces keys with new keys given in the specified YAML
+                        file using `re.sub`.  The YAML file should be written
+                        as ordered mappings with `<pattern>: <replacement>`,
+                        which we will apply the substitution in the order of
+                        mapping.
+"""
+
+
+def cli_checkpoint_rename(args):
+    from_ckpt = args['<ckpt>']
+    to_ckpt = args['<to_ckpt>']
+    match_ckpt = args['<match_ckpt>']
+    dry = ['--dry-run']
+    rules = args['--rules']
+    with open(rules, 'r') as f:
+        rules = yaml.load(f)
+    surgeon = CheckpointSurgeon(from_ckpt)
+    return surgeon.rename(to_ckpt, match_ckpt, rules, dry)
+
+
+def cli_checkpoint_info(args):
+    surgeon = CheckpointSurgeon(args['<ckpt>'])
+    print(yaml.dump(surgeon.var_to_shape_map()))
+
+
+def main():
+    args = docopt(_USAGE, version=mayo.__version__)
+    if args['checkpoint-info']:
+        cli_checkpoint_info(args)
+    elif args['checkpoint-rename']:
+        cli_checkpoint_rename(args)
+
+
+if __name__ == "__main__":
+    main()
