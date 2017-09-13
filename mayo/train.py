@@ -114,7 +114,7 @@ class Train(Session):
         self._train_op = tf.group(*ops)
 
     def _init(self):
-        log.info('Instantiating...')
+        log.debug('Instantiating...')
         self._setup_gradients()
         self._setup_train_operation()
         self.init()
@@ -172,7 +172,7 @@ class Train(Session):
 
     def train(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        log.info('Training start.')
+        log.debug('Training start.')
         cp_epoch = ''
         # train iterations
         system = self.config.system

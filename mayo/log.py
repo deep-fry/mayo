@@ -174,7 +174,7 @@ class Logger(object):
                 time.sleep(1)
             return True
         except KeyboardInterrupt:
-            log.info('We give up.')
+            log.debug('We give up.')
             return False
 
 

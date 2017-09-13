@@ -138,7 +138,7 @@ class CheckpointHandler(object):
             .format(', '.join(v.name for v in restore_vars)))
         restorer = tf.train.Saver(restore_vars)
         restorer.restore(self._session, path)
-        log.info('Checkpoint restored.')
+        log.debug('Checkpoint restored.')
 
     def save(self, epoch):
         if not self._save:

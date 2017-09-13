@@ -17,7 +17,7 @@ class Evaluate(Session):
             self._init()
 
     def _init(self):
-        log.info('Instantiating...')
+        log.debug('Instantiating...')
         # network
         images, labels = self.preprocessor.preprocess_validate()
         self._net = Net(self.config, images, labels, False)

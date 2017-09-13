@@ -23,7 +23,7 @@ class Session(object):
             config.system.search_paths.checkpoints)
 
     def __del__(self):
-        log.info('Finishing...')
+        log.debug('Finishing...')
         del self.preprocessor
         self.tf_session.close()
 
@@ -73,7 +73,7 @@ class Session(object):
             return var_avgs.apply(avg_vars)
 
     def init(self):
-        log.info('Initializing...')
+        log.debug('Initializing...')
         return self.run(tf.variables_initializer(self.global_variables()))
 
     def run(self, ops):
