@@ -90,14 +90,19 @@ Arguments:
         usage_meta['commands'] = ', '.join(commands)
         return self.doc() + self._USAGE.format(**usage_meta)
 
+    def _get_session(self, cls):
+        if not isinstance(self.session, cls):
+            self.session = cls(self.config)
+        return self.session
+
     def cli_train(self):
-        return Train(self.config).train()
+        return self._get_session(Train).train()
 
     def cli_eval(self):
-        return Evaluate(self.config).eval()
+        return self._get_session(Evaluate).eval()
 
     def cli_eval_all(self):
-        print(Evaluate(self.config).eval_all())
+        print(self._get_session(Evaluate).eval_all())
 
     def cli_export(self):
         print(self.config.to_yaml())
@@ -107,9 +112,16 @@ Arguments:
         batch_size = config.system.get('batch_size', None)
         images_shape = (batch_size, ) + config.image_shape()
         labels_shape = (batch_size, config.dataset.num_classes)
-        images = tf.placeholder(tf.float32, images_shape, 'images')
-        labels = tf.placeholder(tf.int32, labels_shape, 'labels')
-        print(Net(config, images, labels, False).info())
+        with tf.Graph().as_default():
+            images = tf.placeholder(tf.float32, images_shape, 'images')
+            labels = tf.placeholder(tf.int32, labels_shape, 'labels')
+            print(Net(config, images, labels, False).info())
+
+    def _invalidate_session(self):
+        if not self.session:
+            return
+        log.debug('Invalidating session because config is updated.')
+        self.session = None
 
     def main(self, args=None):
         if args is None:
@@ -120,9 +132,11 @@ Arguments:
             if any(each.endswith(suffix) for suffix in ('.yaml', '.yml')):
                 self.config.yaml_update(each)
                 log.key('Using config yaml {!r}...'.format(each))
+                self._invalidate_session()
             elif '=' in each:
                 self.config.override_update(*each.split('='))
                 log.key('Overriding config with {!r}...'.format(each))
+                self._invalidate_session()
             elif each in commands:
                 log.key('Executing command {!r}...'.format(each))
                 commands[each]()
