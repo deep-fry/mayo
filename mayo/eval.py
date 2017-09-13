@@ -91,7 +91,7 @@ class Evaluate(Session):
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
         imgs_seen = self.imgs_seen
-        results = []
+        results = [('Epoch', 'Top 1', 'Top 5'), '-']
         try:
             for e in epochs:
                 with log.demote():
