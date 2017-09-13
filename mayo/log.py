@@ -34,7 +34,7 @@ class Logger(object):
     def __init__(self):
         super().__init__()
         self._level = self._levels['info']
-        self.pause_level = self._levels['error']
+        self._pause_level = self._levels['error']
         self.color = 'color' in os.environ['TERM']
         self.width = 80
         self._last_is_update = False
@@ -50,12 +50,16 @@ class Logger(object):
     def width(self, value):
         self._width = value
 
+    @classmethod
+    def _level_key(cls, level):
+        for k, v in cls._levels.items():
+            if v == level:
+                return k
+        raise ValueError('Unrecognized log level.')
+
     @property
     def level(self):
-        for k, v in self._levels.items():
-            if v == self._level:
-                return v
-        raise ValueError('Unrecognized log level.')
+        return self._level_key(self._level)
 
     @level.setter
     def level(self, value):
@@ -64,10 +68,26 @@ class Logger(object):
 
     @contextmanager
     def use_level(self, level):
-        prev_level = self._level
-        self._level = self._levels[level]
+        prev_level = self.level
+        self.level = level
         yield
-        self._level = prev_level
+        self.level = prev_level
+
+    @property
+    def pause_level(self):
+        return self._level_key(self._pause_level)
+
+    @pause_level.setter
+    def pause_level(self, value):
+        self._pause_level = self._levels[value]
+        self.debug('Log pause level: {}'.format(value))
+
+    @contextmanager
+    def use_pause_level(self, level):
+        prev_level = self.pause_level
+        self.pause_level = level
+        yield
+        self.pause_level = prev_level
 
     @contextmanager
     def force_info_as_debug(self):
@@ -109,7 +129,7 @@ class Logger(object):
         self._last_is_update = update
         self._last_use_spinner = update and spinner
         self._last_level = level
-        while num_level >= self.pause_level:
+        while num_level >= self._pause_level:
             r = input(
                 'Continue [Return], Stack trace [t], '
                 'Debugger [d], Abort [q]: ')

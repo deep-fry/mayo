@@ -6,6 +6,7 @@ import yaml
 import tensorflow as tf
 from docopt import docopt
 
+from mayo.log import log
 from mayo.config import Config
 from mayo.eval import Evaluate
 from mayo.net import Net
@@ -122,3 +123,8 @@ Arguments:
                 self.config.override_update(*each.split('='))
             elif each in commands:
                 commands[each]()
+            else:
+                with log.use_pause_level('off'):
+                    log.error(
+                        'We don\'t know what you mean by {!r}'.format(each))
+                return
