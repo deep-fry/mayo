@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import shutil
 import itertools
 from contextlib import contextmanager
@@ -37,6 +38,7 @@ class Logger(object):
         self.color = 'color' in os.environ['TERM']
         self.width = 80
         self._last_is_update = False
+        self._last_use_spinner = True
         self._last_level = self._level
 
     @property
@@ -60,18 +62,6 @@ class Logger(object):
         self._level = self._levels[value]
         self.debug('Log level: {}'.format(value))
 
-    def debug(self, text, update=False):
-        return self.log(text, 'debug', update)
-
-    def info(self, text, update=False):
-        return self.log(text, 'info', update)
-
-    def warn(self, text, update=False):
-        return self.log(text, 'warn', update)
-
-    def error(self, text, update=False):
-        return self.log(text, 'error', update)
-
     @contextmanager
     def use_level(self, level):
         prev_level = self._level
@@ -86,14 +76,14 @@ class Logger(object):
         yield
         self.info = _info
 
-    def _header(self, text, level, update):
-        if update:
+    def _header(self, text, level, spinner):
+        if spinner:
             sign = next(self._spinner)
         else:
             sign = self._signs[level]
         return '{} {}'.format(colored(sign, self._colors[level]), text)
 
-    def log(self, text, level='info', update=False):
+    def log(self, text, level='info', update=False, spinner=True):
         num_level = self._levels[level]
         if self._level > num_level:
             return
@@ -107,12 +97,17 @@ class Logger(object):
         else:
             begin = ''
             end = '\n'
-        text = self._header(text, level, update)
+        text = self._header(text, level, update and spinner)
         if not update and self._last_is_update:
-            tick = colored(self._spinner_done, self._colors[self._last_level])
-            begin = '\r{}\n{}'.format(tick, begin)
+            if self._last_use_spinner:
+                tick = colored(
+                    self._spinner_done, self._colors[self._last_level])
+                begin = '\r{}\n{}'.format(tick, begin)
+            else:
+                begin = '\n{}'.format(begin)
         print(begin + text, end=end)
         self._last_is_update = update
+        self._last_use_spinner = update and spinner
         self._last_level = level
         while num_level >= self.pause_level:
             r = input(
@@ -128,6 +123,30 @@ class Logger(object):
                 traceback.print_stack()
             elif r == 'q':
                 sys.exit(-1)
+
+    def debug(self, text, update=False, spinner=True):
+        return self.log(text, 'debug', update, spinner)
+
+    def info(self, text, update=False, spinner=True):
+        return self.log(text, 'info', update, spinner)
+
+    def warn(self, text, update=False, spinner=True):
+        return self.log(text, 'warn', update, spinner)
+
+    def error(self, text, update=False, spinner=True):
+        return self.log(text, 'error', update, spinner)
+
+    def countdown(self, text, secs, level='info'):
+        try:
+            for i in range(secs):
+                msg = '{} in {} seconds... (Abort: ctrl+c)'
+                msg = msg.format(text, secs - i)
+                self.log(msg, level, update=True, spinner=False)
+                time.sleep(1)
+            return True
+        except KeyboardInterrupt:
+            log.info('We give up.')
+            return False
 
 
 log = Logger()

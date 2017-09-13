@@ -124,8 +124,9 @@ class Train(Session):
         metric_count = self.config.system.metrics_history_count
         if not isinstance(cp_epoch, str):
             cp_epoch = '{:.2f}'.format(cp_epoch)
-        info = 'epoch: {:.2f} | loss: {:10f}{:5}'
-        info += ' | acc: {:5.2f}% | ckpt: {}'
+        info = 'epoch: {:.2f} | loss: {:10f}{:5} | acc: {:5.2f}%'
+        if cp_epoch:
+            info += ' | ckpt: {}'
         loss_mean, loss_std = moving_metrics(
             'train.loss', loss, over=metric_count)
         loss_std = '±{}%'.format(int(loss_std / loss_mean * 100))
@@ -172,14 +173,12 @@ class Train(Session):
     def train(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
         log.info('Training start.')
-        epoch = self.run(self.imgs_seen) / imgs_per_epoch
-        cp_epoch = epoch
+        cp_epoch = ''
         # train iterations
         system = self.config.system
-        max_epochs = system.max_epochs
         cp_interval = system.checkpoint.save.get('interval', 0)
         try:
-            while epoch <= max_epochs:
+            while True:
                 loss, acc, imgs_seen = self.once()
                 epoch = imgs_seen / imgs_per_epoch
                 if math.isnan(loss):
@@ -194,18 +193,13 @@ class Train(Session):
                     with log.force_info_as_debug():
                         self.checkpoint.save(floor_epoch)
                     cp_epoch = floor_epoch
+                if floor_epoch >= system.max_epochs:
+                    log.info('Maximum epoch count reached.')
+                    if floor_epoch > cp_epoch:
+                        log.info('Saving final checkpoint...')
+                        self.checkpoint.save(floor_epoch)
+                    return
         except KeyboardInterrupt:
-            pass
-        # interrupt
-        try:
             log.info('Stopped.')
-            timeout_secs = 3
-            for i in range(timeout_secs):
-                log.info(
-                    'Saving checkpoint in {} seconds...'
-                    .format(timeout_secs - i), update=True)
-                time.sleep(1)
-        except KeyboardInterrupt:
-            log.info('We give up.')
-            return
-        self.checkpoint.save('latest')
+            if log.countdown('Saving checkpoint', 3):
+                self.checkpoint.save('latest')

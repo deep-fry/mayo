@@ -73,7 +73,7 @@ class Session(object):
             return var_avgs.apply(avg_vars)
 
     def init(self):
-        log.info('Initializing session...')
+        log.info('Initializing...')
         return self.run(tf.variables_initializer(self.global_variables()))
 
     def run(self, ops):
