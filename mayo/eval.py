@@ -13,30 +13,25 @@ class Evaluate(Session):
     def __init__(self, config):
         super().__init__(config)
         self.config = config
-        self._init()
+        with self.as_default():
+            self._init()
 
     def _init(self):
-        log.info('Initializing...')
+        log.info('Instantiating...')
         # network
         images, labels = self.preprocessor.preprocess_validate()
         self._net = Net(self.config, images, labels, False)
         logits = self._net.logits()
         # moving average decay
-        decay = self.config.get('train.moving_average_decay', None)
-        if decay:
-            log.debug('Using exponential moving average.')
-            var_avgs = tf.train.ExponentialMovingAverage(
-                decay, self.global_step)
-            var_avgs_vars = tf.trainable_variables()
-            var_avgs_vars += tf.moving_average_variables()
-            var_avgs.apply(var_avgs_vars)
-        else:
-            log.debug('Not using exponential moving average.')
+        avg_op = self.moving_average_op()
+        log.debug(
+            ('Using' if avg_op else 'Not using') +
+            ' exponential moving average.')
         # metrics
         self._top1_op = tf.nn.in_top_k(logits, labels, 1)
         self._top5_op = tf.nn.in_top_k(logits, labels, 5)
         # initialization
-        self.session.run(tf.global_variables_initializer())
+        self.init()
 
     def _update_progress(self, step, top1, top5, num_iterations):
         interval = delta('eval.duration', time.time())
@@ -65,7 +60,7 @@ class Evaluate(Session):
         top1s, top5s, step, total = 0.0, 0.0, 0, 0
         try:
             while step < num_iterations:
-                top1, top5 = self.session.run([self._top1_op, self._top5_op])
+                top1, top5 = self.run([self._top1_op, self._top5_op])
                 if step == num_iterations - 1:
                     # final iteration
                     top1 = top1[:num_final_examples]
@@ -91,24 +86,23 @@ class Evaluate(Session):
 
     def eval_all(self):
         log.info('Evaluating all checkpoints...')
-        checkpoints = self.checkpoint.list()
-        log.debug('Epochs to evaluate: {}', checkpoints)
-        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.validate
+        epochs = self.checkpoint.list_epochs()
+        epochs_to_eval = ', '.join(str(e) for e in epochs)
+        log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
+        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
+        imgs_seen = self.imgs_seen
         results = []
         try:
-            for c in checkpoints:
+            for e in epochs:
                 with log.force_info_as_debug():
-                    top1, top5 = self.eval(c, keyboard_interrupt=False)
-                epoch = self.session.run(self.imgs_seen) / imgs_per_epoch
+                    top1, top5 = self.eval(e, keyboard_interrupt=False)
+                epoch = self.run(imgs_seen) / imgs_per_epoch
                 epoch_str = '{:.3f}'.format(epoch)
                 top1 = format_percent(top1)
                 top5 = format_percent(top5)
                 log.info('epoch: {}, top1: {}, top5: {}'.format(
                     epoch_str, top1, top5))
-                results.append((epoch, epoch_str, top1, top5))
+                results.append((epoch_str, top1, top5))
         except KeyboardInterrupt:
             pass
-        table = [('Epoch', 'Top 1', 'Top 5'), '-']
-        for epoch, *result in sorted(results):
-            table.append(result)
-        return tabular(table)
+        return tabular(results)

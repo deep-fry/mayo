@@ -15,7 +15,8 @@ class Train(Session):
         super().__init__(config)
         self.config = config
         self._nets = []
-        self._init()
+        with self.as_default():
+            self._init()
 
     @property
     @memoize_method
@@ -29,16 +30,18 @@ class Train(Session):
         else:
             step_name = 'global_step'
         params[step_name] = self.global_step
-        return lr_class(**params)
+        with self.as_default():
+            return lr_class(**params)
 
     @property
     @memoize_method
     def optimizer(self):
         params = self.config.train.optimizer
         optimizer_class, params = object_from_params(params)
-        return optimizer_class(self.learning_rate, **params)
+        with self.as_default():
+            return optimizer_class(self.learning_rate, **params)
 
-    def tower_loss(self, images, labels, reuse):
+    def _tower_loss(self, images, labels, reuse):
         net = Net(self.config, images, labels, True, reuse=reuse)
         self._nets.append(net)
         return net.loss(), net.accuracy()
@@ -68,7 +71,7 @@ class Train(Session):
             raise ValueError(
                 'Batch size must be divisible by number of devices')
         # initialize images and labels
-        images_splits, labels_splits = self.preprocessor.preprocess_train()
+        images_splits, labels_splits = self.preprocess('train')
         # for each gpu
         iterator = enumerate(zip(images_splits, labels_splits))
         tower_grads = []
@@ -79,7 +82,7 @@ class Train(Session):
             name = 'tower_{}'.format(i)
             with tf.device('/gpu:{}'.format(i)), tf.name_scope(name):
                 # loss from the final tower
-                self._loss, self._acc = self.tower_loss(
+                self._loss, self._acc = self._tower_loss(
                     images_split, label_split, reuse)
                 reuse = True
                 # batch norm updates from the final tower
@@ -103,14 +106,9 @@ class Train(Session):
         app_grad_op = self.optimizer.apply_gradients(
             self._gradients, global_step=self.global_step)
         ops = [app_grad_op]
-        decay = self.config.train.get('moving_average_decay', 0)
-        if decay:
-            # instantiate moving average if moving_average_decay is supplied
-            var_avgs = tf.train.ExponentialMovingAverage(
-                self.config.train.moving_average_decay, self.global_step)
-            var_avgs_op = var_avgs.apply(
-                tf.trainable_variables() + tf.moving_average_variables())
-            ops.append(var_avgs_op)
+        avg_op = self.moving_average_op()
+        if avg_op:
+            ops.append(avg_op)
         bn_op = tf.group(*self._batch_norm_updates)
         ops.append(bn_op)
         self._train_op = tf.group(*ops)
@@ -119,8 +117,7 @@ class Train(Session):
         log.info('Instantiating...')
         self._setup_gradients()
         self._setup_train_operation()
-        log.info('Initializing session...')
-        self.session.run(tf.global_variables_initializer())
+        self.init()
         self.checkpoint.load()
 
     def _update_progress(self, epoch, loss, accuracy, cp_epoch):
@@ -153,16 +150,16 @@ class Train(Session):
     @memoize_method
     def _summary_writer(self):
         path = self.config.system.search_paths.summaries[0]
-        return tf.summary.FileWriter(path, graph=self.session.graph)
+        return tf.summary.FileWriter(path, graph=self.graph)
 
     def _save_summary(self, epoch):
-        summary = self.session.run(self._summary_op)
+        summary = self.run(self._summary_op)
         self._summary_writer.add_summary(summary, epoch)
 
     def once(self):
         tasks = [
             self._train_op, self._loss, self._acc, self._imgs_seen_op]
-        _, loss, acc, imgs_seen = self.session.run(tasks)
+        _, loss, acc, imgs_seen = self.run(tasks)
         return loss, acc, imgs_seen
 
     def update_overriders(self):
@@ -170,13 +167,12 @@ class Train(Session):
         for n in self._nets:
             ops += n.update_overriders()
         log.info('Updating overrider variables...')
-        self.session.run(ops)
+        self.run(ops)
 
     def train(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        # init
         log.info('Training start.')
-        epoch = self.session.run(self.imgs_seen) / imgs_per_epoch
+        epoch = self.run(self.imgs_seen) / imgs_per_epoch
         cp_epoch = math.floor(epoch)
         # train iterations
         system = self.config.system
@@ -196,8 +192,10 @@ class Train(Session):
                 if cp_interval > 0:
                     if every('train.checkpoint.epoch', cp_epoch, cp_interval):
                         self._update_progress(epoch, loss, acc, 'saving')
-                        with log.use_level('warn'):
-                            self._checkpoint.save(cp_epoch)
+                        with log.force_info_as_debug():
+                            import ipdb
+                            ipdb.set_trace()
+                            self.checkpoint.save(cp_epoch)
         except KeyboardInterrupt:
             pass
         # interrupt
@@ -212,4 +210,4 @@ class Train(Session):
         except KeyboardInterrupt:
             log.info('We give up.')
             return
-        self._checkpoint.save('latest')
+        self.checkpoint.save('latest')

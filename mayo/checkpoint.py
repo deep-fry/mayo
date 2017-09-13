@@ -52,15 +52,15 @@ class CheckpointHandler(object):
         name = '{}-{}'.format(self._checkpoint_basename, epoch)
         return os.path.join(self._directory(False), name)
 
-    def list(self):
+    def list_epochs(self):
         files = self._directory_glob()
         checkpoints = []
         for f in files:
             c = os.path.splitext(f)[0]
-            c = re.findall(self._checkpoint_basename + '-(\d+)', c)[0]
+            c = int(re.findall(self._checkpoint_basename + '-(\d+)', c)[0])
             if c not in checkpoints:
                 checkpoints.append(c)
-        return checkpoints
+        return sorted(checkpoints)
 
     def _path(self, is_saving, load=None):
         directory = self._directory(is_saving)
