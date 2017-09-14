@@ -109,9 +109,9 @@ class MeanStdPruner(BasePruner):
         super().__init__()
         self.alpha = alpha
 
-    def _threshold(self, var):
-        axes = list(range(len(var.get_shape()) - 1))
-        mean, var = tf.nn.moments(var, axes=axes)
+    def _threshold(self, tensor):
+        axes = list(range(len(tensor.get_shape()) - 1))
+        mean, var = tf.nn.moments(tensor, axes=axes)
         return mean + self.alpha * tf.sqrt(var)
 
     def _updated_mask(self, var, mask):
@@ -120,9 +120,9 @@ class MeanStdPruner(BasePruner):
 
 class DynamicNetworkSurgeryPruner(MeanStdPruner):
     """
-    Ref:
-    1. https://github.com/yiwenguo/Dynamic-Network-Surgery
-    2. https://arxiv.org/abs/1608.04493
+    References:
+        1. https://github.com/yiwenguo/Dynamic-Network-Surgery
+        2. https://arxiv.org/abs/1608.04493
     """
     def __init__(self, c_rate, on_factor=1.1, off_factor=0.9):
         super().__init__(c_rate)
