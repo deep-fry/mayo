@@ -91,11 +91,6 @@ Arguments:
         usage_meta['commands'] = ', '.join(commands)
         return self.doc() + self._USAGE.format(**usage_meta)
 
-    def _get_session(self, cls):
-        if not isinstance(self.session, cls):
-            self.session = cls(self.config)
-        return self.session
-
     def _error_exit(self, error_msg):
         with log.use_pause_level('off'):
             log.error(error_msg)
@@ -136,20 +131,29 @@ Arguments:
         'train.optimizer',
     ]
 
+    def _get_session(self, action):
+        keys = self._model_keys + self._dataset_keys
+        if action == 'train':
+            cls = Train
+            keys += self._train_keys
+        elif action == 'validate':
+            cls = Evaluate
+            keys += self._validate_keys
+        else:
+            raise TypeError('Action {!r} not recognized.'.format(action))
+        self._validate_config(keys, action)
+        if not isinstance(self.session, cls):
+            self.session = cls(self.config)
+        return self.session
+
     def cli_train(self):
-        keys = self._model_keys + self._dataset_keys + self._train_keys
-        self._validate_config(keys, 'train')
-        return self._get_session(Train).train()
+        return self._get_session('train').train()
 
     def cli_eval(self):
-        keys = self._model_keys + self._dataset_keys
-        self._validate_config(keys, 'eval')
-        return self._get_session(Evaluate).eval()
+        return self._get_session('validate').eval()
 
     def cli_eval_all(self):
-        keys = self._model_keys + self._dataset_keys
-        self._validate_config(keys, 'eval-all')
-        print(self._get_session(Evaluate).eval_all())
+        print(self._get_session('validate').eval_all())
 
     def cli_export(self):
         print(self.config.to_yaml())
@@ -165,6 +169,15 @@ Arguments:
             images = tf.placeholder(tf.float32, images_shape, 'images')
             labels = tf.placeholder(tf.int32, labels_shape, 'labels')
             print(Net(config, images, labels, False).info())
+
+    def cli_override(self):
+        self._get_session('train').update_overriders()
+
+    def cli_save(self):
+        if not self.session:
+            raise ValueError(
+                'Session not initialized, please train or eval first.')
+        self.session.checkpoint.save('latest')
 
     def _invalidate_session(self):
         if not self.session:
