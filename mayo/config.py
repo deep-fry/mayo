@@ -321,11 +321,13 @@ class Config(_DotDict):
         return files
 
     def _excepthook(self, etype, evalue, etb):
-        if isinstance(etype, KeyboardInterrupt):
-            return
         from IPython.core import ultratb
-        use_pdb = self.get('system.use_pdb', True)
-        return ultratb.FormattedTB(call_pdb=use_pdb)(etype, evalue, etb)
+        ultratb.FormattedTB()(etype, evalue, etb)
+        if etype is KeyboardInterrupt:
+            return
+        if self.get('system.use_pdb', True):
+            import ipdb
+            ipdb.post_mortem(etb)
 
     def _setup_excepthook(self):
         sys.excepthook = self._excepthook
