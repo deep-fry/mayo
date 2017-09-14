@@ -94,32 +94,6 @@ class BasePruner(BaseOverrider):
         return tf.assign(self._mask, self._updated_mask())
 
 
-class DynamicNetworkSurgery(BasePruner):
-    """
-    Ref:
-    1. https://github.com/yiwenguo/Dynamic-Network-Surgery
-    2. https://arxiv.org/abs/1608.04493
-    """
-    def __init__(self, cRate):
-        super().__init__()
-        self.cRate = cRate
-
-    def _updated_mask(self):
-        axis = list(range(len(self._before.get_shape()) - 1))
-        mean, var = tf.nn.moments(self._before, axis)
-        std = tf.sqrt(var)
-        off_threshold = 0.9 * (mean + self.cRate * std)
-        on_threshold = 1.1 * (mean + self.cRate * std)
-        # off mask indicates variables that should stay
-        off_mask = tf.abs(self._before) > off_threshold
-        on_mask = tf.abs(self._before) > on_threshold
-        mask = tf.cast(self._mask, tf.bool)
-        mask = tf.logical_or(mask, on_mask)
-        mask = tf.logical_and(mask, off_mask)
-        mask = tf.cast(mask, tf.float32)
-        return mask
-
-
 class ThresholdPruner(BasePruner):
     def __init__(self, threshold):
         super().__init__()
@@ -144,6 +118,11 @@ class MeanStdPruner(BasePruner):
 
 
 class DynamicNetworkSurgeryPruner(MeanStdPruner):
+    """
+    Ref:
+    1. https://github.com/yiwenguo/Dynamic-Network-Surgery
+    2. https://arxiv.org/abs/1608.04493
+    """
     def __init__(self, c_rate, on_factor=1.1, off_factor=0.9):
         super().__init__(c_rate)
         self.on_factor = on_factor
