@@ -132,7 +132,7 @@ class BaseNet(object):
 
     @contextmanager
     def context(self):
-        var_ctx = tf.variable_scope(self.config['name'], reuse=self._reuse)
+        var_ctx = tf.variable_scope(self.config.model.name, reuse=self._reuse)
         cpu_ctx = slim.arg_scope([slim.model_variable], device='/cpu:0')
         with var_ctx, cpu_ctx as scope:
             yield scope
@@ -148,7 +148,7 @@ class BaseNet(object):
             self.config.num_classes(), self.is_training)
         transform = transformer.transform
         net = self.end_points['images']
-        for params in self.config.net:
+        for params in self.config.model.net:
             name = params['name']
             params, norm_scope, overrider_scope = transform(params)
             # get method by its name to instantiate a layer
@@ -159,7 +159,7 @@ class BaseNet(object):
                 net = func(net, params)
             # save end points
             self._add_end_point(name, net)
-            if name != 'logits' and name == self.config.logits:
+            if name != 'logits' and name == self.config.model.logits:
                 self._add_end_point('logits', net)
         # overriders
         self.overriders = transformer.overriders

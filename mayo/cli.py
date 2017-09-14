@@ -58,12 +58,13 @@ Usage:
     {__executable__} (-h | --help)
 
 Arguments:
-  <anything> can be one of the following:
-     * action, one of:
-         {commands};
-     * a YAML file; or
-     * an overrider argument, formatted as <dot_key_path>=<yaml_value>, e.g.:
-         "system.num_gpus=2".
+  <anything> can be one of the following given in sequence:
+     * A YAML file with a `.yaml` or `.yml` suffix.  If a YAML file is given,
+       it will attempt to load the YAML file to update the config.
+     * An overrider argument to update the config, formatted as
+       "<dot_key_path>=<yaml_value>", e.g., "system.num_gpus=2".
+     * An action to execute, one of:
+         {commands}.
 """
 
     def __init__(self):
@@ -95,21 +96,69 @@ Arguments:
             self.session = cls(self.config)
         return self.session
 
+    def _error_exit(self, error_msg):
+        with log.use_pause_level('off'):
+            log.error(error_msg)
+        sys.exit(-1)
+
+    def _validate_config(self, keys, action):
+        for k in keys:
+            if k in self.config:
+                continue
+            self._error_exit(
+                'Please ensure config content {!r} is imported before '
+                'executing {!r}.'.format(k, action))
+
+    _model_keys = [
+        'model.name',
+        'model.net',
+        'model.logits',
+        'dataset.num_classes',
+        'dataset.preprocess.shape',
+        'dataset.background_class.use',
+    ]
+    _dataset_keys = [
+        'dataset.name',
+        'dataset.background_class.has',
+    ]
+    _validate_keys = [
+        'dataset.preprocess.validate',
+        'dataset.preprocess.final',
+        'dataset.path.validate',
+        'dataset.num_examples_per_epoch.validate',
+    ]
+    _train_keys = [
+        'dataset.preprocess.train',
+        'dataset.preprocess.final',
+        'dataset.path.train',
+        'dataset.num_examples_per_epoch.train',
+        'train.learning_rate',
+        'train.optimizer',
+    ]
+
     def cli_train(self):
+        keys = self._model_keys + self._dataset_keys + self._train_keys
+        self._validate_config(keys, 'train')
         return self._get_session(Train).train()
 
     def cli_eval(self):
+        keys = self._model_keys + self._dataset_keys
+        self._validate_config(keys, 'eval')
         return self._get_session(Evaluate).eval()
 
     def cli_eval_all(self):
+        keys = self._model_keys + self._dataset_keys
+        self._validate_config(keys, 'eval-all')
         print(self._get_session(Evaluate).eval_all())
 
     def cli_export(self):
         print(self.config.to_yaml())
 
     def cli_info(self):
+        keys = self._model_keys
+        self._validate_config(keys, 'info')
         config = self.config
-        batch_size = config.system.get('batch_size', None)
+        batch_size = config.get('system.batch_size', None)
         images_shape = (batch_size, ) + config.image_shape()
         labels_shape = (batch_size, config.dataset.num_classes)
         with tf.Graph().as_default():

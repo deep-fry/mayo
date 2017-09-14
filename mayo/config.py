@@ -225,6 +225,12 @@ class _DotDict(dict):
                 raise
         return default
 
+    def __contains__(self, key):
+        obj, key = _dot_path(self, key)
+        if obj is self:
+            return super(_DotDict, obj).__contains__(key)
+        return key in obj
+
     def __getitem__(self, key):
         obj, key = _dot_path(self, key)
         if obj is self:
@@ -296,8 +302,9 @@ class Config(_DotDict):
         return self.dataset.num_classes + self.label_offset()
 
     def data_files(self, mode):
+        path = self.dataset.path
         try:
-            path = self.dataset.path[mode]
+            path = path[mode]
         except KeyError:
             raise KeyError('Mode {!r} not recognized.'.format(mode))
         files = []

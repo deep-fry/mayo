@@ -1,6 +1,7 @@
 import os
 import sys
 import time
+import atexit
 import shutil
 import itertools
 from contextlib import contextmanager
@@ -36,13 +37,13 @@ class Logger(object):
 
     def __init__(self):
         super().__init__()
-        self._level = self._levels['info']
-        self._pause_level = self._levels['error']
+        self.level = 'info'
+        self.pause_level = 'error'
         self.color = 'color' in os.environ['TERM']
         self.width = 80
         self._last_is_update = False
         self._last_use_spinner = True
-        self._last_level = self._level
+        self._last_level = self.level
 
     @property
     def width(self):
@@ -177,5 +178,11 @@ class Logger(object):
             log.debug('We give up.')
             return False
 
+    def exit(self):
+        if self._last_is_update:
+            # emit an empty line, as last log has no carriage return
+            print()
+
 
 log = Logger()
+atexit.register(log.exit)
