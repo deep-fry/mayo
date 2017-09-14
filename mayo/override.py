@@ -64,13 +64,17 @@ class ChainOverrider(BaseOverrider):
         return tf.group(*ops)
 
 
+def _binarize(tensor, threshold):
+    return tf.cast(tf.abs(tensor) > threshold, tf.float32)
+
+
 class ThresholdBinarizer(BaseOverrider):
     def __init__(self, threshold):
         super().__init__()
         self.threshold = threshold
 
     def _apply(self, _, value):
-        return tf.cast(tf.abs(value) > self.threshold, tf.float32)
+        return _binarize(value, self.threshold)
 
 
 class BasePruner(BaseOverrider):
@@ -78,47 +82,26 @@ class BasePruner(BaseOverrider):
         shape = value.get_shape()
         name = '{}/mask'.format(value.op.name)
         self._mask = getter(
-            name, dtype=tf.float32, shape=shape,
+            name, dtype=tf.bool, shape=shape,
             initializer=tf.ones_initializer(), trainable=False)
-        return value * self._mask
+        return value * tf.cast(self._mask, tf.float32)
 
-    def _updated_mask(self):
+    def _updated_mask(self, var, mask):
         raise NotImplementedError(
             'Method to compute an updated mask is not implemented.')
 
     def _update(self):
-        return tf.assign(self._mask, self._updated_mask())
-
-
-class DynamicNetworkSurgery(BasePruner):
-    def __init__(self, cRate, original_mask):
-        super().__init__()
-        self.cRate = cRate
-        self.original_mask = original_mask
-
-    def _updated_mask(self):
-        axis = list(range(len(self._before.get_shape()) - 1))
-        mean, var = tf.nn.moments(self._before, axis)
-        std = tf.sqrt(var)
-        off_threshold = 0.9 * (mean + self.cRate * std)
-        on_threshold = 1.1 * (mean + self.cRate * std)
-        # off mask indicates variables that should stay
-        off_mask = tf.cast(tf.abs(self._before) > off_threshold, tf.float32)
-        on_mask = tf.cast(tf.abs(self._before) > on_threshold, tf.float32)
-        mask = tf.logical_or(self.original_mask, on_mask)
-        mask = tf.logical_and(mask, tf.logical_not(off_mask))
-        mask = tf.cast(mask, tf.float32)
-        return mask
+        mask = self._updated_mask(self._before, self._mask)
+        return tf.assign(self._mask, mask)
 
 
 class ThresholdPruner(BasePruner):
     def __init__(self, threshold):
         super().__init__()
         self.threshold = threshold
-        self._binarizer = ThresholdBinarizer(threshold)
 
-    def _updated_mask(self):
-        return self._binarizer.apply(None, self._before)
+    def _updated_mask(self, var, mask):
+        return _binarize(var, self.threshold)
 
 
 class MeanStdPruner(BasePruner):
@@ -126,11 +109,30 @@ class MeanStdPruner(BasePruner):
         super().__init__()
         self.alpha = alpha
 
-    def _updated_mask(self):
-        axes = list(range(len(self._before.get_shape())))
-        mean, var = tf.nn.moments(self._before, axes=axes)
-        threshold = mean + self.alpha * tf.sqrt(var)
-        return ThresholdBinarizer(threshold).apply(None, self._before)
+    def _threshold(self, var):
+        axes = list(range(len(var.get_shape()) - 1))
+        mean, var = tf.nn.moments(var, axes=axes)
+        return mean + self.alpha * tf.sqrt(var)
+
+    def _updated_mask(self, var, mask):
+        return _binarize(var, self._threshold(var))
+
+
+class DynamicNetworkSurgeryPruner(MeanStdPruner):
+    def __init__(self, c_rate, on_factor=1.1, off_factor=0.9):
+        super().__init__(c_rate)
+        self.on_factor = on_factor
+        self.off_factor = off_factor
+
+    def _updated_mask(self, var, mask):
+        threshold = self._threshold(var)
+        on_mask = tf.abs(var) > self.on_factor * threshold
+        mask = tf.logical_or(mask, on_mask)
+        off_mask = tf.abs(var) <= self.off_factor * threshold
+        return tf.logical_and(mask, off_mask)
+
+
+DNSPruner = DynamicNetworkSurgeryPruner
 
 
 class Rounder(BaseOverrider):
