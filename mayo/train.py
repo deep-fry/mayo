@@ -191,7 +191,6 @@ class Train(Session):
         try:
             while True:
                 loss, acc, imgs_seen = self.once()
-                self.debug_once()
                 epoch = imgs_seen / imgs_per_epoch
                 if math.isnan(loss):
                     raise ValueError('Model diverged with a nan-valued loss.')
