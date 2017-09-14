@@ -1,5 +1,6 @@
 import time
 import math
+import sys
 
 import tensorflow as tf
 
@@ -165,6 +166,16 @@ class Train(Session):
         _, loss, acc, imgs_seen = self.session.run(tasks)
         return loss, acc, imgs_seen
 
+    def debug_once(self):
+        # used to some params...
+        tf_vars = tf.trainable_variables()
+        val = tf_vars[0].eval(session=self.session)
+        # print(val)
+        self.update_overriders()
+        val = tf_vars[0].eval(session=self.session)
+        print(val)
+        sys.exit()
+
     def update_overriders(self):
         ops = []
         for n in self._nets:
@@ -185,6 +196,7 @@ class Train(Session):
         try:
             while epoch <= max_epochs:
                 loss, acc, imgs_seen = self.once()
+                self.debug_once()
                 epoch = imgs_seen / imgs_per_epoch
                 if math.isnan(loss):
                     raise ValueError('Model diverged with a nan-valued loss.')

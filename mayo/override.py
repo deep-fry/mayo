@@ -91,10 +91,14 @@ class BasePruner(BaseOverrider):
 
 
 class DynamicNetworkSurgery(BasePruner):
-    def __init__(self, cRate, original_mask):
+    """
+    Ref:
+    1. https://github.com/yiwenguo/Dynamic-Network-Surgery
+    2. https://arxiv.org/abs/1608.04493
+    """
+    def __init__(self, cRate):
         super().__init__()
         self.cRate = cRate
-        self.original_mask = original_mask
 
     def _updated_mask(self):
         axis = list(range(len(self._before.get_shape()) - 1))
@@ -103,10 +107,11 @@ class DynamicNetworkSurgery(BasePruner):
         off_threshold = 0.9 * (mean + self.cRate * std)
         on_threshold = 1.1 * (mean + self.cRate * std)
         # off mask indicates variables that should stay
-        off_mask = tf.cast(tf.abs(self._before) > off_threshold, tf.float32)
-        on_mask = tf.cast(tf.abs(self._before) > on_threshold, tf.float32)
-        mask = tf.logical_or(self.original_mask, on_mask)
-        mask = tf.logical_and(mask, tf.logical_not(off_mask))
+        off_mask = tf.abs(self._before) > off_threshold
+        on_mask = tf.abs(self._before) > on_threshold
+        mask = tf.cast(self._mask, tf.bool)
+        mask = tf.logical_or(mask, on_mask)
+        mask = tf.logical_and(mask, off_mask)
         mask = tf.cast(mask, tf.float32)
         return mask
 
@@ -174,7 +179,6 @@ class DynamicFixedPointQuantizer(BaseOverrider):
         value *= 2 ** (fw - dr)
         # quantize
         value = self._rounder.apply(getter, value)
-        # >> f
         value = tf.div(value, 2 ** fw)
         # ensure number is representable without overflow
         if iw is not None:
