@@ -86,3 +86,7 @@ class Session(object):
             elif mode == 'validate':
                 return self.preprocessor.preprocess_validate()
         raise TypeError('Unrecognized mode {!r}'.format(mode))
+
+    def interact(self):
+        from IPython import embed
+        embed()

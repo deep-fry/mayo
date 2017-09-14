@@ -126,7 +126,12 @@ Arguments:
         'train.optimizer',
     ]
 
-    def _get_session(self, action):
+    def _get_session(self, action=None):
+        if not action:
+            if not self.session:
+                raise ValueError(
+                    'Session not initialized, please train or eval first.')
+            return self.session
         keys = self._model_keys + self._dataset_keys
         if action == 'train':
             cls = Train
@@ -169,10 +174,10 @@ Arguments:
         self._get_session('train').update_overriders()
 
     def cli_save(self):
-        if not self.session:
-            raise ValueError(
-                'Session not initialized, please train or eval first.')
         self.session.checkpoint.save('latest')
+
+    def cli_interact(self):
+        self._get_session().interact()
 
     def _invalidate_session(self):
         if not self.session:
