@@ -152,7 +152,7 @@ class Preprocess(object):
         if not self.is_started:
             return
         self._coord.request_stop()
-        self._coord.join(self._threads, stop_grace_period_secs=5)
+        self._coord.join(self._threads, stop_grace_period_secs=10)
         self.is_started = False
 
     @staticmethod

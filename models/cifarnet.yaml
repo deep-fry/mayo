@@ -1,5 +1,4 @@
 ---
-name: cifarnet
 dataset:
     background_class: {use: false}
     preprocess:
@@ -9,55 +8,57 @@ dataset:
             channels: 3
         validate: []
         final: [{type: linear_map, scale: 2.0, shift: -1.0}]
-logits: logits
-hyper:
-    - &conv
-      type: convolution
-      padding: same
-      weights_initializer: &trunc_norm_init
-          type: tensorflow.truncated_normal_initializer
-          stddev: 0.05
-    - &pool
-      type: max_pool
-      kernel_size: [2, 2]
-      stride: 2
-      padding: valid
-    - &norm
-      type: local_response_normalization
-      depth_radius: 4
-      alpha: !arith 0.0001 / 9.0
-      beta: 0.75
-      bias: 1.0
-    - &dropout {type: dropout, keep_prob: 0.5}
-    - &fc
-      type: fully_connected
-      weights_initializer:
-          <<: *trunc_norm_init
-          stddev: 0.004
-      biases_initializer:
-          type: tensorflow.constant_initializer
-          value: 0.1
-      weights_regularizer:
-          type: tensorflow.contrib.layers.l2_regularizer
-          scale: 0.004
-net:
-    - {name: conv1, <<: *conv, kernel_size: 5, num_outputs: 64}
-    - {name: pool1, <<: *pool}
-    - {name: norm1, <<: *norm}
-    - {name: conv2, <<: *conv, kernel_size: 2, num_outputs: 64}
-    - {name: norm2, <<: *norm}
-    - {name: pool2, <<: *pool}
-    - {name: flatten, type: flatten}
-    - {name: fc3, <<: *fc, num_outputs: 384}
-    - {name: dropout, <<: *dropout}
-    - {name: fc4, <<: *fc, num_outputs: 192}
-    - name: logits
-      <<: *fc
-      num_outputs: num_classes
-      biases_initializer: {type: tensorflow.zeros_initializer}
-      weights_initializer:
-          <<: *trunc_norm_init
-          stddev: !arith 1.0 / 192.0
-      weights_regularizer:
-          null
-      activation_fn: null
+model:
+    name: cifarnet
+    hyper:
+        - &conv
+          type: convolution
+          padding: same
+          weights_initializer: &trunc_norm_init
+              type: tensorflow.truncated_normal_initializer
+              stddev: 0.05
+        - &pool
+          type: max_pool
+          kernel_size: [2, 2]
+          stride: 2
+          padding: valid
+        - &norm
+          type: local_response_normalization
+          depth_radius: 4
+          alpha: !arith 0.0001 / 9.0
+          beta: 0.75
+          bias: 1.0
+        - &dropout {type: dropout, keep_prob: 0.5}
+        - &fc
+          type: fully_connected
+          weights_initializer:
+              <<: *trunc_norm_init
+              stddev: 0.004
+          biases_initializer:
+              type: tensorflow.constant_initializer
+              value: 0.1
+          weights_regularizer:
+              type: tensorflow.contrib.layers.l2_regularizer
+              scale: 0.004
+    net:
+        - {name: conv1, <<: *conv, kernel_size: 5, num_outputs: 64}
+        - {name: pool1, <<: *pool}
+        - {name: norm1, <<: *norm}
+        - {name: conv2, <<: *conv, kernel_size: 2, num_outputs: 64}
+        - {name: norm2, <<: *norm}
+        - {name: pool2, <<: *pool}
+        - {name: flatten, type: flatten}
+        - {name: fc3, <<: *fc, num_outputs: 384}
+        - {name: dropout, <<: *dropout}
+        - {name: fc4, <<: *fc, num_outputs: 192}
+        - name: logits
+          <<: *fc
+          num_outputs: num_classes
+          biases_initializer: {type: tensorflow.zeros_initializer}
+          weights_initializer:
+              <<: *trunc_norm_init
+              stddev: !arith 1.0 / 192.0
+          weights_regularizer:
+              null
+          activation_fn: null
+    logits: logits

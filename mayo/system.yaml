@@ -7,16 +7,16 @@ system:
     num_gpus: 1
     num_preprocess_threads: 8
     batch_size: 128
-    max_epochs: 90
+    max_epochs: 120
     search_paths:
         datasets:
-            - datasets
+            - datasets/
         checkpoints:
             save: &cp_paths
-                - checkpoints/$(name)/$(dataset.name)
+                - checkpoints/$(model.name)/$(dataset.name)/
             load: *cp_paths
         summaries:
-            - summaries/$(name)/$(dataset.name)
+            - summaries/$(model.name)/$(dataset.name)/
     checkpoint:
         load: latest
         save: {interval: 1}
