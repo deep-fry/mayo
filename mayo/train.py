@@ -164,16 +164,6 @@ class Train(Session):
         _, loss, acc, imgs_seen = self.run(tasks)
         return loss, acc, imgs_seen
 
-    def debug_once(self):
-        # used to some params...
-        tf_vars = tf.trainable_variables()
-        val = tf_vars[0].eval(session=self.session)
-        # print(val)
-        self.update_overriders()
-        val = tf_vars[0].eval(session=self.session)
-        print(val)
-        sys.exit()
-
     def update_overriders(self):
         ops = []
         for n in self._nets:
