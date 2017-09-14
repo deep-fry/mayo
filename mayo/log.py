@@ -166,6 +166,11 @@ class Logger(object):
     def error(self, text, update=False, spinner=True):
         return self.log(text, 'error', update, spinner)
 
+    def error_exit(self, error_msg):
+        with self.use_pause_level('off'):
+            self.error(error_msg)
+        sys.exit(-1)
+
     def countdown(self, text, secs, level='info'):
         try:
             for i in range(secs):
@@ -179,8 +184,8 @@ class Logger(object):
             return False
 
     def exit(self):
+        # emit an empty line, as last log has no carriage return
         if self._last_is_update:
-            # emit an empty line, as last log has no carriage return
             print()
 
 

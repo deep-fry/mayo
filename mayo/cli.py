@@ -91,16 +91,11 @@ Arguments:
         usage_meta['commands'] = ', '.join(commands)
         return self.doc() + self._USAGE.format(**usage_meta)
 
-    def _error_exit(self, error_msg):
-        with log.use_pause_level('off'):
-            log.error(error_msg)
-        sys.exit(-1)
-
     def _validate_config(self, keys, action):
         for k in keys:
             if k in self.config:
                 continue
-            self._error_exit(
+            log.error_exit(
                 'Please ensure config content {!r} is imported before '
                 'executing {!r}.'.format(k, action))
 
