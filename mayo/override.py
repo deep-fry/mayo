@@ -91,7 +91,8 @@ class BasePruner(BaseOverrider):
             'Method to compute an updated mask is not implemented.')
 
     def _update(self):
-        return tf.assign(self._mask, self._updated_mask())
+        mask = self._updated_mask(self._before, self._mask)
+        return tf.assign(self._mask, mask)
 
 
 class ThresholdPruner(BasePruner):
