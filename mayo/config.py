@@ -226,7 +226,10 @@ class _DotDict(dict):
         return default
 
     def __contains__(self, key):
-        obj, key = _dot_path(self, key)
+        try:
+            obj, key = _dot_path(self, key)
+        except KeyError:
+            return False
         if obj is self:
             return super(_DotDict, obj).__contains__(key)
         return key in obj
