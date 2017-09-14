@@ -25,7 +25,7 @@ model:
         - &norm
           type: local_response_normalization
           depth_radius: 4
-          alpha: !arith 0.0001 / 9.0
+          alpha: !arith 0.001 / 9.0
           beta: 0.75
           bias: 1.0
         - &dropout {type: dropout, keep_prob: 0.5}
@@ -49,7 +49,7 @@ model:
         - {name: pool2, <<: *pool}
         - {name: flatten, type: flatten}
         - {name: fc3, <<: *fc, num_outputs: 384}
-        - {name: dropout, <<: *dropout}
+        - {name: dropout3, <<: *dropout}
         - {name: fc4, <<: *fc, num_outputs: 192}
         - name: logits
           <<: *fc
