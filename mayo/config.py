@@ -79,9 +79,16 @@ class ArithTag(YamlScalarTag):
         if isinstance(n, ast.Num):
             return n.n
         if isinstance(n, ast.Call):
-            op = __builtins__[n.func.id]
+            op = self._eval(n.func)
             args = (self._eval(a) for a in n.args)
             return op(*args)
+        if isinstance(n, ast.Attribute):
+            return getattr(self._eval(n.value), n.attr)
+        if isinstance(n, ast.Name):
+            try:
+                return __builtins__[n.id]
+            except KeyError:
+                return __import__(n.id)
         if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
             raise TypeError('Unrecognized operator node {}'.format(n))
         op = self._eval_expr_map[type(n.op)]
