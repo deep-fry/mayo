@@ -6,8 +6,10 @@ dataset:
             height: 32
             width: 32
             channels: 3
-        validate: []
-        final: [{type: linear_map, scale: 2.0, shift: -1.0}]
+        validate:
+            - {type: resize_with_crop_or_pad}
+        final:
+            - {type: standardize_image}
 model:
     name: cifarnet
     hyper:

@@ -64,6 +64,13 @@ class _ImagePreprocess(object):
     def central_crop(self, i, central_fraction=0.875):
         return tf.image.central_crop(i, central_fraction=central_fraction)
 
+    def random_crop(self, i):
+        return tf.random_crop(i, self.shape)
+
+    def resize_with_crop_or_pad(self, i):
+        height, width, _ = self.shape
+        return tf.image.resize_image_with_crop_or_pad(i, height, width)
+
     def random_flip(self, i):
         return tf.image.random_flip_left_right(i)
 
@@ -86,6 +93,9 @@ class _ImagePreprocess(object):
 
     def subtract_image_mean(self, i):
         return i - tf.reduce_mean(i)
+
+    def standardize_image(self, i):
+        return tf.image.per_image_standardization(i)
 
     def permute_channels(self, i, order):
         channels = len(order)

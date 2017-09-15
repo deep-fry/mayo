@@ -16,4 +16,5 @@ dataset:
     preprocess:
         train:
             - {type: distort_color}
+            - {type: random_crop}
             - {type: random_flip}
