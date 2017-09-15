@@ -45,8 +45,12 @@ class Importer(object):
 
 
 class NumpyImporter(Importer):
+    def __init__(self):
+        super().__init__()
+        self._encoding = 'ASCII'
+
     def _import(self, file):
-        var_to_tensor = np.load(file, encoding='latin1')
+        var_to_tensor = np.load(file, encoding=self._encoding)
         var_to_shape = {
             k: list(v.shape) for k, v in var_to_tensor.item().items()}
         return var_to_shape, var_to_tensor
