@@ -320,7 +320,7 @@ class Config(_DotDict):
         if not files:
             msg = 'No files found for dataset {!r} with mode {!r} at {!r}'
             raise FileNotFoundError(msg.format(
-                self.name, mode, ', '.join(paths)))
+                self.dataset.name, mode, ', '.join(paths)))
         return files
 
     def _excepthook(self, etype, evalue, etb):
