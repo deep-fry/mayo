@@ -135,10 +135,10 @@ def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
         if isinstance(keyable, (tuple, list)):
             key = int(key)
         if insert_if_not_exists:
-            keyable = keyable.setdefault(key, keyable.__class__())
+            keyable = dict.setdefault(keyable, key, keyable.__class__())
             continue
         try:
-            value = keyable[key]
+            value = dict.get(keyable, key)
         except KeyError:
             raise KeyError('Key path {!r} not found.'.format(dot_path_key))
         except AttributeError:
@@ -150,8 +150,9 @@ def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
 
 
 class _DotDict(dict):
-    def __init__(self, data):
+    def __init__(self, data, root):
         super().__init__(data)
+        super().__setattr__('root', root)
 
     def __deepcopy__(self, memo):
         cls = self.__class__
@@ -176,35 +177,9 @@ class _DotDict(dict):
     def _wrap(self, obj):
         def wrap(obj):
             if type(obj) is dict:
-                return _DotDict(obj)
+                return _DotDict(obj, self)
             return obj
         return self._recursive_apply(obj, {dict: wrap})
-
-    def _link(self, obj):
-        def link_str(string):
-            regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
-            keys = re.findall(regex, string, re.MULTILINE)
-            for k in keys:
-                try:
-                    d, fk = _dot_path(obj, k)
-                    value = d[fk]
-                except KeyError:
-                    # unable to link, key missing from self, bypassing
-                    continue
-                string = string.replace('$({})'.format(k), str(value))
-            return string
-
-        def link_tag(tag):
-            tag = tag.__class__(link_str(tag.content))
-            if isinstance(tag, ArithTag):
-                return tag.value()
-            return tag
-
-        link_map = {
-            str: lambda s: yaml.load(link_str(s)),
-            YamlScalarTag: link_tag,
-        }
-        return self._recursive_apply(obj, link_map)
 
     def _merge(self, d, md):
         for k, v in md.items():
@@ -241,11 +216,29 @@ class _DotDict(dict):
             return super(_DotDict, obj).__contains__(key)
         return key in obj
 
+    def _eval(self, value):
+        def eval_tag(value):
+            return value.__class__(self._eval(value.content)).value()
+
+        def eval_str(value):
+            regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
+            keys = re.findall(regex, value, re.MULTILINE)
+            for k in keys:
+                d, fk = _dot_path(self.root, k)
+                value = value.replace('$({})'.format(k), str(d[fk]))
+            return value
+
+        eval_map = {YamlScalarTag: eval_tag, str: eval_str}
+        return self._recursive_apply(value, eval_map)
+
     def __getitem__(self, key):
         obj, key = _dot_path(self, key)
         if obj is self:
-            return super(_DotDict, obj).__getitem__(key)
-        return obj[key]
+            value = super(_DotDict, obj).__getitem__(key)
+        else:
+            value = obj[key]
+        return self._eval(value)
+    __getattr__ = __getitem__
 
     def __setitem__(self, key, value):
         obj, key = _dot_path(self, key)
@@ -261,14 +254,13 @@ class _DotDict(dict):
         else:
             del obj[key]
 
-    __getattr__ = dict.__getitem__
     __setattr__ = dict.__setitem__
     __delattr__ = dict.__delitem__
 
 
 class Config(_DotDict):
     def __init__(self):
-        super().__init__({})
+        super().__init__({}, self)
         self._setup_excepthook()
         self._init_system_config()
 
@@ -279,7 +271,6 @@ class Config(_DotDict):
     def merge(self, dictionary):
         super().merge(dictionary)
         self._wrap(self)
-        self._link(self)
         if dictionary.get('system', {}).get('log_level', None):
             self._setup_log_level()
 

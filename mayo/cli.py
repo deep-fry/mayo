@@ -46,6 +46,10 @@ def meta():
     return meta_dict
 
 
+class SeesionNotInitializedError(Exception):
+    pass
+
+
 class CLI(object):
     _DOC = """
 {__mayo__} {__version__} ({__date__})
@@ -129,7 +133,7 @@ Arguments:
     def _get_session(self, action=None):
         if not action:
             if not self.session:
-                raise ValueError(
+                raise SeesionNotInitializedError(
                     'Session not initialized, please train or eval first.')
             return self.session
         keys = self._model_keys + self._dataset_keys
