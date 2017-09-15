@@ -3,9 +3,9 @@ train:
     moving_average_decay: 0.9999
     learning_rate:
         type: tensorflow.train.exponential_decay
-        learning_rate: 0.1
-        decay_rate: 0.16
-        _num_epochs_per_decay: 30.0
+        learning_rate: !arith 0.1 * math.sqrt($(system.batch_size) / 128)
+        decay_rate: 0.1
+        _num_epochs_per_decay: 350
         decay_steps: !arith >
             $(dataset.num_examples_per_epoch.train) / $(system.batch_size) *
             $(train.learning_rate._num_epochs_per_decay)
