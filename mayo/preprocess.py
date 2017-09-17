@@ -225,7 +225,7 @@ class Preprocess(object):
         Reads data to populate the queue, and pops serialized data from queue
         """
         filename_queue = self._filename_queue(mode)
-        if self.num_readers > 1:
+        if mode == 'train' and self.config.system.preprocess.num_readers > 1:
             queue = self._queue(mode)
             enqueue_ops = []
             for _ in range(self.num_readers):
@@ -275,9 +275,13 @@ class Preprocess(object):
         return encoded, label, bbox, text
 
     def _unserialize(self, serialized, mode):
-        num_threads = self.config.system.num_preprocess_threads
-        if num_threads % 4:
-            raise ValueError('Expect number of threads to be a multiple of 4.')
+        num_threads = self.config.system.preprocess.num_threads
+        if mode == 'train':
+            if num_threads % 4:
+                raise ValueError(
+                    'Expect number of threads to be a multiple of 4.')
+        else:
+            num_threads = 1
         images_labels = []
         for tid in range(num_threads):
             log.debug('Preprocessing thread #{}'.format(tid))
