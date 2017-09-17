@@ -2,7 +2,6 @@ import re
 import os
 import ast
 import sys
-import copy
 import glob
 import operator
 import collections
@@ -144,116 +143,63 @@ def _dot_path(keyable, dot_path_key):
                     .format(dot_path_key, key, keyable))
         except (KeyError, IndexError):
             raise KeyError('Key path {!r} not found.'.format(dot_path_key))
-        if value is None:
-            import ipdb
-            ipdb.set_trace()
         keyable = value
     return keyable, final_key
 
 
-class _DotDict(dict):
+class _DotDict(collections.MutableMapping):
     def __init__(self, data, root):
-        super().__init__(data)
-        super().__setattr__('root', root)
-
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.items():
-            result[k] = copy.deepcopy(v, memo)
-        return result
-
-    def _recursive_apply(self, obj, func_map):
-        if isinstance(obj, dict):
-            for k, v in obj.items():
-                obj[k] = self._recursive_apply(v, func_map)
-        elif isinstance(obj, (tuple, list, set, frozenset)):
-            obj = obj.__class__(
-                [self._recursive_apply(v, func_map) for v in obj])
-        for cls, func in func_map.items():
-            if isinstance(obj, cls):
-                return func(obj)
-        return obj
-
-    def _wrap(self, obj):
-        def wrap(obj):
-            if type(obj) is dict:
-                return _DotDict(obj, self)
-            return obj
-        return self._recursive_apply(obj, {dict: wrap})
+        super().__init__()
+        super().__setattr__('_mapping', data)
+        super().__setattr__('_root', root)
 
     def _merge(self, d, md):
         for k, md_k in md.items():
-            d_k = dict.get(d, k)
+            d_k = d.get(k)
             d_map = isinstance(d_k, collections.Mapping)
             md_map = isinstance(md_k, collections.Mapping)
             if d_map and md_map:
                 self._merge(d_k, md_k)
             else:
-                dict.__setitem__(d, k, md_k)
+                d[k] = md_k
 
     def merge(self, md):
-        self._merge(self, md)
-
-    def to_dict(self):
-        unwrap = lambda obj: dict(obj) if isinstance(obj, dict) else obj
-        return self._recursive_apply(copy.deepcopy(self), {dict: unwrap})
-
-    def get(self, key, default=None):
-        try:
-            return self[key]
-        except KeyError:
-            return default
-
-    def __contains__(self, key):
-        try:
-            obj, key = _dot_path(self, key)
-        except KeyError:
-            return False
-        if obj is self:
-            return super(_DotDict, obj).__contains__(key)
-        return key in obj
+        self._merge(self._mapping, md)
 
     def _eval(self, value):
-        def eval_tag(value):
+        if isinstance(value, YamlScalarTag):
             return value.__class__(self._eval(value.content)).value()
-
-        def eval_str(value):
+        if isinstance(value, str):
             regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
             keys = re.findall(regex, value, re.MULTILINE)
             for k in keys:
-                value = value.replace('$({})'.format(k), str(self.root[k]))
+                v = str(self._root[k])
+                value = value.replace('$({})'.format(k), v)
             return value
-
-        eval_map = {YamlScalarTag: eval_tag, str: eval_str}
-        return self._recursive_apply(value, eval_map)
+        if isinstance(value, dict):
+            return _DotDict(value, self._root)
+        return value
 
     def __getitem__(self, key):
-        obj, key = _dot_path(self, key)
-        if obj is self:
-            value = super(_DotDict, obj).__getitem__(key)
-        else:
-            value = obj[key]
-        return self._eval(value)
+        obj, key = _dot_path(self._mapping, key)
+        return self._eval(obj[key])
     __getattr__ = __getitem__
 
     def __setitem__(self, key, value):
-        obj, key = _dot_path(self, key)
-        if obj is self:
-            super(_DotDict, obj).__setitem__(key, value)
-        else:
-            obj[key] = value
+        obj, key = _dot_path(self._mapping, key)
+        obj[key] = value
+    __setattr__ = __setitem__
 
     def __delitem__(self, key):
-        obj, key = _dot_path(self, key)
-        if obj is self:
-            super(_DotDict, obj).__delitem__(key)
-        else:
-            del obj[key]
+        obj, key = _dot_path(self._mapping, key)
+        del obj[key]
+    __delattr__ = __delitem__
 
-    __setattr__ = dict.__setitem__
-    __delattr__ = dict.__delitem__
+    def __iter__(self):
+        return iter(self._mapping)
+
+    def __len__(self):
+        return len(self._mapping)
 
 
 class Config(_DotDict):
@@ -268,7 +214,6 @@ class Config(_DotDict):
 
     def merge(self, dictionary):
         super().merge(dictionary)
-        self._wrap(self)
         if dictionary.get('system', {}).get('log'):
             self._setup_log_level()
 
@@ -287,7 +232,7 @@ class Config(_DotDict):
         if file is not None:
             file = open(file, 'w')
         kwargs = {'explicit_start': True, 'width': 70, 'indent': 4}
-        return yaml.dump(self.to_dict(), file, **kwargs)
+        return yaml.dump(self._mapping, file, **kwargs)
 
     def image_shape(self):
         params = self.dataset.preprocess.shape
