@@ -21,7 +21,7 @@ model:
               stddev: 0.05
         - &pool
           type: max_pool
-          kernel_size: [2, 2]
+          kernel_size: [3, 3]
           stride: 2
           padding: valid
         - &norm
@@ -46,7 +46,7 @@ model:
         - {name: conv1, <<: *conv, kernel_size: 5, num_outputs: 64}
         - {name: pool1, <<: *pool}
         - {name: norm1, <<: *norm}
-        - {name: conv2, <<: *conv, kernel_size: 2, num_outputs: 64}
+        - {name: conv2, <<: *conv, kernel_size: 5, num_outputs: 64}
         - {name: norm2, <<: *norm}
         - {name: pool2, <<: *pool}
         - {name: flatten2, type: flatten}
