@@ -82,7 +82,7 @@ class Evaluate(Session):
             log.info('Evaluation complete.')
             log.info('    top1: {}, top5: {} [{} images]'.format(
                 format_percent(top1_acc), format_percent(top5_acc), total))
-        return top1_acc, top5_acc
+            return top1_acc, top5_acc
 
     def eval_all(self):
         log.info('Evaluating all checkpoints...')

@@ -129,22 +129,24 @@ ArithTag.register()
 ExecTag.register()
 
 
-def _dot_path(keyable, dot_path_key, insert_if_not_exists=False):
+def _dot_path(keyable, dot_path_key):
     *dot_path, final_key = dot_path_key.split('.')
     for key in dot_path:
-        if isinstance(keyable, (tuple, list)):
-            key = int(key)
-        if insert_if_not_exists:
-            keyable = dict.setdefault(keyable, key, keyable.__class__())
-            continue
         try:
-            value = dict.get(keyable, key)
-        except KeyError:
+            if isinstance(keyable, (tuple, list)):
+                value = keyable[int(key)]
+            elif isinstance(keyable, dict):
+                value = dict.__getitem__(keyable, key)
+            else:
+                raise TypeError(
+                    'Key path {!r} resolution stopped at {!r} because the '
+                    'current object {!r} is not key-addressable.'
+                    .format(dot_path_key, key, keyable))
+        except (KeyError, IndexError):
             raise KeyError('Key path {!r} not found.'.format(dot_path_key))
-        except AttributeError:
-            raise AttributeError(
-                'Key path {!r} resolution stopped at {!r} because the '
-                'current object is not dict-like.'.format(dot_path_key, key))
+        if value is None:
+            import ipdb
+            ipdb.set_trace()
         keyable = value
     return keyable, final_key
 
@@ -182,13 +184,14 @@ class _DotDict(dict):
         return self._recursive_apply(obj, {dict: wrap})
 
     def _merge(self, d, md):
-        for k, v in md.items():
-            can_merge = k in d and isinstance(d[k], dict)
-            can_merge = can_merge and isinstance(md[k], collections.Mapping)
-            if can_merge:
-                self._merge(d[k], md[k])
+        for k, md_k in md.items():
+            d_k = dict.get(d, k)
+            d_map = isinstance(d_k, collections.Mapping)
+            md_map = isinstance(md_k, collections.Mapping)
+            if d_map and md_map:
+                self._merge(d_k, md_k)
             else:
-                d[k] = md[k]
+                dict.__setitem__(d, k, md_k)
 
     def merge(self, md):
         self._merge(self, md)
@@ -224,8 +227,7 @@ class _DotDict(dict):
             regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
             keys = re.findall(regex, value, re.MULTILINE)
             for k in keys:
-                d, fk = _dot_path(self.root, k)
-                value = value.replace('$({})'.format(k), str(d[fk]))
+                value = value.replace('$({})'.format(k), str(self.root[k]))
             return value
 
         eval_map = {YamlScalarTag: eval_tag, str: eval_str}
@@ -271,7 +273,7 @@ class Config(_DotDict):
     def merge(self, dictionary):
         super().merge(dictionary)
         self._wrap(self)
-        if dictionary.get('system', {}).get('log_level', None):
+        if dictionary.get('system', {}).get('log_level'):
             self._setup_log_level()
 
     def yaml_update(self, file):
