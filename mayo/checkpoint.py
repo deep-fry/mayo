@@ -20,11 +20,11 @@ class CheckpointManifestNotFoundError(FileNotFoundError):
 class CheckpointHandler(object):
     _checkpoint_basename = 'checkpoint'
 
-    def __init__(self, session, load, save, search_paths):
+    def __init__(self, session, load, save, search_path):
         super().__init__()
         self._session = session
         self._load, self._save = load, save
-        self._search_paths = search_paths
+        self._search_path = search_path
         self._checkpoint_directories = {}
 
     def _directory(self, is_saving):
@@ -32,7 +32,7 @@ class CheckpointHandler(object):
             return self._checkpoint_directories[is_saving]
         except KeyError:
             pass
-        paths = self._search_paths.get('save' if is_saving else 'load')
+        paths = self._search_path.get('save' if is_saving else 'load')
         path = paths[0]
         for each in paths:
             if not os.path.isdir(each):

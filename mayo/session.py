@@ -20,7 +20,7 @@ class Session(object):
             self.tf_session,
             config.system.checkpoint.load,
             config.system.checkpoint.save,
-            config.system.search_paths.checkpoints)
+            config.system.search_path.checkpoint)
 
     def __del__(self):
         log.debug('Finishing...')

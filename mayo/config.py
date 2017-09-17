@@ -269,7 +269,7 @@ class Config(_DotDict):
     def merge(self, dictionary):
         super().merge(dictionary)
         self._wrap(self)
-        if dictionary.get('system', {}).get('log_level'):
+        if dictionary.get('system', {}).get('log'):
             self._setup_log_level()
 
     def yaml_update(self, file):
@@ -280,7 +280,7 @@ class Config(_DotDict):
         if isinstance(value, str):
             value = yaml.load(value)
         self[key] = value
-        if 'system.log_level' in key:
+        if 'system.log' in key:
             self._setup_log_level()
 
     def to_yaml(self, file=None):
@@ -307,10 +307,10 @@ class Config(_DotDict):
         except KeyError:
             raise KeyError('Mode {!r} not recognized.'.format(mode))
         files = []
-        search_paths = self.system.search_paths.datasets
+        search_path = self.system.search_path.dataset
         paths = [path]
         if not os.path.isabs(path):
-            paths = [os.path.join(d, path) for d in search_paths]
+            paths = [os.path.join(d, path) for d in search_path]
         for p in paths:
             files += glob.glob(p)
         if not files:
@@ -335,9 +335,9 @@ class Config(_DotDict):
         sys.excepthook = self._excepthook
 
     def _setup_log_level(self):
-        level = self.get('system.log_level.mayo', 'info')
+        level = self.get('system.log.mayo', 'info')
         if level != 'info':
             from mayo.log import log
             log.level = level
-        level = self.get('system.log_level.tensorflow', 0)
+        level = self.get('system.log.tensorflow', 0)
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level)

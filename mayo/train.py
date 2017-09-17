@@ -122,7 +122,7 @@ class Train(Session):
         self.checkpoint.load()
 
     def _update_progress(self, epoch, loss, accuracy, cp_epoch):
-        metric_count = self.config.system.metrics_history_count
+        metric_count = self.config.system.log.metrics_history_count
         if not isinstance(cp_epoch, str):
             cp_epoch = '{:.2f}'.format(cp_epoch)
         info = 'epoch: {:.2f} | loss: {:10f}{:5} | acc: {:5.2f}%'
@@ -151,7 +151,7 @@ class Train(Session):
     @property
     @memoize_method
     def _summary_writer(self):
-        path = self.config.system.search_paths.summaries[0]
+        path = self.config.system.search_path.summary[0]
         return tf.summary.FileWriter(path, graph=self.graph)
 
     def _save_summary(self, epoch):
@@ -186,7 +186,7 @@ class Train(Session):
                     raise ValueError('Model diverged with a nan-valued loss.')
                 self._update_progress(epoch, loss, acc, cp_epoch)
                 summary_delta = delta('train.summary.epoch', epoch)
-                if system.save_summary and summary_delta >= 0.1:
+                if system.summary.save and summary_delta >= 0.1:
                     self._save_summary(epoch)
                 floor_epoch = math.floor(epoch)
                 if every('train.checkpoint.epoch', floor_epoch, cp_interval):

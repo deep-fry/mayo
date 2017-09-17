@@ -1,28 +1,30 @@
 ---
 system:
-    pdb:
-        use: true
-        skip: [KeyboardInterrupt, FileNotFoundError]
-    log_level:
-        mayo: info
-        tensorflow: 2
     num_gpus: 1
     preprocess:
         num_readers: 4
         num_threads: 8
     batch_size: 128
     max_epochs: 120
-    search_paths:
-        datasets:
+    pdb:
+        use: true
+        skip:
+            - KeyboardInterrupt
+            - FileNotFoundError
+    log:
+        mayo: info
+        tensorflow: 2
+        metrics_history_count: 200
+    search_path:
+        dataset:
             - datasets/
-        checkpoints:
+        checkpoint:
             save: &cp_paths
                 - checkpoints/$(model.name)/$(dataset.name)/
             load: *cp_paths
-        summaries:
+        summary:
             - summaries/$(model.name)/$(dataset.name)/
     checkpoint:
         load: latest
         save: {interval: 1}
-    save_summary: true
-    metrics_history_count: 200
+    summary: {save: true}

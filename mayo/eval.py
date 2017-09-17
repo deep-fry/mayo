@@ -37,7 +37,7 @@ class Evaluate(Session):
         interval = delta('eval.duration', time.time())
         if interval != 0:
             batch_size = self.config.system.batch_size
-            metric_count = self.config.system.metrics_history_count
+            metric_count = self.config.system.log.metrics_history_count
             imgs_per_sec = batch_size * delta('eval.step', step) / interval
             imgs_per_sec = moving_metrics(
                 'eval.imgs_per_sec', imgs_per_sec,
