@@ -36,9 +36,11 @@ def every(name, value, interval):
     if interval <= 0:
         return False
     name += '.every'
-    prev_value = _persistent_dict.get(name, value)
-    _persistent_dict[name] = value
-    return value - prev_value >= interval
+    next_value = _persistent_dict.setdefault(name, value) + interval
+    if value < next_value:
+        return False
+    _persistent_dict[name] = next_value
+    return True
 
 
 def moving_metrics(name, value, std=True, over=100):
