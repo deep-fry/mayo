@@ -200,8 +200,6 @@ class _DotDict(dict):
         unwrap = lambda obj: dict(obj) if isinstance(obj, dict) else obj
         return self._recursive_apply(copy.deepcopy(self), {dict: unwrap})
 
-    _magic = object()
-
     def get(self, key, default=None):
         try:
             return self[key]
