@@ -12,7 +12,6 @@ dataset:
             - {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: mobilenet_v1
-    depth_multiplier: &depth_multiplier 1
     hyper:
         - &regularizer
           type: tensorflow.contrib.layers.l2_regularizer
@@ -34,7 +33,7 @@ model:
         - &dsconv
           <<: *conv
           type: depthwise_separable_convolution
-          depth_multiplier: *depth_multiplier
+          depth_multiplier: 1
           depthwise_regularizer: null
           pointwise_regularizer: *regularizer
         - &pool
@@ -51,9 +50,12 @@ model:
           normalizer_fn: null
           weights_regularizer: *regularizer
     net:
-        - {name: conv0, <<: *conv, stride: 2,
-           num_outputs: !arith 'max(int(32 * $(depth_multiplier)), 8)',
-           weights_regularizer: *regularizer}
+        - name: conv0
+          <<: *conv
+          stride: 2
+          num_outputs: !arith >
+              max(int(32 * $(model.hyper.2.depth_multiplier)), 8)
+          weights_regularizer: *regularizer
         - {name: conv1, <<: *dsconv, stride: 1, num_outputs: 64}
         - {name: conv2, <<: *dsconv, stride: 2, num_outputs: 128}
         - {name: conv3, <<: *dsconv, stride: 1, num_outputs: 128}
