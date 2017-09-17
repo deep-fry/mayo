@@ -128,25 +128,6 @@ ArithTag.register()
 ExecTag.register()
 
 
-def _dot_path(keyable, dot_path_key):
-    *dot_path, final_key = dot_path_key.split('.')
-    for key in dot_path:
-        try:
-            if isinstance(keyable, (tuple, list)):
-                value = keyable[int(key)]
-            elif isinstance(keyable, dict):
-                value = dict.__getitem__(keyable, key)
-            else:
-                raise TypeError(
-                    'Key path {!r} resolution stopped at {!r} because the '
-                    'current object {!r} is not key-addressable.'
-                    .format(dot_path_key, key, keyable))
-        except (KeyError, IndexError):
-            raise KeyError('Key path {!r} not found.'.format(dot_path_key))
-        keyable = value
-    return keyable, final_key
-
-
 class _DotDict(collections.MutableMapping):
     def __init__(self, data, root):
         super().__init__()
@@ -180,18 +161,38 @@ class _DotDict(collections.MutableMapping):
             return _DotDict(value, self._root)
         return value
 
+    def _dot_path(self, dot_path_key):
+        *dot_path, final_key = dot_path_key.split('.')
+        keyable = self._mapping
+        for key in dot_path:
+            try:
+                if isinstance(keyable, (tuple, list)):
+                    value = keyable[int(key)]
+                elif isinstance(keyable, collections.Mapping):
+                    value = keyable[key]
+                else:
+                    raise TypeError(
+                        'Key path {!r} resolution stopped at {!r} because the '
+                        'current object {!r} is not key-addressable.'
+                        .format(dot_path_key, key, keyable))
+            except (KeyError, IndexError):
+                raise KeyError(
+                    'Key path {!r} cannot be resolved.'.format(dot_path_key))
+            keyable = value
+        return keyable, final_key
+
     def __getitem__(self, key):
-        obj, key = _dot_path(self._mapping, key)
+        obj, key = self._dot_path(key)
         return self._eval(obj[key])
     __getattr__ = __getitem__
 
     def __setitem__(self, key, value):
-        obj, key = _dot_path(self._mapping, key)
+        obj, key = self._dot_path(key)
         obj[key] = value
     __setattr__ = __setitem__
 
     def __delitem__(self, key):
-        obj, key = _dot_path(self._mapping, key)
+        obj, key = self._dot_path(key)
         del obj[key]
     __delattr__ = __delitem__
 
