@@ -178,7 +178,6 @@ class Train(Session):
         # train iterations
         system = self.config.system
         cp_interval = system.checkpoint.save.get('interval', 0)
-        prev_value = 0
         try:
             while True:
                 loss, acc, imgs_seen = self.once()
@@ -190,9 +189,7 @@ class Train(Session):
                 if system.save_summary and summary_delta >= 0.1:
                     self._save_summary(epoch)
                 floor_epoch = math.floor(epoch)
-                save_cond, prev_value = every('train.checkpoint.epoch',
-                    floor_epoch, cp_interval, prev_value)
-                if save_cond:
+                if every('train.checkpoint.epoch', floor_epoch, cp_interval):
                     self._update_progress(epoch, loss, acc, 'saving')
                     with log.demote():
                         self.checkpoint.save(floor_epoch)

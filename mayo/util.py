@@ -32,15 +32,13 @@ def delta(name, value):
     return value - prev_value
 
 
-def every(name, value, interval, prev_value):
+def every(name, value, interval):
     if interval <= 0:
         return False
     name += '.every'
-    save = (value - prev_value) >= interval
-    if save:
-        prev_value = _persistent_dict.get(name, value)
+    prev_value = _persistent_dict.get(name, value)
     _persistent_dict[name] = value
-    return (save, prev_value)
+    return value - prev_value >= interval
 
 
 def moving_metrics(name, value, std=True, over=100):
