@@ -202,13 +202,11 @@ class _DotDict(dict):
 
     _magic = object()
 
-    def get(self, key, default=_magic):
+    def get(self, key, default=None):
         try:
             return self[key]
         except KeyError:
-            if default is self._magic:
-                raise
-        return default
+            return default
 
     def __contains__(self, key):
         try:
