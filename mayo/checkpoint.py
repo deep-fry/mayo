@@ -102,7 +102,7 @@ class CheckpointHandler(object):
             return tf.global_variables()
 
     def load(self, epoch=None):
-        if not self._load and not isinstance(self._load, int):
+        if self._load is False:
             log.debug('Checkpoint loading disabled.')
             return
         if epoch is not None:
