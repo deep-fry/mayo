@@ -1,6 +1,8 @@
 ---
 system:
-    use_pdb: true
+    pdb:
+        use: true
+        skip: [KeyboardInterrupt, FileNotFoundError]
     log_level:
         mayo: info
         tensorflow: 2

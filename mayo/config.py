@@ -321,10 +321,13 @@ class Config(_DotDict):
 
     def _excepthook(self, etype, evalue, etb):
         from IPython.core import ultratb
+        from mayo.util import import_from_string
         ultratb.FormattedTB()(etype, evalue, etb)
-        if etype is KeyboardInterrupt:
-            return
-        if self.get('system.use_pdb', True):
+        for exc in self.get('system.pdb.skip', []):
+            exc = import_from_string(exc)
+            if issubclass(etype, exc):
+                return
+        if self.get('system.pdb.use', True):
             import ipdb
             ipdb.post_mortem(etb)
 

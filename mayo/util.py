@@ -74,7 +74,11 @@ def import_from_file(path):
 def import_from_dot_path(path, m=None):
     components = path.split('.')
     if m is None:
-        m = __import__(components.pop(0))
+        root = components.pop(0)
+        try:
+            m = __builtins__[root]
+        except KeyError:
+            m = __import__(root)
     for c in components:
         m = getattr(m, c)
     return m
