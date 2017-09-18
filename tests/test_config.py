@@ -50,7 +50,7 @@ class TestDotDict(TestCase):
         self.assertListEqual(list(self.d), list(self.od))
 
     def test_len(self):
-        self.assertEqual(len(self.d), len(self.od))
+        self.assertCountEqual(self.d, self.od)
 
     def test_link(self):
         od = {'a': '$(b)'}
