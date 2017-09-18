@@ -209,5 +209,5 @@ Arguments:
             else:
                 with log.use_pause_level('off'):
                     log.error(
-                        'We don\'t know what you mean by {!r}'.format(each))
+                        'We don\'t know what you mean by {!r}.'.format(each))
                 return

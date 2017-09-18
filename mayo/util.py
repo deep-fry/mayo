@@ -165,3 +165,14 @@ def tabular(data):
             cols.append(col)
         table.append("| {} |".format(" | ".join(cols)))
     return '\n'.join(table)
+
+
+def unique(items):
+    found = set()
+    keep = []
+    for item in items:
+        if item in found:
+            continue
+        found.add(item)
+        keep.append(item)
+    return keep

@@ -9,17 +9,6 @@ import collections
 import yaml
 
 
-def _unique(items):
-    found = set([])
-    keep = []
-    for item in items:
-        if item in found:
-            continue
-        found.add(item)
-        keep.append(item)
-    return keep
-
-
 class YamlTag(object):
     tag = None
 
@@ -126,6 +115,7 @@ class EvalTag(YamlScalarTag):
 
 ArithTag.register()
 ExecTag.register()
+EvalTag.register()
 
 
 class _DotDict(collections.MutableMapping):
@@ -136,7 +126,7 @@ class _DotDict(collections.MutableMapping):
                     self.__class__, type(data)))
         super().__init__()
         super().__setattr__('_mapping', data)
-        super().__setattr__('_root', root)
+        super().__setattr__('_root', root or data)
 
     @classmethod
     def _merge(cls, d, md):
@@ -162,7 +152,7 @@ class _DotDict(collections.MutableMapping):
                 if not keys:
                     break
                 for k in keys:
-                    d, fk = self._dot_path(k, self._root or self)
+                    d, fk = self._dot_path(k, self._root)
                     value = value.replace('$({})'.format(k), str(d[fk]))
             return value
         if isinstance(value, collections.Mapping):
@@ -224,7 +214,7 @@ class _DotDict(collections.MutableMapping):
 
 class Config(_DotDict):
     def __init__(self):
-        super().__init__({}, self)
+        super().__init__({})
         self._setup_excepthook()
         self._init_system_config()
 
