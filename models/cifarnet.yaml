@@ -12,6 +12,12 @@ dataset:
             - {type: standardize_image}
 model:
     name: cifarnet
+    description: |
+        A network model for CIFAR-10 training. References::
+            https://github.com/tensorflow/models/blob/master/tutorials/image/cifar10/cifar10.py
+            https://github.com/tensorflow/models/blob/master/slim/nets/cifarnet.py
+        The two models differs mainly in pooling kernel size, the former uses 3
+        whereas the latter uses 2; here 3 is used.
     hyper:
         - &conv
           type: convolution
@@ -21,7 +27,7 @@ model:
               stddev: 0.05
         - &pool
           type: max_pool
-          kernel_size: [3, 3]
+          kernel_size: 3
           stride: 2
           padding: valid
         - &norm
@@ -35,8 +41,8 @@ model:
           type: fully_connected
           weights_initializer:
               <<: *trunc_norm_init
-              stddev: 0.004
-          biases_initializer:
+              stddev: 0.04
+          biases_initializer: &bias_init
               type: tensorflow.constant_initializer
               value: 0.1
           weights_regularizer:
@@ -46,7 +52,8 @@ model:
         - {name: conv1, <<: *conv, kernel_size: 5, num_outputs: 64}
         - {name: pool1, <<: *pool}
         - {name: norm1, <<: *norm}
-        - {name: conv2, <<: *conv, kernel_size: 5, num_outputs: 64}
+        - {name: conv2, <<: *conv, kernel_size: 5, num_outputs: 64,
+           biases_initializer: *bias_init}
         - {name: norm2, <<: *norm}
         - {name: pool2, <<: *pool}
         - {name: flatten2, type: flatten}
@@ -60,7 +67,6 @@ model:
           weights_initializer:
               <<: *trunc_norm_init
               stddev: !arith 1.0 / 192.0
-          weights_regularizer:
-              null
+          weights_regularizer: null
           activation_fn: null
     logits: logits
