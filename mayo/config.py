@@ -212,20 +212,9 @@ class _DotDict(collections.MutableMapping):
         return len(self._mapping)
 
 
-class Config(_DotDict):
+class BaseConfig(_DotDict):
     def __init__(self):
         super().__init__({})
-        self._setup_excepthook()
-        self._init_system_config()
-
-    def _init_system_config(self):
-        root = os.path.dirname(__file__)
-        self.yaml_update(os.path.join(root, 'system.yaml'))
-
-    def merge(self, dictionary):
-        super().merge(dictionary)
-        if dictionary.get('system', {}).get('log'):
-            self._setup_log_level()
 
     def yaml_update(self, file):
         with open(file, 'r') as f:
@@ -245,15 +234,31 @@ class Config(_DotDict):
     def override_update(self, key, value):
         if isinstance(value, str):
             value = yaml.load(value)
-        self[key] = value
-        if 'system.log' in key:
-            self._setup_log_level()
+        self.merge({key: value})
 
     def to_yaml(self, file=None):
         if file is not None:
             file = open(file, 'w')
         kwargs = {'explicit_start': True, 'width': 70, 'indent': 4}
         return yaml.dump(self._mapping, file, **kwargs)
+
+
+class Config(BaseConfig):
+    def __init__(self):
+        super().__init__()
+        self._setup_excepthook()
+        self._init_system_config()
+
+    def _init_system_config(self):
+        root = os.path.dirname(__file__)
+        self.yaml_update(os.path.join(root, 'system.yaml'))
+
+    def merge(self, dictionary):
+        super().merge(dictionary)
+        update_log = dictionary.get('system', {}).get('log')
+        update_log = update_log or any('system.log' in k for k in dictionary)
+        if update_log:
+            self._setup_log_level()
 
     def image_shape(self):
         params = self.dataset.preprocess.shape
@@ -292,7 +297,7 @@ class Config(_DotDict):
         for exc in self.get('system.pdb.skip', []):
             exc = import_from_string(exc)
             if issubclass(etype, exc):
-                return
+                sys.exit(-1)
         if self.get('system.pdb.use', True):
             import ipdb
             ipdb.post_mortem(etb)

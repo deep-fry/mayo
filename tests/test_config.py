@@ -2,7 +2,7 @@ from common import TestCase
 
 import yaml
 
-from mayo.config import _DotDict, Config, ArithTag
+from mayo.config import ArithTag, _DotDict, BaseConfig, Config
 
 
 class TestYamlTags(TestCase):
@@ -79,12 +79,9 @@ class TestDotDict(TestCase):
         self.assertEqual(d['a'], 2)
 
 
-class TestConfig(TestCase):
+class TestBaseConfig(TestCase):
     def setUp(self):
-        self.config = Config()
-
-    def test_system(self):
-        self.assertIn('system', self.config)
+        self.config = BaseConfig()
 
     def test_yaml_update(self):
         self.config.yaml_update('models/lenet5.yaml')
@@ -99,3 +96,11 @@ class TestConfig(TestCase):
     def test_yaml_export(self):
         self.assertDictEqual(
             yaml.load(self.config.to_yaml()), self.config._mapping)
+
+
+class TestConfig(TestCase):
+    def setUp(self):
+        self.config = Config()
+
+    def test_system(self):
+        self.assertIn('system', self.config)
