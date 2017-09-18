@@ -1,5 +1,6 @@
+from common import TestCase
+
 import types
-import unittest
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -8,17 +9,12 @@ from mayo.net import _InstantiationParamTransformer
 from mayo.override import Rounder
 
 
-class TestTransformer(unittest.TestCase):
+class TestTransformer(TestCase):
     def setUp(self):
         self.num_classes = 10
         self.is_training = True
         self.transformer = _InstantiationParamTransformer(
             self.num_classes, self.is_training)
-
-    def _assertObjectEqual(self, x, y):
-        self.assertEqual(x.__class__, y.__class__)
-        self.assertEqual(
-            getattr(x, '__dict__', None), getattr(y, '__dict__', None))
 
     def test_create_hyperobjects(self):
         initializer = {
@@ -45,11 +41,11 @@ class TestTransformer(unittest.TestCase):
         self.transformer._create_hyperobjects(params)
         for key, value in params.items():
             if 'initializer' in key:
-                self._assertObjectEqual(value, initializer_object)
+                self.assertObjectEqual(value, initializer_object)
             elif 'regularizer' in key:
-                self._assertObjectEqual(value, regularizer_object)
+                self.assertObjectEqual(value, regularizer_object)
             elif 'overrider' in key:
-                self._assertObjectEqual(value, overrider_object)
+                self.assertObjectEqual(value, overrider_object)
 
     def test_config_layer(self):
         params = {
@@ -69,7 +65,7 @@ class TestTransformer(unittest.TestCase):
             x = x_scope
         with y as y_scope:
             y = y_scope
-        self._assertObjectEqual(x, y)
+        self.assertObjectEqual(x, y)
 
     def test_empty_norm_scope(self):
         null_scope = slim.arg_scope([])

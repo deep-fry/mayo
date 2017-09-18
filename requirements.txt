@@ -1,7 +1,9 @@
-PyYAML==3.12
-tensorflow==1.2.1
-docopt==0.6.2
-ipdb==0.10.3
-ipython==6.1.0
-readline==6.2.4.1
-termcolor=1.1.0
+PyYAML
+tensorflow
+docopt
+ipdb
+ipython
+readline
+termcolor
+nose
+ipdbplugin

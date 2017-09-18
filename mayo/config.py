@@ -129,7 +129,11 @@ ExecTag.register()
 
 
 class _DotDict(collections.MutableMapping):
-    def __init__(self, data, root):
+    def __init__(self, data, root=None):
+        if not isinstance(data, collections.Mapping):
+            raise TypeError(
+                'Cannot construct {!r} from data of type {!r}'.format(
+                    self.__class__, type(data)))
         super().__init__()
         super().__setattr__('_mapping', data)
         super().__setattr__('_root', root)
@@ -151,25 +155,38 @@ class _DotDict(collections.MutableMapping):
         if isinstance(value, YamlScalarTag):
             return value.__class__(self._eval(value.content)).value()
         if isinstance(value, str):
-            regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]+)\)'
-            keys = re.findall(regex, value, re.MULTILINE)
-            for k in keys:
-                v = str(self._root[k])
-                value = value.replace('$({})'.format(k), v)
+            regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]*)\)'
+            while True:
+                keys = re.findall(regex, value, re.MULTILINE)
+                if not keys:
+                    break
+                for k in keys:
+                    d, fk = self._dot_path(k, self._root or self)
+                    value = value.replace('$({})'.format(k), str(d[fk]))
             return value
         if isinstance(value, dict):
             return _DotDict(value, self._root)
+        if isinstance(value, (tuple, list, set, frozenset)):
+            return value.__class__(self._eval(v) for v in value)
         return value
 
-    def _dot_path(self, dot_path_key):
+    def _dot_path(self, dot_path_key, dictionary=None, setdefault=None):
         *dot_path, final_key = dot_path_key.split('.')
-        keyable = self._mapping
-        for key in dot_path:
+        keyable = dictionary or self._mapping
+        for index, key in enumerate(dot_path):
             try:
                 if isinstance(keyable, (tuple, list)):
                     value = keyable[int(key)]
                 elif isinstance(keyable, collections.Mapping):
-                    value = keyable[key]
+                    if setdefault:
+                        try:
+                            next_key = dot_path[index + 1]
+                        except IndexError:
+                            next_key = final_key
+                        default_cls = list if next_key.isdigit() else dict
+                        value = keyable.setdefault(key, default_cls())
+                    else:
+                        value = keyable[key]
                 else:
                     raise TypeError(
                         'Key path {!r} resolution stopped at {!r} because the '
@@ -187,7 +204,7 @@ class _DotDict(collections.MutableMapping):
     __getattr__ = __getitem__
 
     def __setitem__(self, key, value):
-        obj, key = self._dot_path(key)
+        obj, key = self._dot_path(key, setdefault=True)
         obj[key] = value
     __setattr__ = __setitem__
 
