@@ -24,7 +24,7 @@ class TestDotDict(TestCase):
     def test_simple_construct(self):
         od = {'a': 1}
         d = _DotDict(od)
-        self.assertDictEqual(dict(d), od)
+        self.assertDictEqual(d._mapping, od)
 
     def test_incorrect_type_construct(self):
         with self.assertRaises(TypeError):
@@ -32,7 +32,11 @@ class TestDotDict(TestCase):
 
     def test_merge(self):
         self.d.merge({'a': 4, 'b': {'d': 3}})
-        self.assertDictEqual(dict(self.d), {'a': 4, 'b': {'c': 2, 'd': 3}})
+        self.assertDictEqual(self.d._mapping, {'a': 4, 'b': {'c': 2, 'd': 3}})
+
+    def test_dot_path_merge(self):
+        self.d.merge({'b.c': 3})
+        self.assertDictEqual(self.d._mapping, {'a': 1, 'b': {'c': 3}})
 
     def test_get(self):
         d = self.d

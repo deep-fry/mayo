@@ -138,18 +138,19 @@ class _DotDict(collections.MutableMapping):
         super().__setattr__('_mapping', data)
         super().__setattr__('_root', root)
 
-    def _merge(self, d, md):
+    @classmethod
+    def _merge(cls, d, md):
         for k, md_k in md.items():
             d_k = d.get(k)
             d_map = isinstance(d_k, collections.Mapping)
             md_map = isinstance(md_k, collections.Mapping)
             if d_map and md_map:
-                self._merge(d_k, md_k)
+                cls._merge(d_k, md_k)
             else:
                 d[k] = md_k
 
     def merge(self, md):
-        self._merge(self._mapping, md)
+        self._merge(self, md)
 
     def _eval(self, value):
         if isinstance(value, YamlScalarTag):
@@ -164,8 +165,9 @@ class _DotDict(collections.MutableMapping):
                     d, fk = self._dot_path(k, self._root or self)
                     value = value.replace('$({})'.format(k), str(d[fk]))
             return value
-        if isinstance(value, dict):
-            return _DotDict(value, self._root)
+        if isinstance(value, collections.Mapping):
+            if not isinstance(value, _DotDict):
+                return _DotDict(value, self._root)
         if isinstance(value, (tuple, list, set, frozenset)):
             return value.__class__(self._eval(v) for v in value)
         return value
@@ -236,8 +238,19 @@ class Config(_DotDict):
             self._setup_log_level()
 
     def yaml_update(self, file):
-        with open(file, 'r') as file:
-            self.merge(yaml.load(file))
+        with open(file, 'r') as f:
+            dictionary = yaml.load(f)
+        self.merge(dictionary)
+        try:
+            imports = dictionary.pop('_import')
+        except KeyError:
+            return
+        if isinstance(imports, str):
+            imports = [imports]
+        for i in imports:
+            if not os.path.isabs(i):
+                i = os.path.join(os.path.dirname(file), i)
+            self.yaml_update(i)
 
     def override_update(self, key, value):
         if isinstance(value, str):
