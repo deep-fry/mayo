@@ -4,7 +4,6 @@ import re
 
 import yaml
 import numpy as np
-import tensorflow as tf
 from docopt import docopt
 
 import mayo
@@ -13,29 +12,11 @@ from mayo.log import log
 
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
-_USAGE = """
-The mayo checkpoint helper.
-Usage:
-    ckpt <importer> <file> info
-    ckpt <importer> <file> export <exporter> <to_file> [options]
-
-Arguments:
-    <importer> can be one of: {importer}.
-
-Options:
-    --dry-run           Performs a dry run, not actually changing anything
-                        but shows things to be changed.
-    --rules=<yaml>      Replaces keys with new keys given in the specified YAML
-                        file using `re.sub`.  The YAML file should be written
-                        as ordered mappings with `<pattern>: <replacement>`,
-                        which we will apply the substitution in the order of
-                        mapping.
-"""
-
 
 class BaseImporter(object):
     def __init__(self, file):
         super().__init__()
+        log.key('Importing with {}...'.format(self.__class__.__name__))
         self.var_to_shape, self.var_to_tensor = self._import(file)
 
     @staticmethod
@@ -56,6 +37,7 @@ class NumpyImporter(BaseImporter):
 class CheckpointImporter(BaseImporter):
     @staticmethod
     def _import(file):
+        import tensorflow as tf
         reader = tf.train.NewCheckpointReader(file)
         var_to_shape = reader.get_variable_to_shape_map()
         var_to_tensor = {}
@@ -140,6 +122,7 @@ class BaseExporter(object):
         if dry_run:
             log.key('Dry run, not actually saving.')
             return
+        log.key('Exporting with {}...'.format(self.__class__.__name__))
         self._export(file)
 
     def _export(self, file):
@@ -153,53 +136,99 @@ class NumpyExporter(BaseExporter):
 
 class CheckpointExporter(BaseExporter):
     def _export(self, file):
+        import tensorflow as tf
         session = tf.Session()
         new_vars = []
+        log.info('Instantiating variables...')
         with session.as_default():
             for var, tensor in self.var_to_tensor.items():
                 new_vars.append(tf.Variable(tensor, name=var))
-        log.key('Saving checkpoint with renamed variables...')
+        log.info('Saving checkpoint with renamed variables...')
         saver = tf.train.Saver()
         session.run(tf.variables_initializer(new_vars))
         saver.save(session, file)
 
 
 _importers = {
-    'numpy': NumpyImporter,
-    'checkpoint': CheckpointImporter,
-    'torch': PyTorchImporter,
+    '': CheckpointImporter,
+    '.npy': NumpyImporter,
+    '.pth': PyTorchImporter,
 }
 _exporters = {
-    'numpy': NumpyExporter,
-    'checkpoint': CheckpointExporter,
+    '': CheckpointExporter,
+    '.npy': NumpyExporter,
 }
 
 
-def _porter(args, porter):
-    key = args['<{}porter>'.format(porter.lower())]
-    omap = _importers if porter.lower() == 'im' else _exporters
+_USAGE = """
+The mayo checkpoint helper.
+Usage:
+    {executable} <from_file> info
+    {executable} <from_file> export <to_file> [options]
+
+Arguments:
+    * <from_file> can be a file that is either:
+{importers}
+    * <to_file> can be one of:
+{exporters}
+
+Options:
+    --dry-run           Performs a dry run, not actually changing anything
+                        but shows things to be changed.
+    --rules=<yaml>      Replaces keys with new keys given in the specified YAML
+                        file using `re.sub`.  The YAML file should be written
+                        as ordered mappings with `<pattern>: <replacement>`,
+                        which we will apply the substitution in the order of
+                        mapping.
+"""
+
+
+def usage():
+    def format_porters(porters):
+        descs = []
+        for index, (suffix, porter) in enumerate(porters.items()):
+            if not suffix:
+                desc = 'a file without a suffix'
+            else:
+                desc = 'a {!r} file'.format(suffix)
+            final = ';'
+            if index == len(porters) - 2:
+                final = '; or'
+            elif index == len(porters) - 1:
+                final = '.'
+            descs.append(
+                '{}- {} ({}){}'.format(' ' * 8, desc, porter.__name__, final))
+        return '\n'.join(descs)
+
+    importers = format_porters(_importers)
+    exporters = format_porters(_exporters)
+    return _USAGE.format(
+        executable=__file__, importers=importers, exporters=exporters)
+
+
+def _porter(file, porters):
+    name, suffix = os.path.splitext(file)
     try:
-        return omap[key]
+        return porters[suffix]
     except KeyError:
-        raise KeyError(
-            '{}porter should be one of {!r}'
-            .format(porter.capitalize(), ', '.join(omap)))
+        raise ValueError('Unrecognized suffix {!r}'.format(suffix))
 
 
 def main():
-    usage = _USAGE.format(importer=', '.join(_importers))
-    args = docopt(usage, version=mayo.__version__)
-    importer_cls = _porter(args, 'im')
-    importer = importer_cls(args['<file>'])
+    args = docopt(usage(), version=mayo.__version__)
+    from_file = args['<from_file>']
+    importer_cls = _porter(from_file, _importers)
+    importer = importer_cls(from_file)
     if args['info']:
         print(yaml.dump(importer.var_to_shape))
     elif args['export']:
         rules = args['--rules']
         with open(rules, 'r') as f:
             rules = yaml.load(f)
-        exporter_cls = _porter(args, 'ex')
+        to_file = args['<to_file>']
+        exporter_cls = _porter(to_file, _exporters)
         exporter = exporter_cls(importer.var_to_tensor, rules)
-        exporter.export(args['<to_file>'], args['--dry-run'])
+        exporter.export(to_file, args['--dry-run'])
     else:
         raise TypeError('Do not know what we should do.')
 
