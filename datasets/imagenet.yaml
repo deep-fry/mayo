@@ -11,10 +11,9 @@ dataset:
         validate: 50000
     shape:
         channels: 3
-    channel_means:
-        - 0.485019607843137
-        - 0.4579607843
-        - 0.407607843137255
+    moment:
+        mean: [0.485, 0.456, 0.406]
+        std: [0.229, 0.224, 0.225]
     preprocess:
         train:
             - {type: distort_bbox}

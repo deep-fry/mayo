@@ -7,10 +7,10 @@ from mayo.util import memoize_method, multi_objects_from_params
 
 
 class _ImagePreprocess(object):
-    def __init__(self, shape, means, bbox, tid):
+    def __init__(self, shape, moment, bbox, tid):
         super().__init__()
         self.shape = shape
-        self.means = means
+        self.moment = moment or {}
         self.bbox = bbox
         self.tid = tid
 
@@ -82,14 +82,27 @@ class _ImagePreprocess(object):
         return i
 
     def subtract_channel_means(self, i):
-        if not self.means:
+        means = self.moment.get('mean')
+        if not means:
             log.warn(
-                'Channel means not found in "dataset.channel_means", '
-                'defaulting to 0.5 for each channel.')
-            self.means = [0.5] * i.shape[2]
-        shape = [1, 1, len(self.means)]
-        means = tf.constant(self.means, shape=shape, name='image_means')
+                'Channel means not supplied, defaulting '
+                'to 0.5 for each channel.')
+            means = [0.5] * i.shape[2]
+        shape = [1, 1, len(means)]
+        means = tf.constant(means, shape=shape, name='image_means')
         return i - means
+
+    def normalize_channels(self, i):
+        i = self.subtract_channel_means(i)
+        stds = self.moment.get('std')
+        if not stds:
+            log.warn(
+                'Channel std value not supplied, defaulting '
+                'to 1.0 for each channel.')
+            return i
+        shape = [1, 1, len(stds)]
+        stds = tf.constant(stds, shape=shape, name='image_stds')
+        return i / stds
 
     def subtract_image_mean(self, i):
         return i - tf.reduce_mean(i)
@@ -175,8 +188,8 @@ class Preprocess(object):
         channels = self.config.image_shape()[-1]
         image = self._decode_jpeg(buffer, channels)
         shape = self.config.image_shape()
-        means = self.config.dataset.get('channel_means')
-        image_preprocess = _ImagePreprocess(shape, means, bbox, tid)
+        moment = self.config.dataset.get('moment')
+        image_preprocess = _ImagePreprocess(shape, moment, bbox, tid)
         actions_map = self.config.dataset.preprocess
         mode_actions = actions_map[mode] or []
         if not isinstance(mode_actions, collections.Sequence):

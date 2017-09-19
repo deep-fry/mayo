@@ -8,8 +8,7 @@ dataset:
             channels: 3
         validate: []
         final:
-            - {type: subtract_image_mean}
-            - {type: linear_map, scale: 255.0}
+            - {type: normalize_channels}
 model:
     name: alexnet
     description: |
