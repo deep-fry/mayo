@@ -12,6 +12,18 @@ dataset:
             - {type: linear_map, scale: 255.0}
 model:
     name: alexnet
+    description: |
+        This AlexNet implementation is based on::
+            One weird trick for parallelizing convolutional neural networks
+            (Alex Krizhevsky, 2014)
+
+        We use the following reference models::
+            https://github.com/tensorflow/models/blob/master/slim/nets/alexnet.py
+            https://github.com/pytorch/vision/blob/master/torchvision/models/alexnet.py
+
+        Unfortunately there are some discrepancies between the above models,
+        namely `conv4` uses different output sizes (384 vs. 256), and padding
+        of `conv1` is different (valid vs. same).
     hyper:
         - &init
           biases_initializer:
@@ -34,25 +46,16 @@ model:
               type: tensorflow.truncated_normal_initializer
               stddev: 0.09
           <<: *init
-        - &norm
-          type: local_response_normalization
-          depth_radius: 2
-          alpha: 0.00002
-          beta: 0.75
-          bias: 1.0
     net:
-        - {name: conv1, <<: *conv, kernel_size: 11, stride: 4, num_outputs: 64,
-           padding: 'valid'}
-        - {name: norm1, <<: *norm}
+        - {name: conv1, <<: *conv, kernel_size: 11, stride: 4, num_outputs: 64}
         - &pool
           {name: pool1, type: max_pool, kernel_size: 3, stride: 2,
            padding: valid}
         - {name: conv2, <<: *conv, kernel_size: 5, stride: 1, num_outputs: 192}
-        - {name: norm2, <<: *norm}
         - {name: pool2, <<: *pool}
         - &conv_repeat
           {name: conv3, <<: *conv, kernel_size: 3, stride: 1, num_outputs: 384}
-        - {name: conv4, <<: *conv_repeat}
+        - {name: conv4, <<: *conv_repeat, num_outputs: 256}
         - {name: conv5, <<: *conv_repeat, num_outputs: 256}
         - {name: pool5, <<: *pool}
         - {name: flatten5, type: flatten}
