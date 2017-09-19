@@ -16,13 +16,11 @@ os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 _USAGE = """
 The mayo checkpoint helper.
 Usage:
-    ckpt <importer> info <file>
-    ckpt <importer> to-checkpoint \
-<file> <to> [<match>] --rules=<yaml> [--dry-run]
+    ckpt <importer> <file> info
+    ckpt <importer> <file> export <exporter> <to_file> [options]
 
 Arguments:
-    The argument <importer> can be one of the following:
-        checkpoint, numpy, torch.
+    <importer> can be one of: {importer}.
 
 Options:
     --dry-run           Performs a dry run, not actually changing anything
@@ -35,7 +33,7 @@ Options:
 """
 
 
-class Importer(object):
+class BaseImporter(object):
     def __init__(self, file):
         super().__init__()
         self.var_to_shape, self.var_to_tensor = self._import(file)
@@ -44,7 +42,7 @@ class Importer(object):
         raise NotImplementedError
 
 
-class NumpyImporter(Importer):
+class NumpyImporter(BaseImporter):
     def __init__(self):
         super().__init__()
         self._encoding = 'ASCII'
@@ -55,7 +53,7 @@ class NumpyImporter(Importer):
         return var_to_shape, var_to_tensor
 
 
-class CheckpointImporter(Importer):
+class CheckpointImporter(BaseImporter):
     def _import(self, file):
         reader = tf.train.NewCheckpointReader(file)
         var_to_shape = reader.get_variable_to_shape_map()
@@ -65,7 +63,7 @@ class CheckpointImporter(Importer):
         return var_to_shape, var_to_tensor
 
 
-class PyTorchImporter(Importer):
+class PyTorchImporter(BaseImporter):
     @staticmethod
     def _permute(tensor):
         """
@@ -100,25 +98,15 @@ class PyTorchImporter(Importer):
         return var_to_shape, var_to_tensor
 
 
-_importer_map = {
-    'numpy': NumpyImporter,
-    'checkpoint': CheckpointImporter,
-    'torch': PyTorchImporter,
-}
-
-
-class CheckpointExporter(object):
-    def __init__(self, importer):
+class BaseExporter(object):
+    def __init__(self, var_to_tensor, rules):
         super().__init__()
-        self._session = tf.Session()
-        self._importer = importer
+        self.var_to_tensor = self._rename(var_to_tensor, rules)
 
-    def var_to_shape_map(self, ckpt):
-        return dict(tf.contrib.framework.list_variables(ckpt))
-
-    def var_to_var_map(self, rules):
+    @staticmethod
+    def _rename_map(variables, rules):
         vvmap = {}
-        for v in self._importer.var_to_shape:
+        for v in variables:
             nv = v
             for pattern, replacement in rules.items():
                 if replacement is None:
@@ -130,65 +118,81 @@ class CheckpointExporter(object):
                 vvmap[v] = nv
         return vvmap
 
-    def _check_unassigned(self, renamed_vars, match_ckpt):
-        if not match_ckpt:
-            return
-        log.key('Checking for unassigned variables...')
-        to_vars = self.var_to_shape_map(match_ckpt)
-        uninit_vars = [v for v in to_vars if v not in renamed_vars]
-        if not uninit_vars:
-            log.info('All variables are assigned.')
-            return
-        log.warn('Variables below will not be assigned:')
-        for v in uninit_vars:
-            log.warn('    - {}'.format(uninit_vars))
-
-    def rename(self, to_ckpt, match_ckpt, rules, dry_run=False):
+    def _rename(self, var_to_tensor, rules):
         log.key('Renaming variables...')
-        vvmap = self.var_to_var_map(rules)
-        new_vars = []
-        for var_name, shape in self._importer.var_to_shape.items():
+        rename_map = self._rename_map(var_to_tensor, rules)
+        new_var_to_tensor = {}
+        for v in var_to_tensor:
             try:
-                new_var_name = vvmap[var_name]
+                nv = rename_map[v]
             except KeyError:
-                log.info(
-                    'Skipping {!r} as it is not required'.format(var_name))
+                log.info('Skipping {!r} as it is not required'.format(v))
                 continue
-            if new_var_name != var_name:
-                log.info(
-                    'Renamed {!r} as {!r}.'.format(var_name, new_var_name))
+            if nv != v:
+                log.info('Renamed {!r} as {!r}.'.format(v, nv))
             else:
-                log.info('{!r} is not renamed.'.format(var_name))
-            with self._session.as_default():
-                var = self._importer.var_to_tensor[var_name]
-                new_vars.append(tf.Variable(var, name=new_var_name))
-        self._check_unassigned(vvmap.values(), match_ckpt)
+                log.info('{!r} is not renamed.'.format(v))
+            new_var_to_tensor[nv] = var_to_tensor[v]
+        return new_var_to_tensor
+
+    def export(self, file, dry_run=False):
         if dry_run:
             log.key('Dry run, not actually saving.')
             return
+        self._export(file)
+
+    def _export(self, file):
+        raise NotImplementedError
+
+
+class CheckpointExporter(BaseExporter):
+    def _export(self, file):
+        session = tf.Session()
+        new_vars = []
+        with session.as_default():
+            for var, tensor in self.var_to_tensor.items():
+                new_vars.append(tf.Variable(tensor, name=var))
         log.key('Saving checkpoint with renamed variables...')
         saver = tf.train.Saver()
-        self._session.run(tf.variables_initializer(new_vars))
-        saver.save(self._session, to_ckpt)
+        session.run(tf.variables_initializer(new_vars))
+        saver.save(session, file)
+
+
+_importers = {
+    'numpy': NumpyImporter,
+    'checkpoint': CheckpointImporter,
+    'torch': PyTorchImporter,
+}
+_exporters = {
+    'checkpoint': CheckpointExporter,
+}
+
+
+def _porter(args, porter):
+    key = args['<{}porter>'.format(porter.lower())]
+    omap = _importers if porter.lower() == 'im' else _exporters
+    try:
+        return omap[key]
+    except KeyError:
+        raise KeyError(
+            '{}porter should be one of {}'
+            .format(porter.captialize(), ', '.join(omap)))
 
 
 def main():
-    args = docopt(_USAGE, version=mayo.__version__)
-    try:
-        importer_cls = _importer_map[args['<importer>']]
-    except KeyError:
-        raise KeyError(
-            'Importer should be one of {}'.format(', '.join(_importer_map)))
+    usage = _USAGE.format(importer=', '.join(_importers))
+    args = docopt(usage, version=mayo.__version__)
+    importer_cls = _porter(args, 'im')
     importer = importer_cls(args['<file>'])
     if args['info']:
         print(yaml.dump(importer.var_to_shape))
-    elif args['to-checkpoint']:
-        exporter = CheckpointExporter(importer)
+    elif args['export']:
         rules = args['--rules']
         with open(rules, 'r') as f:
             rules = yaml.load(f)
-        exporter.rename(
-            args['<to>'], args['<match>'], rules, args['--dry-run'])
+        exporter_cls = _porter(args, 'ex')
+        exporter = exporter_cls(importer.var_to_tensor, rules)
+        exporter.export(args['<to_file>'], args['--dry-run'])
     else:
         raise TypeError('Do not know what we should do.')
 
