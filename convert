@@ -6,21 +6,31 @@ import yaml
 import numpy as np
 from docopt import docopt
 
-import mayo
-from mayo.log import log
-
-
+__version__ = '0.0.1'
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'
 
 
+class Log(object):
+    def log(self, text, head):
+        print(head + ' ' + text)
+
+    def key(self, text):
+        self.log(text, '*')
+
+    def info(self, text):
+        self.log(text, '-')
+
+
+log = Log()
+
+
 class BaseImporter(object):
-    def __init__(self, file):
+    def __init__(self, file, rules):
         super().__init__()
         log.key('Importing with {}...'.format(self.__class__.__name__))
-        self.var_to_shape, self.var_to_tensor = self._import(file)
+        self.var_to_shape, self.var_to_tensor = self._import(file, rules or {})
 
-    @staticmethod
-    def _import(file):
+    def _import(self, file, rules):
         raise NotImplementedError
 
 
@@ -28,7 +38,7 @@ class NumpyImporter(BaseImporter):
     _encoding = 'ASCII'
 
     @classmethod
-    def _import(cls, file):
+    def _import(cls, file, rules):
         var_to_tensor = np.load(file, encoding=cls._encoding).item()
         var_to_shape = {k: list(v.shape) for k, v in var_to_tensor.items()}
         return var_to_shape, var_to_tensor
@@ -36,7 +46,7 @@ class NumpyImporter(BaseImporter):
 
 class CheckpointImporter(BaseImporter):
     @staticmethod
-    def _import(file):
+    def _import(file, rules):
         import tensorflow as tf
         reader = tf.train.NewCheckpointReader(file)
         var_to_shape = reader.get_variable_to_shape_map()
@@ -47,8 +57,7 @@ class CheckpointImporter(BaseImporter):
 
 
 class PyTorchImporter(BaseImporter):
-    @staticmethod
-    def _permute(tensor):
+    def _permute(self, name, tensor, rules):
         """
         PyTorch tensors requires us to permute them, as the ordering is
         different from tensorflow.
@@ -59,23 +68,37 @@ class PyTorchImporter(BaseImporter):
             torch:      [out, in]
             tensorflow: [in, out]
         """
-        dim = len(tensor.size())
+        shape = list(tensor.size())
+        dim = len(shape)
+        permute_order = {
+            2: (1, 0),
+            4: (2, 3, 1, 0),
+        }
+        order = permute_order.get(dim)
         tensor = tensor.data.numpy()
-        if dim == 2:
-            permute = (1, 0)
-        elif dim == 4:
-            permute = (2, 3, 1, 0)
-        else:
+        if not order:
             return tensor
-        return np.transpose(tensor, permute)
+        unflat_shape = rules.get(name)
+        if unflat_shape:
+            log.info(
+                'Unflattening {!r} with shape {} into {}...'
+                .format(name, shape, unflat_shape))
+            tensor = np.reshape(tensor, unflat_shape)
+            tensor = np.transpose(tensor, (0, 2, 3, 1))
+            log.info(
+                'Reflattening permuted tensor of shape {} into {}...'
+                .format(list(tensor.shape), shape))
+            tensor = np.reshape(tensor, shape)
+        log.info('Permuted {!r} of shape {!r}.'.format(name, shape))
+        return np.transpose(tensor, order)
 
-    def _import(self, file):
+    def _import(self, file, rules):
         from torch import load
         raw = load(file)
         var_to_shape = {}
         var_to_tensor = {}
         for k, v in raw.items():
-            tensor = self._permute(v)
+            tensor = self._permute(k, v, rules.get('unflat'))
             var_to_tensor[k] = tensor
             var_to_shape[k] = list(tensor.shape)
         return var_to_shape, var_to_tensor
@@ -84,7 +107,11 @@ class PyTorchImporter(BaseImporter):
 class BaseExporter(object):
     def __init__(self, var_to_tensor, rules):
         super().__init__()
-        self.var_to_tensor = self._rename(var_to_tensor, rules)
+        rules = (rules or {}).get('rename')
+        if rules:
+            self.var_to_tensor = self._rename(var_to_tensor, rules)
+        else:
+            self.var_to_tensor = var_to_tensor
 
     @staticmethod
     def _rename_map(variables, rules):
@@ -161,10 +188,10 @@ _exporters = {
 
 
 _USAGE = """
-The mayo checkpoint helper.
+The universal deep learning framework saved model converter.
 Usage:
-    {executable} <from_file> info
-    {executable} <from_file> export <to_file> [options]
+    {executable} <from_file> info [options]
+    {executable} <from_file> to <to_file> [options]
 
 Arguments:
     * <from_file> can be a file that is either:
@@ -215,16 +242,17 @@ def _porter(file, porters):
 
 
 def main():
-    args = docopt(usage(), version=mayo.__version__)
+    args = docopt(usage(), version=__version__)
     from_file = args['<from_file>']
-    importer_cls = _porter(from_file, _importers)
-    importer = importer_cls(from_file)
-    if args['info']:
-        print(yaml.dump(importer.var_to_shape))
-    elif args['export']:
-        rules = args['--rules']
+    rules = args['--rules']
+    if rules:
         with open(rules, 'r') as f:
             rules = yaml.load(f)
+    importer_cls = _porter(from_file, _importers)
+    importer = importer_cls(from_file, rules)
+    if args['info']:
+        print(yaml.dump(importer.var_to_shape))
+    elif args['to']:
         to_file = args['<to_file>']
         exporter_cls = _porter(to_file, _exporters)
         exporter = exporter_cls(importer.var_to_tensor, rules)

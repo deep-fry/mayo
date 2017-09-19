@@ -6,8 +6,9 @@
 #   https://arxiv.org/pdf/1704.04861.pdf
 # into a checkpoint used by our mobilenet.yaml model.
 ---
-MobilenetV1: mobilenet_v1
-Logits/Conv2d_1c_1x1: fc
-Conv2d_: conv
-softmax: null
-loss: null
+rename:
+    MobilenetV1: mobilenet_v1
+    Logits/Conv2d_1c_1x1: fc
+    Conv2d_: conv
+    softmax: null
+    loss: null
