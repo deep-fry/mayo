@@ -38,23 +38,24 @@ class BaseImporter(object):
         super().__init__()
         self.var_to_shape, self.var_to_tensor = self._import(file)
 
-    def _import(self, file):
+    @staticmethod
+    def _import(file):
         raise NotImplementedError
 
 
 class NumpyImporter(BaseImporter):
-    def __init__(self):
-        super().__init__()
-        self._encoding = 'ASCII'
+    _encoding = 'ASCII'
 
-    def _import(self, file):
-        var_to_tensor = np.load(file, encoding=self._encoding).item()
+    @classmethod
+    def _import(cls, file):
+        var_to_tensor = np.load(file, encoding=cls._encoding).item()
         var_to_shape = {k: list(v.shape) for k, v in var_to_tensor.items()}
         return var_to_shape, var_to_tensor
 
 
 class CheckpointImporter(BaseImporter):
-    def _import(self, file):
+    @staticmethod
+    def _import(file):
         reader = tf.train.NewCheckpointReader(file)
         var_to_shape = reader.get_variable_to_shape_map()
         var_to_tensor = {}
@@ -145,6 +146,11 @@ class BaseExporter(object):
         raise NotImplementedError
 
 
+class NumpyExporter(BaseExporter):
+    def _export(self, file):
+        np.save(file, self.var_to_tensor)
+
+
 class CheckpointExporter(BaseExporter):
     def _export(self, file):
         session = tf.Session()
@@ -164,6 +170,7 @@ _importers = {
     'torch': PyTorchImporter,
 }
 _exporters = {
+    'numpy': NumpyExporter,
     'checkpoint': CheckpointExporter,
 }
 
@@ -175,8 +182,8 @@ def _porter(args, porter):
         return omap[key]
     except KeyError:
         raise KeyError(
-            '{}porter should be one of {}'
-            .format(porter.captialize(), ', '.join(omap)))
+            '{}porter should be one of {!r}'
+            .format(porter.capitalize(), ', '.join(omap)))
 
 
 def main():
