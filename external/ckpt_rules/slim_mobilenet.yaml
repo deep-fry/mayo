@@ -1,0 +1,13 @@
+# This rules file converts pretrained mobilenet_v1 model from:
+#   http://download.tensorflow.org/models/mobilenet_v1_1.0_224_2017_06_14.tar.gz
+# originally for:
+#   https://github.com/tensorflow/models/blob/master/slim/nets/mobilenet_v1.py
+# as described in:
+#   https://arxiv.org/pdf/1704.04861.pdf
+# into a checkpoint used by our mobilenet.yaml model.
+---
+MobilenetV1: mobilenet_v1
+Logits/Conv2d_1c_1x1: fc
+Conv2d_: conv
+softmax: null
+loss: null

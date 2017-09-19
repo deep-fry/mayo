@@ -1,5 +1,0 @@
-MobilenetV1: mobilenet_v1
-Logits/Conv2d_1c_1x1: fc
-Conv2d_: conv
-softmax: null
-loss: null
