@@ -119,14 +119,20 @@ EvalTag.register()
 
 
 class _DotDict(collections.MutableMapping):
-    def __init__(self, data, root=None):
+    def __init__(self, data, root=None, normalize=True):
         if not isinstance(data, collections.Mapping):
             raise TypeError(
                 'Cannot construct {!r} from data of type {!r}'.format(
                     self.__class__, type(data)))
         super().__init__()
-        super().__setattr__('_mapping', data)
-        super().__setattr__('_root', root or data)
+        super().__setattr__('_root', root or self)
+        if not normalize:
+            super().__setattr__('_mapping', data)
+        else:
+            super().__setattr__('_mapping', {})
+            # normalize key paths
+            for key, value in data.items():
+                self[key] = value
 
     @classmethod
     def _merge(cls, d, md):
@@ -152,17 +158,23 @@ class _DotDict(collections.MutableMapping):
                 if not keys:
                     break
                 for k in keys:
-                    d, fk = self._dot_path(k, self._root)
-                    value = value.replace('$({})'.format(k), str(d[fk]))
+                    v = str(self._root[k])
+                    value = value.replace('$({})'.format(k), v)
             return value
         if isinstance(value, collections.Mapping):
             if not isinstance(value, _DotDict):
-                return _DotDict(value, self._root)
+                return _DotDict(value, self._root, False)
         if isinstance(value, (tuple, list, set, frozenset)):
             return value.__class__(self._eval(v) for v in value)
         return value
 
     def _dot_path(self, dot_path_key, dictionary=None, setdefault=None):
+        def type_error(keyable, key):
+            raise TypeError(
+                'Key path {!r} resolution stopped at {!r} because the '
+                'current object {!r} is not key-addressable.'
+                .format(dot_path_key, key, keyable))
+
         *dot_path, final_key = dot_path_key.split('.')
         keyable = dictionary or self._mapping
         for index, key in enumerate(dot_path):
@@ -180,14 +192,15 @@ class _DotDict(collections.MutableMapping):
                     else:
                         value = keyable[key]
                 else:
-                    raise TypeError(
-                        'Key path {!r} resolution stopped at {!r} because the '
-                        'current object {!r} is not key-addressable.'
-                        .format(dot_path_key, key, keyable))
+                    type_error(keyable, key)
             except (KeyError, IndexError):
                 raise KeyError(
                     'Key path {!r} cannot be resolved.'.format(dot_path_key))
             keyable = value
+        if isinstance(keyable, (tuple, list)):
+            final_key = int(final_key)
+        elif not isinstance(keyable, collections.Mapping):
+            type_error(keyable, final_key)
         return keyable, final_key
 
     def __getitem__(self, key):
@@ -199,6 +212,10 @@ class _DotDict(collections.MutableMapping):
         obj, key = self._dot_path(key, setdefault=True)
         obj[key] = value
     __setattr__ = __setitem__
+
+    def set(self, key, value):
+        # old setattr behaviour
+        super().__setattr__(key, value)
 
     def __delitem__(self, key):
         obj, key = self._dot_path(key)
@@ -213,8 +230,15 @@ class _DotDict(collections.MutableMapping):
 
 
 class BaseConfig(_DotDict):
-    def __init__(self):
+    def __init__(self, merge_hook=None):
         super().__init__({})
+        self.set('_merge_hook', merge_hook or {})
+
+    def merge(self, dictionary):
+        super().merge(dictionary)
+        for key, func in self._merge_hook.items():
+            if key in _DotDict(dictionary):
+                func()
 
     def yaml_update(self, file):
         with open(file, 'r') as f:
@@ -245,20 +269,16 @@ class BaseConfig(_DotDict):
 
 class Config(BaseConfig):
     def __init__(self):
-        super().__init__()
+        merge_hook = {
+            'system.log': self._setup_log_level,
+        }
+        super().__init__(merge_hook)
         self._setup_excepthook()
         self._init_system_config()
 
     def _init_system_config(self):
         root = os.path.dirname(__file__)
         self.yaml_update(os.path.join(root, 'system.yaml'))
-
-    def merge(self, dictionary):
-        super().merge(dictionary)
-        update_log = dictionary.get('system', {}).get('log')
-        update_log = update_log or any('system.log' in k for k in dictionary)
-        if update_log:
-            self._setup_log_level()
 
     def image_shape(self):
         params = self.dataset.preprocess.shape

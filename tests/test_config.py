@@ -30,6 +30,11 @@ class TestDotDict(TestCase):
         with self.assertRaises(TypeError):
             _DotDict(1)
 
+    def test_dot_path_construct(self):
+        od = {'a.b': 1}
+        d = _DotDict(od)
+        self.assertDictEqual(d._mapping, {'a': {'b': 1}})
+
     def test_merge(self):
         self.d.merge({'a': 4, 'b': {'d': 3}})
         self.assertDictEqual(self.d._mapping, {'a': 4, 'b': {'c': 2, 'd': 3}})
@@ -64,7 +69,7 @@ class TestDotDict(TestCase):
 
     def test_dot_path_link(self):
         od = {'a': '$(b.c)'}
-        link = {'b': {'c': 'd'}}
+        link = _DotDict({'b': {'c': 'd'}})
         d = _DotDict(od, link)
         self.assertEqual(d['a'], link['b']['c'])
 
@@ -82,6 +87,13 @@ class TestDotDict(TestCase):
 class TestBaseConfig(TestCase):
     def setUp(self):
         self.config = BaseConfig()
+
+    def test_hook(self):
+        def hook():
+            raise NotImplementedError
+        self.config.set('_merge_hook', {'a.b': hook})
+        with self.assertRaises(NotImplementedError):
+            self.config.merge({'a.b': 1})
 
     def test_yaml_update(self):
         self.config.yaml_update('models/lenet5.yaml')
