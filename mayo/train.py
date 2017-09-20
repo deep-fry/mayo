@@ -14,7 +14,6 @@ from mayo.session import Session
 class Train(Session):
     def __init__(self, config):
         super().__init__(config)
-        self.config = config
         self._nets = []
         with self.as_default():
             self._init()
@@ -32,7 +31,8 @@ class Train(Session):
             step_name = 'global_step'
         params[step_name] = self.global_step
         log.debug(
-            'Using learning rate {}(**{}).'.format(lr_class.__name__, params))
+            'Using learning rate {!r} with params {}.'
+            .format(lr_class.__name__, params))
         with self.as_default():
             return lr_class(**params)
 

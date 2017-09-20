@@ -1,3 +1,6 @@
+import os
+import re
+import subprocess
 from contextlib import contextmanager
 
 import tensorflow as tf
@@ -11,6 +14,8 @@ from mayo.preprocess import Preprocess
 class Session(object):
     def __init__(self, config):
         super().__init__()
+        self.config = config
+        self._init_gpus()
         self.graph = tf.Graph()
         self.tf_session = tf.Session(
             graph=self.graph,
@@ -26,6 +31,33 @@ class Session(object):
         log.debug('Finishing...')
         del self.preprocessor
         self.tf_session.close()
+
+    def _init_gpus(self):
+        mem_bound = 500
+        num_gpus = self.config.system.num_gpus
+        gpus = self.config.system.get('visible_gpus', 'auto')
+        if gpus != 'auto':
+            os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(gpus)
+            return
+        try:
+            info = subprocess.check_output(
+                'nvidia-smi', shell=True, stderr=subprocess.STDOUT)
+            info = re.findall('(\d+)MiB\s/', info.decode('utf-8'))
+            log.debug('GPU memory usage (MB): {}'.format(', '.join(info)))
+            info = [int(m) for m in info]
+            gpus = [i for i in range(num_gpus) if info[i] <= mem_bound]
+        except subprocess.CalledProcessError:
+            gpus = []
+        if len(gpus) < num_gpus:
+            log.warn(
+                'Number of GPUs available {} is less than the number of '
+                'GPUs requested {}.'.format(len(gpus), num_gpus))
+        gpus = ','.join(str(g) for g in gpus[:num_gpus])
+        if gpus:
+            log.info('Using GPUs: {}'.format(gpus))
+        else:
+            log.info('Not using GPUs.')
+        os.environ['CUDA_VISIBLE_DEVICES'] = gpus
 
     @contextmanager
     def as_default(self):
