@@ -39,7 +39,8 @@ class NumpyImporter(BaseImporter):
 
     @classmethod
     def _import(cls, file, rules):
-        var_to_tensor = np.load(file, encoding=cls._encoding).item()
+        encoding = rules.get('encoding', cls._encoding)
+        var_to_tensor = np.load(file, encoding=encoding).item()
         var_to_shape = {k: list(v.shape) for k, v in var_to_tensor.items()}
         return var_to_shape, var_to_tensor
 
@@ -72,7 +73,7 @@ class PyTorchImporter(BaseImporter):
         Additionally, because the ordering of inputs are different between
         TensorFlow [height, width, channels] and PyTorch [channels, height,
         width], flatten + FC requires additional processing.  For instance,
-        AlexNet fc6 in PyTorch uses 9216x4096, where 9216 is flattened
+        AlexNet fc6 in PyTorch uses 4096x9216, where 9216 is flattened
         from 256x6x6.  In order to produce the correct spatial ordering in
         TensorFlow, we need to first unflatten 9216x4096 into 256x6x6x4096,
         permute into 4096x6x6x256 and reflatten it to 4096x9216 and finally
