@@ -26,5 +26,5 @@ system:
             - summaries/$(model.name)/$(dataset.name)/
     checkpoint:
         load: latest
-        save: {interval: 1}
+        save: {interval: 1, countdown: 3}
     summary: {save: true}

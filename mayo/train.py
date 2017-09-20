@@ -31,6 +31,8 @@ class Train(Session):
         else:
             step_name = 'global_step'
         params[step_name] = self.global_step
+        log.debug(
+            'Using learning rate {}(**{}).'.format(lr_class.__name__, params))
         with self.as_default():
             return lr_class(**params)
 
@@ -39,6 +41,7 @@ class Train(Session):
     def optimizer(self):
         params = self.config.train.optimizer
         optimizer_class, params = object_from_params(params)
+        log.debug('Using optimizer {!r}.'.format(optimizer_class.__name__))
         with self.as_default():
             return optimizer_class(self.learning_rate, **params)
 
@@ -202,5 +205,6 @@ class Train(Session):
                     return
         except KeyboardInterrupt:
             log.info('Stopped.')
-            if log.countdown('Saving checkpoint', 3):
+            countdown = self.config.system.checkpoint.save.countdown
+            if log.countdown('Saving checkpoint', countdown):
                 self.checkpoint.save('latest')
