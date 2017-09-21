@@ -32,13 +32,9 @@ class Session(object):
         del self.preprocessor
         self.tf_session.close()
 
-    def _init_gpus(self):
+    def _auto_select_gpus(self):
         mem_bound = 500
         num_gpus = self.config.system.num_gpus
-        gpus = self.config.system.get('visible_gpus', 'auto')
-        if gpus != 'auto':
-            os.environ['CUDA_VISIBLE_DEVICES'] = ','.join(gpus)
-            return
         try:
             info = subprocess.check_output(
                 'nvidia-smi', shell=True, stderr=subprocess.STDOUT)
@@ -52,7 +48,14 @@ class Session(object):
             log.warn(
                 'Number of GPUs available {} is less than the number of '
                 'GPUs requested {}.'.format(len(gpus), num_gpus))
-        gpus = ','.join(str(g) for g in gpus[:num_gpus])
+        return ','.join(str(g) for g in gpus[:num_gpus])
+
+    def _init_gpus(self):
+        gpus = self.config.system.get('visible_gpus', 'auto')
+        if gpus != 'auto' and isinstance(gpus, list):
+            gpus = ','.join(str(g) for g in gpus)
+        else:
+            gpus = self._auto_select_gpus()
         if gpus:
             log.info('Using GPUs: {}'.format(gpus))
         else:
