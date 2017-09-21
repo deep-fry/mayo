@@ -170,7 +170,7 @@ class _DotDict(collections.MutableMapping):
 
     def _dot_path(self, dot_path_key, dictionary=None, setdefault=None):
         def type_error(keyable, key):
-            raise TypeError(
+            raise KeyError(
                 'Key path {!r} resolution stopped at {!r} because the '
                 'current object {!r} is not key-addressable.'
                 .format(dot_path_key, key, keyable))
