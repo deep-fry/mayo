@@ -68,7 +68,7 @@ Arguments:
      * An overrider argument to update the config, formatted as
        "<dot_key_path>=<yaml_value>", e.g., "system.num_gpus=2".
      * An action to execute, one of:
-         {commands}.
+{commands}
 """
 
     def __init__(self):
@@ -91,8 +91,10 @@ Arguments:
 
     def usage(self):
         usage_meta = meta()
-        commands = (c for c in self.commands() if 'checkpoint' not in c)
-        usage_meta['commands'] = ', '.join(commands)
+        commands = '\n'.join(
+            '{}[ {:8} ]\t{}'.format(' ' * 9, name, func.__doc__.strip())
+            for name, func in self.commands().items())
+        usage_meta['commands'] = commands
         return self.doc() + self._USAGE.format(**usage_meta)
 
     def _validate_config(self, keys, action):
@@ -151,18 +153,23 @@ Arguments:
         return self.session
 
     def cli_train(self):
+        """Performs training.  """
         return self._get_session('train').train()
 
     def cli_eval(self):
+        """Evaluates the accuracy of a saved model.  """
         return self._get_session('validate').eval()
 
     def cli_eval_all(self):
+        """Evaluates all checkpoints for accuracy.  """
         print(self._get_session('validate').eval_all())
 
     def cli_export(self):
+        """Exports the current config.  """
         print(self.config.to_yaml())
 
     def cli_info(self):
+        """Prints parameter and layer info of the model.  """
         keys = self._model_keys
         self._validate_config(keys, 'info')
         config = self.config
@@ -175,12 +182,15 @@ Arguments:
             print(Net(config, images, labels, False).info())
 
     def cli_override(self):
+        """Updates variable overriders in the training session.  """
         self._get_session('train').update_overriders()
 
     def cli_save(self):
+        """Saves the latest checkpoint.  """
         self.session.checkpoint.save('latest')
 
     def cli_interact(self):
+        """Interacts with the train/eval session using iPython.  """
         self._get_session().interact()
 
     def _invalidate_session(self):

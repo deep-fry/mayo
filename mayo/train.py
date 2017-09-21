@@ -1,6 +1,5 @@
 import time
 import math
-import sys
 
 import tensorflow as tf
 
@@ -180,7 +179,7 @@ class Train(Session):
         cp_epoch = ''
         # train iterations
         system = self.config.system
-        cp_interval = system.checkpoint.save.get('interval', 0)
+        cp_interval = system.checkpoint.get('save.interval', 0)
         try:
             while True:
                 loss, acc, imgs_seen = self.once()
@@ -197,7 +196,7 @@ class Train(Session):
                     with log.demote():
                         self.checkpoint.save(floor_epoch)
                     cp_epoch = floor_epoch
-                if floor_epoch >= system.max_epochs:
+                if system.max_epochs and floor_epoch >= system.max_epochs:
                     log.info('Maximum epoch count reached.')
                     if cp_epoch and floor_epoch > cp_epoch:
                         log.info('Saving final checkpoint...')
@@ -205,6 +204,8 @@ class Train(Session):
                     return
         except KeyboardInterrupt:
             log.info('Stopped.')
-            countdown = self.config.system.checkpoint.save.countdown
-            if log.countdown('Saving checkpoint', countdown):
-                self.checkpoint.save('latest')
+            save = self.config.system.checkpoint.get('save', {})
+            if save:
+                countdown = save.get('countdown', 0)
+                if log.countdown('Saving checkpoint', countdown):
+                    self.checkpoint.save('latest')
