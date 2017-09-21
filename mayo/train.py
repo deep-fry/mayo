@@ -1,6 +1,5 @@
 import time
 import math
-import sys
 
 import tensorflow as tf
 
