@@ -16,8 +16,8 @@ model:
         - &pickle_initializer
           weights_initializer: &weights_initializer
               type: external/pickle_initializer.py:initializer
-              path: external/$(name)_pickle.pkl
-              net: $(name)
+              path: external/$(model.name)_pickle.pkl
+              net: $(model.name)
               base: weights
               perturb: 10.0
               _inherit: [name]
