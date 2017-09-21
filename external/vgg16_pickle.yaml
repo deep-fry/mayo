@@ -20,7 +20,7 @@ model:
               net: $(model.name)
               base: weights
               perturb: 10.0
-              _inherit: [name]
+              _inherit: [model.name]
           biases_initializer: {<<: *weights_initializer, base: biases}
         - &conv
           <<: *pickle_initializer
