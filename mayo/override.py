@@ -177,18 +177,17 @@ class DynamicFixedPointQuantizer(BaseOverrider):
         dr = self.dynamic_range
         fw = self.fractional_width
         iw = self.integer_width
-        # x = f - d bits
-        value *= 2 ** (fw - dr)
+        shift = 2 * (fw - dr)
+        # x << f - d bits
+        value = tf.multiply(value, shift)
         # quantize
         value = self._rounder.apply(getter, value)
-        value = tf.div(value, 2 ** fw)
         # ensure number is representable without overflow
         if iw is not None:
-            max_value = 2 ** (iw - dr)
+            max_value = 2 ** (iw - 1) * shift
             value = tf.clip_by_value(value, -max_value, max_value - 1)
-        # restore shift by dynamic range
-        if dr != 0:
-            value *= 2 ** dr
+        # revert bit-shift earlier
+        value = tf.divide(value, shift)
         return value
 
 

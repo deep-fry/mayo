@@ -45,7 +45,7 @@ class Session(object):
             info = re.findall('(\d+)MiB\s/', info.decode('utf-8'))
             log.debug('GPU memory usage (MB): {}'.format(', '.join(info)))
             info = [int(m) for m in info]
-            gpus = [i for i in range(num_gpus) if info[i] <= mem_bound]
+            gpus = [i for i in range(len(info)) if info[i] <= mem_bound]
         except subprocess.CalledProcessError:
             gpus = []
         if len(gpus) < num_gpus:
