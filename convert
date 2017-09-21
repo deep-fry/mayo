@@ -28,7 +28,9 @@ class BaseImporter(object):
     def __init__(self, file, rules):
         super().__init__()
         log.key('Importing with {}...'.format(self.__class__.__name__))
-        self.var_to_shape, self.var_to_tensor = self._import(file, rules or {})
+        self.var_to_tensor = self._import(file, rules or {})
+        self.var_to_shape = {
+            k: list(v.shape) for k, v in self.var_to_tensor.items()}
 
     def _import(self, file, rules):
         raise NotImplementedError
@@ -40,9 +42,7 @@ class NumpyImporter(BaseImporter):
     @classmethod
     def _import(cls, file, rules):
         encoding = rules.get('encoding', cls._encoding)
-        var_to_tensor = np.load(file, encoding=encoding).item()
-        var_to_shape = {k: list(v.shape) for k, v in var_to_tensor.items()}
-        return var_to_shape, var_to_tensor
+        return np.load(file, encoding=encoding).item()
 
 
 class CheckpointImporter(BaseImporter):
@@ -50,11 +50,10 @@ class CheckpointImporter(BaseImporter):
     def _import(file, rules):
         import tensorflow as tf
         reader = tf.train.NewCheckpointReader(file)
-        var_to_shape = reader.get_variable_to_shape_map()
         var_to_tensor = {}
-        for v in var_to_shape:
+        for v in reader.get_variable_to_shape_map():
             var_to_tensor[v] = reader.get_tensor(v)
-        return var_to_shape, var_to_tensor
+        return var_to_tensor
 
 
 class PyTorchImporter(BaseImporter):
@@ -106,13 +105,11 @@ class PyTorchImporter(BaseImporter):
     def _import(self, file, rules):
         from torch import load
         raw = load(file)
-        var_to_shape = {}
         var_to_tensor = {}
         for k, v in raw.items():
             tensor = self._permute(k, v, rules.get('unflat', {}))
             var_to_tensor[k] = tensor
-            var_to_shape[k] = list(tensor.shape)
-        return var_to_shape, var_to_tensor
+        return var_to_tensor
 
 
 class BaseExporter(object):
