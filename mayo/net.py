@@ -49,7 +49,7 @@ class _InstantiationParamTransformer(object):
         for name in param_names:
             _create_object_for_key(params, name)
 
-    def _config_layer(self, params):
+    def _config_layer(self, name, params):
         # activation
         fn = params.get('activation_fn', None)
         if fn is not None:
@@ -64,7 +64,7 @@ class _InstantiationParamTransformer(object):
         if params.get('num_outputs', None) == 'num_classes':
             params['num_outputs'] = self.num_classes
         # set up parameters
-        params['scope'] = params.pop('name')
+        params['scope'] = name
         try:
             params['padding'] = params['padding'].upper()
         except KeyError:
@@ -105,12 +105,12 @@ class _InstantiationParamTransformer(object):
         scope = tf.get_variable_scope()
         return tf.variable_scope(scope, custom_getter=custom_getter)
 
-    def transform(self, params):
+    def transform(self, name, params):
         params = dict(params)
         # weight and bias hyperparams
         self._create_hyperobjects(params)
         # layer configs
-        self._config_layer(params)
+        self._config_layer(name, params)
         # normalization arg_scope
         norm_scope = self._norm_scope(params)
         # overrider arg_scope
@@ -148,19 +148,29 @@ class BaseNet(object):
             self.config.num_classes(), self.is_training)
         transform = transformer.transform
         net = self.end_points['images']
-        for params in self.config.model.net:
-            name = params['name']
-            params, norm_scope, overrider_scope = transform(params)
+        names = self.config.model.net
+        if not names:
+            raise ValueError('No layers specified in "model.net".')
+        for name in names:
+            params = self.config.model.layers[name]
+            params, norm_scope, overrider_scope = transform(name, params)
             # get method by its name to instantiate a layer
             func, params = object_from_params(params, self, 'instantiate_')
             # instantiation
-            log.debug('Instantiating {!r} with params {}'.format(name, params))
+            log.debug(
+                'Instantiating {!r} with params {}...'.format(name, params))
             with norm_scope, overrider_scope:
                 net = func(net, params)
             # save end points
-            self._add_end_point(name, net)
-            if name != 'logits' and name == self.config.model.logits:
+            if name == self.config.model.pop('logits', 'logits'):
+                log.debug('Using layer named {!r} as logits.'.format(name))
                 self._add_end_point('logits', net)
+            else:
+                self._add_end_point(name, net)
+        if 'logits' not in self.end_points:
+            log.debug(
+                'Logits layer not specified, defaulting to the last '
+                'layer {!r}.'.format(name))
         # overriders
         self.overriders = transformer.overriders
 

@@ -106,7 +106,7 @@ Arguments:
     _model_keys = [
         'model.name',
         'model.net',
-        'model.logits',
+        'model.layers',
         'dataset.num_classes',
         'dataset.preprocess.shape',
         'dataset.background_class.use',
