@@ -6,7 +6,7 @@ system:
         num_readers: 4
         num_threads: 8
     batch_size: 128
-    max_epochs: 120
+    max_epochs: null
     pdb:
         use: true
         skip:
