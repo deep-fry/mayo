@@ -275,10 +275,18 @@ class Config(BaseConfig):
         super().__init__(merge_hook)
         self._setup_excepthook()
         self._init_system_config()
+        self._check()
 
     def _init_system_config(self):
         root = os.path.dirname(__file__)
         self.yaml_update(os.path.join(root, 'system.yaml'))
+
+    def _check(self):
+        if os.environ.pop('CUDA_VISIBLE_DEVICES', None):
+            from mayo import log
+            log.warn(
+                'Ignoring "CUDA_VISIBLE_DEVICES", as it is overridden '
+                'by config "system.visible_gpus".')
 
     def image_shape(self):
         params = self.dataset.preprocess.shape
