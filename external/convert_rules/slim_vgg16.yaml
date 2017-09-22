@@ -1,0 +1,12 @@
+# This rules file converts pretrained vgg16 model from:
+#   http://download.tensorflow.org/models/vgg_16_2016_08_28.tar.gz
+# originally for:
+#   https://github.com/tensorflow/models/blob/master/slim/nets/vgg.py
+# as described in:
+#   http://arxiv.org/abs/1409.1556.pdf
+# into a checkpoint used by our mobilenet.yaml model.
+# Baseline accuracy: 71.5% / 89.8%
+---
+rename:
+    vgg_16: vgg16
+    conv\d/: ''
