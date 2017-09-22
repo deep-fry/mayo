@@ -81,12 +81,14 @@ class CheckpointHandler(object):
             cp_name = manifest['model_checkpoint_path']
         elif self._load == 'pretrained':
             cp_name = self._load
+        elif self._load == 'baseline':
+            cp_name = self._load
         elif isinstance(self._load, int):
             cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
         else:
             raise ValueError(
-                'Key "system.checkpoint.load" accepts either "latest", '
-                '"pretrained" or an epoch number.')
+                'Key "system.checkpoint.load" accepts either "baseline",'
+                '"latest", "pretrained" or an epoch number.')
         path = os.path.join(directory, cp_name)
         load_name = ''
         if not isinstance(self._load, int):
