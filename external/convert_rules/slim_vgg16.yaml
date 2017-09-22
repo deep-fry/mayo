@@ -4,7 +4,7 @@
 #   https://github.com/tensorflow/models/blob/master/slim/nets/vgg.py
 # as described in:
 #   http://arxiv.org/abs/1409.1556.pdf
-# into a checkpoint used by our mobilenet.yaml model.
+# into a checkpoint used by our vgg16.yaml model.
 # Baseline accuracy: 71.5% / 89.8%
 ---
 rename:
