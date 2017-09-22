@@ -8,7 +8,6 @@ dataset:
             channels: 1
         validate: []
         final: [{type: linear_map, scale: 2.0, shift: -1.0}]
-logits: logits
 model:
   name: lenet5
   hyper:
