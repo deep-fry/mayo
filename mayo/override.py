@@ -1,4 +1,24 @@
+import collections
+
 import tensorflow as tf
+
+
+def _round(value):
+    omap = {'Round': 'Identity'}
+    with tf.get_default_graph().gradient_override_map(omap):
+        return tf.round(value)
+
+
+def _binarize(tensor, threshold):
+    return tf.cast(tf.abs(tensor) > threshold, tf.float32)
+
+
+def _clip_by_value(tensor, minimum, maximum, transparent_backprop=False):
+    omap = {}
+    if transparent_backprop:
+        omap = {'Minimum': 'Identity', 'Maximum': 'Identity'}
+    with tf.get_default_graph().gradient_override_map(omap):
+        return tf.clip_by_value(tensor, minimum, maximum)
 
 
 class BaseOverrider(object):
@@ -25,9 +45,9 @@ class BaseOverrider(object):
     def apply(self, getter, value):
         self._applied = True
         self._name = value.op.name
-        self._before = value
-        self._after = self._apply(getter, value)
-        return self._after
+        self.before = value
+        self.after = self._apply(getter, value)
+        return self.after
 
     def _update(self):
         """
@@ -44,10 +64,16 @@ class BaseOverrider(object):
         return self._update()
 
 
-class ChainOverrider(BaseOverrider):
+class ChainOverrider(BaseOverrider, collections.Sequence):
     def __init__(self, overriders):
         super().__init__()
         self._overriders = overriders
+
+    def __getitem__(self, index):
+        return self._overriders[index]
+
+    def __len__(self):
+        return len(self._overriders)
 
     def _apply(self, getter, value):
         for o in self._overriders:
@@ -62,10 +88,6 @@ class ChainOverrider(BaseOverrider):
             except NotImplementedError:
                 pass
         return tf.group(*ops)
-
-
-def _binarize(tensor, threshold):
-    return tf.cast(tf.abs(tensor) > threshold, tf.float32)
 
 
 class ThresholdBinarizer(BaseOverrider):
@@ -91,7 +113,7 @@ class BasePruner(BaseOverrider):
             'Method to compute an updated mask is not implemented.')
 
     def _update(self):
-        mask = self._updated_mask(self._before, self._mask)
+        mask = self._updated_mask(self.before, self._mask)
         return tf.assign(self._mask, mask)
 
 
@@ -143,54 +165,53 @@ DNSPruner = DynamicNetworkSurgeryPruner
 class Rounder(BaseOverrider):
     @staticmethod
     def _apply(getter, value):
-        omap = {'Round': 'Identity'}
-        with tf.get_default_graph().gradient_override_map(omap):
-            return tf.round(value)
+        return _round(value)
 
 
-class DynamicFixedPointQuantizer(BaseOverrider):
+class FixedPointQuantizer(BaseOverrider):
     """
-    Quantize inputs into 2's compliment fixed-point values with an n-bit
-    integer part and an f-bit fractional part with d-bit dynamic range.
+    Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
+    dynamic range.
 
     Args:
-        - integer_width:
-            the number of bits to use in integer part.  If not specified
-            (None), then we do not restrict the value bound.
+        - width:
+            The number of bits to use in number representation.
         - fractional_width:
-            the number of bits to use in fractional part.
-        - dynamic_range:
-            the dynamic range to use.
+            The number of bits to use for fractional part.
+            If not specified, `.update()` can update the dynamic range of the
+            variable automatically.
 
     References:
-        - https://arxiv.org/pdf/1604.03168
+        [1] https://arxiv.org/pdf/1604.03168
+        [2] https://arxiv.org/pdf/1412.7024
     """
-    def __init__(
-            self, integer_width=None, fractional_width=8, dynamic_range=0):
+    def __init__(self, width, dynamic_range=None):
         super().__init__()
-        self.integer_width = integer_width
-        self.fractional_width = fractional_width
+        self.width = width
+        if width < 1:
+            raise ValueError(
+                'Width of quantized value must be greater than 0.')
         self.dynamic_range = dynamic_range
-        self._rounder = Rounder()
 
     def _apply(self, getter, value):
-        dr = self.dynamic_range
-        fw = self.fractional_width
-        iw = self.integer_width
-        shift = 2 * (fw - dr)
+        if not self.dynamic_range:
+            name = '{}/dynamic_range'.format(value.op.name)
+            self.dynamic_range = getter(
+                name, dtype=tf.int32, shape=[],
+                initializer=tf.constant_initializer(32),
+                trainable=False)
+
+        shift = 2 ** self.dynamic_range
         # x << f - d bits
         value = tf.multiply(value, shift)
         # quantize
-        value = self._rounder.apply(getter, value)
+        value = Rounder._apply(getter, value)
         # ensure number is representable without overflow
-        if iw is not None:
-            max_value = 2 ** (iw - 1) * shift
-            value = tf.clip_by_value(value, -max_value, max_value - 1)
+        max_value = 2 ** (self.width - 1)
+        value = _clip_by_value(value, -max_value, max_value - 1)
         # revert bit-shift earlier
         value = tf.divide(value, shift)
         return value
 
-
-class FixedPointQuantizer(DynamicFixedPointQuantizer):
-    def __init__(self, integer_width=None, fractional_width=8):
-        super().__init__(integer_width, fractional_width, 0)
+    def _update(self):
+        raise NotImplementedError
