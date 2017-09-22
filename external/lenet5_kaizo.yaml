@@ -1,17 +1,16 @@
 ---
 model.layers:
-    _overriders: &overrider
-        weights_overrider: &pnq
-            - type: mayo.override.DNSPruner
-              c_rate: 4
-            - type: mayo.override.FixedPointQuantizer
-              integer_width: 1
-              fractional_width: 4
-        activation_overrider:
-            type: mayo.override.FixedPointQuantizer
-            integer_width: 1
-            fractional_width: 4
-        biases_overrider: *pnq
-    conv0: *overrider
+    _quantizer: &quantizer
+        type: mayo.override.FixedPointQuantizer
+        width: 3
+        dynamic_range: 3
+    _pruner: &pruner
+        type: mayo.override.DNSPruner
+        c_rate: 4
+        should_update: false
+    conv0: &overrider
+        weights_overrider: [*pruner, *quantizer]
+        activation_overrider: *quantizer
+        biases_overrider: [*pruner, *quantizer]
     conv1: *overrider
     fc1: *overrider

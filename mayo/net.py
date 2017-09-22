@@ -182,15 +182,6 @@ class BaseNet(object):
     def generic_instantiate(self, net, params):
         raise NotImplementedError
 
-    def update_overriders(self):
-        ops = []
-        for o in self.overriders:
-            try:
-                ops.append(o.update())
-            except NotImplementedError:
-                pass
-        return ops
-
     def logits(self):
         return self.end_points['logits']
 

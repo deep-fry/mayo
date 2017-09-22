@@ -1,19 +1,83 @@
 import collections
+from functools import partial
 
+import numpy as np
 import tensorflow as tf
 
 
+def _is_constant(*args):
+    return all(isinstance(a, (bool, int, float)) for a in args)
+
+
+def _is_numpy(*args):
+    if _is_constant(*args):
+        return False
+    return all(isinstance(a, (bool, int, float, np.ndarray)) for a in args)
+
+
+def _is_tensor(*args):
+    return any(isinstance(a, tf.Tensor) for a in args)
+
+
+def _cast(value, dtype):
+    if _is_constant(value):
+        return dtype(value)
+    if _is_numpy(value):
+        dtypes = {
+            float: np.float32,
+            int: np.int32,
+        }
+        return np.cast[dtypes[dtype]](value)
+    dtypes = {
+        float: tf.float32,
+        int: tf.int32,
+    }
+    return tf.cast(value, dtypes[dtype])
+
+
 def _round(value):
+    if _is_constant(value):
+        return round(value)
     omap = {'Round': 'Identity'}
     with tf.get_default_graph().gradient_override_map(omap):
         return tf.round(value)
 
 
+def _abs(value):
+    return abs(value) if _is_constant(value) else tf.abs(value)
+
+
+def _binary_bool_operation(a, b, op):
+    if _is_constant(a, b):
+        raise TypeError('Element-wise operator not supported on scalars.')
+    if _is_numpy(a, b):
+        return getattr(np, op)(a, b)
+    return getattr(tf, op)(a, b)
+
+
+_logical_or = partial(_binary_bool_operation, op='logical_or')
+_logical_and = partial(_binary_bool_operation, op='logical_and')
+
+
+def _clip(*args, min_max=None):
+    if _is_constant(*args):
+        return min(*args) if min_max else max(*args)
+    if _is_numpy(*args):
+        return np.min(*args) if min_max else np.max(*args)
+    return tf.minimum(*args) if min_max else tf.maximum(*args)
+
+
+_min = partial(_clip, min_max=True)
+_max = partial(_clip, min_max=False)
+
+
 def _binarize(tensor, threshold):
-    return tf.cast(tf.abs(tensor) > threshold, tf.float32)
+    return _cast(_abs(tensor) > threshold, float)
 
 
 def _clip_by_value(tensor, minimum, maximum, transparent_backprop=False):
+    if _is_tensor(tensor, minimum, maximum):
+        return _min(_max(tensor, minimum), maximum)
     omap = {}
     if transparent_backprop:
         omap = {'Minimum': 'Identity', 'Maximum': 'Identity'}
@@ -31,6 +95,11 @@ class BaseOverrider(object):
     overridden result; `_update` updates states of tensorflow variables used in
     `_apply`.
     """
+    def __init__(self, should_update=True):
+        super().__init__()
+        self.name = None
+        self.should_update = should_update
+
     class OverrideNotAppliedError(Exception):
         """Invoke apply before update.  """
 
@@ -44,29 +113,33 @@ class BaseOverrider(object):
 
     def apply(self, getter, value):
         self._applied = True
-        self._name = value.op.name
+        self.name = value.op.name
         self.before = value
         self.after = self._apply(getter, value)
         return self.after
 
-    def _update(self):
-        """
-        Update things to apply during training, returns the update operation.
-        """
-        raise NotImplementedError(
-            'Update operation not supported on this overrider class {!r}.'
-            .format(self.__class__))
+    def _update(self, session):
+        """Update things to apply during training.  """
+        pass
 
-    def update(self):
+    def update(self, session):
+        if not self.should_update:
+            return None
         if not getattr(self, '_applied', False):
             raise self.__class__.OverrideNotAppliedError(
-                '"apply" must be invoked before call "update".')
-        return self._update()
+                'Method "apply" must be invoked before call "update".')
+        return self._update(session)
+
+    def __repr__(self):
+        if not self.name:
+            return super().__repr__()
+        return '<{} overrides {!r}>'.format(
+            self.__class__.__qualname__, self.name)
 
 
 class ChainOverrider(BaseOverrider, collections.Sequence):
-    def __init__(self, overriders):
-        super().__init__()
+    def __init__(self, overriders, should_update=True):
+        super().__init__(should_update)
         self._overriders = overriders
 
     def __getitem__(self, index):
@@ -80,14 +153,12 @@ class ChainOverrider(BaseOverrider, collections.Sequence):
             value = o.apply(getter, value)
         return value
 
-    def _update(self):
-        ops = []
+    def _update(self, session):
         for o in self._overriders:
-            try:
-                ops.append(o.update())
-            except NotImplementedError:
-                pass
-        return tf.group(*ops)
+            o.update(session)
+
+    def __repr__(self):
+        return repr(self._overriders)
 
 
 class ThresholdBinarizer(BaseOverrider):
@@ -106,20 +177,20 @@ class BasePruner(BaseOverrider):
         self._mask = getter(
             name, dtype=tf.bool, shape=shape,
             initializer=tf.ones_initializer(), trainable=False)
-        return value * tf.cast(self._mask, tf.float32)
+        return value * _cast(self._mask, float)
 
     def _updated_mask(self, var, mask):
         raise NotImplementedError(
             'Method to compute an updated mask is not implemented.')
 
-    def _update(self):
+    def _update(self, session):
         mask = self._updated_mask(self.before, self._mask)
-        return tf.assign(self._mask, mask)
+        return session.run(tf.assign(self._mask, mask))
 
 
 class ThresholdPruner(BasePruner):
-    def __init__(self, threshold):
-        super().__init__()
+    def __init__(self, threshold, should_update=True):
+        super().__init__(should_update)
         self.threshold = threshold
 
     def _updated_mask(self, var, mask):
@@ -127,8 +198,8 @@ class ThresholdPruner(BasePruner):
 
 
 class MeanStdPruner(BasePruner):
-    def __init__(self, alpha):
-        super().__init__()
+    def __init__(self, alpha, should_update=True):
+        super().__init__(should_update)
         self.alpha = alpha
 
     def _threshold(self, tensor):
@@ -146,17 +217,18 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         1. https://github.com/yiwenguo/Dynamic-Network-Surgery
         2. https://arxiv.org/abs/1608.04493
     """
-    def __init__(self, c_rate, on_factor=1.1, off_factor=0.9):
-        super().__init__(c_rate)
+    def __init__(
+            self, c_rate, on_factor=1.1, off_factor=0.9, should_update=True):
+        super().__init__(c_rate, should_update)
         self.on_factor = on_factor
         self.off_factor = off_factor
 
     def _updated_mask(self, var, mask):
         threshold = self._threshold(var)
-        on_mask = tf.abs(var) > self.on_factor * threshold
-        mask = tf.logical_or(mask, on_mask)
-        off_mask = tf.abs(var) <= self.off_factor * threshold
-        return tf.logical_and(mask, off_mask)
+        on_mask = _abs(var) > self.on_factor * threshold
+        mask = _logical_or(mask, on_mask)
+        off_mask = _abs(var) <= self.off_factor * threshold
+        return _logical_and(mask, off_mask)
 
 
 DNSPruner = DynamicNetworkSurgeryPruner
@@ -176,6 +248,7 @@ class FixedPointQuantizer(BaseOverrider):
     Args:
         - width:
             The number of bits to use in number representation.
+            If not specified, we do not limit the range of values.
         - fractional_width:
             The number of bits to use for fractional part.
             If not specified, `.update()` can update the dynamic range of the
@@ -185,33 +258,41 @@ class FixedPointQuantizer(BaseOverrider):
         [1] https://arxiv.org/pdf/1604.03168
         [2] https://arxiv.org/pdf/1412.7024
     """
-    def __init__(self, width, dynamic_range=None):
-        super().__init__()
+    _full_precision = 32
+
+    def __init__(self, width=None, dynamic_range=None, should_update=True):
+        super().__init__(should_update)
         self.width = width
-        if width < 1:
+        if width is not None and width < 1:
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
         self.dynamic_range = dynamic_range
 
     def _apply(self, getter, value):
-        if not self.dynamic_range:
+        if self.dynamic_range is None:
             name = '{}/dynamic_range'.format(value.op.name)
             self.dynamic_range = getter(
                 name, dtype=tf.int32, shape=[],
-                initializer=tf.constant_initializer(32),
+                initializer=tf.constant_initializer(self._full_precision),
                 trainable=False)
 
-        shift = 2 ** self.dynamic_range
-        # x << f - d bits
-        value = tf.multiply(value, shift)
+        shift = _cast(2 ** self.dynamic_range, float)
+        # x << dynamic_range
+        value = value * shift
         # quantize
-        value = Rounder._apply(getter, value)
+        value = _round(value)
         # ensure number is representable without overflow
-        max_value = 2 ** (self.width - 1)
+        max_value = _cast(2 ** (self.width - 1), float)
         value = _clip_by_value(value, -max_value, max_value - 1)
         # revert bit-shift earlier
-        value = tf.divide(value, shift)
-        return value
+        return value / shift
 
-    def _update(self):
-        raise NotImplementedError
+    def _update(self, session):
+        if not isinstance(self.dynamic_range, tf.Variable):
+            raise TypeError(
+                'Unable to automatically assign a dynamic range as it was '
+                'supplied as a constant.  Please set "should_update" to False '
+                'when instantiating {!r} with a constant dynamic range.'
+                .format(self.__class__))
+        dr = ...
+        session.run(tf.assign(self.dynamic_range, dr))

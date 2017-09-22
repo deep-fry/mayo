@@ -167,11 +167,10 @@ class Train(Session):
         return loss, acc, imgs_seen
 
     def update_overriders(self):
-        ops = []
-        for n in self._nets:
-            ops += n.update_overriders()
         log.info('Updating overrider variables...')
-        self.run(ops)
+        for n in self._nets:
+            for o in n.overriders:
+                o.update(self)
 
     def train(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
