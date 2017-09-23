@@ -79,24 +79,15 @@ class CheckpointHandler(object):
                 raise CheckpointManifestNotFoundError(
                     'Manifest for the latest checkpoint cannot be found.')
             cp_name = manifest['model_checkpoint_path']
-        elif self._load == 'pretrained':
-            cp_name = self._load
-        elif self._load == 'baseline':
-            cp_name = self._load
         elif isinstance(self._load, int):
             cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
         else:
-            raise ValueError(
-                'Key "system.checkpoint.load" accepts either "baseline",'
-                '"latest", "pretrained" or an epoch number.')
+            cp_name = self._load
         path = os.path.join(directory, cp_name)
-        load_name = ''
-        if not isinstance(self._load, int):
-            load_name = self._load + ' '
-        log.info('Loading {}checkpoint from {!r}...'.format(load_name, path))
+        log.info('Loading checkpoint from {!r}...'.format(path))
         if not os.path.exists(path + '.index'):
             raise CheckpointNotFoundError(
-                'Checkpoint named {!r} not found.'.format(path))
+                'Checkpoint {!r} not found.'.format(path))
         return path
 
     def _global_variables(self):
