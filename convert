@@ -186,6 +186,7 @@ class CheckpointExporter(BaseExporter):
 
 _importers = {
     '': CheckpointImporter,
+    '.ckpt': CheckpointImporter,
     '.npy': NumpyImporter,
     '.pth': PyTorchImporter,
 }

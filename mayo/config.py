@@ -158,8 +158,14 @@ class _DotDict(collections.MutableMapping):
                 if not keys:
                     break
                 for k in keys:
-                    v = str(self._root[k])
-                    value = value.replace('$({})'.format(k), v)
+                    placeholder = '$({})'.format(k)
+                    try:
+                        v = str(self._root[k])
+                    except KeyError:
+                        raise KeyError(
+                            'Attempting to resolve a non-existent key-path '
+                            'with placeholder {!r}.'.format(placeholder))
+                    value = value.replace(placeholder, v)
             return value
         if isinstance(value, collections.Mapping):
             if not isinstance(value, _DotDict):
@@ -243,10 +249,12 @@ class BaseConfig(_DotDict):
     def yaml_update(self, file):
         with open(file, 'r') as f:
             dictionary = yaml.load(f)
-        self.merge(dictionary)
         try:
             imports = dictionary.pop('_import')
         except KeyError:
+            imports = None
+        self.merge(dictionary)
+        if not imports:
             return
         if isinstance(imports, str):
             imports = [imports]

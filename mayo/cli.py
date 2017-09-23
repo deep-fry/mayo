@@ -46,7 +46,7 @@ def meta():
     return meta_dict
 
 
-class SeesionNotInitializedError(Exception):
+class SessionNotInitializedError(Exception):
     pass
 
 
@@ -135,7 +135,7 @@ Arguments:
     def _get_session(self, action=None):
         if not action:
             if not self.session:
-                raise SeesionNotInitializedError(
+                raise SessionNotInitializedError(
                     'Session not initialized, please train or eval first.')
             return self.session
         keys = self._model_keys + self._dataset_keys
@@ -191,7 +191,12 @@ Arguments:
 
     def cli_interact(self):
         """Interacts with the train/eval session using iPython.  """
-        self._get_session().interact()
+        try:
+            self._get_session().interact()
+        except SessionNotInitializedError:
+            log.warn('Session not initalized, interacting with "mayo.cli".')
+            from IPython import embed
+            embed()
 
     def _invalidate_session(self):
         if not self.session:
