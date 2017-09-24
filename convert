@@ -181,7 +181,7 @@ class CheckpointExporter(BaseExporter):
         log.info('Saving checkpoint with renamed variables...')
         saver = tf.train.Saver()
         session.run(tf.variables_initializer(new_vars))
-        saver.save(session, file)
+        saver.save(session, file, write_meta_graph=False)
 
 
 _importers = {
