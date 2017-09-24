@@ -47,9 +47,11 @@ class Evaluate(Session):
                 percentage, top1 * 100, top5 * 100, imgs_per_sec)
             log.info(info, update=True)
 
-    def eval(self, epoch=None, keyboard_interrupt=True):
+    def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint
-        self.checkpoint.load(epoch)
+        if key is None:
+            key = self.config.system.checkpoint.load
+        self.checkpoint.load(key)
         num_examples = self.config.dataset.num_examples_per_epoch.validate
         batch_size = self.config.system.batch_size
         num_iterations = math.ceil(num_examples / batch_size)

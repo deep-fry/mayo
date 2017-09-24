@@ -39,7 +39,7 @@ def every(name, value, interval):
     next_value = _persistent_dict.setdefault(name, value) + interval
     if value < next_value:
         return False
-    _persistent_dict[name] = next_value
+    _persistent_dict[name] = value
     return True
 
 

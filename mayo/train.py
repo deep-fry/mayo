@@ -121,7 +121,7 @@ class Train(Session):
         self._setup_gradients()
         self._setup_train_operation()
         self.init()
-        self.checkpoint.load()
+        self.checkpoint.load(self.config.system.checkpoint.load)
 
     def _update_progress(self, epoch, loss, accuracy, cp_epoch):
         metric_count = self.config.system.log.metrics_history_count
