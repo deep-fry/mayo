@@ -1,20 +1,17 @@
 ---
 model.layers:
-    _should_update:
-        quantizer: true
-        pruner: false
     _quantizer: &quantizer
         type: mayo.override.FixedPointQuantizer
         width: 3
         dynamic_range: 3
-        should_update: $(model.layers._should_update.quantizer)
+        should_update: true
     _pruner: &pruner
         type: mayo.override.DNSPruner
         c_rate: 4
-        should_update: $(model.layers._should_update.pruner)
+        should_update: false
     conv0: &overrider
-        weights_overrider: [*pruner, *quantizer]
+        weights_overrider: &pnq [*pruner, *quantizer]
         activation_overrider: *quantizer
-        biases_overrider: [*pruner, *quantizer]
-    conv1: *overrider
-    fc1: *overrider
+        biases_overrider: *pnq
+    conv1: {<<: *overrider}
+    fc1: {<<: *overrider}
