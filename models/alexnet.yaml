@@ -23,46 +23,45 @@ model:
         Unfortunately there are some discrepancies between the above models,
         namely `conv4` uses different output sizes (384 vs. 256), and padding
         of `conv1` is different (valid vs. same).
-    hyper:
-        - &init
-          biases_initializer:
-              type: tensorflow.constant_initializer
-              value: 0.01
-          weights_initializer:
-              type: tensorflow.truncated_normal_initializer
-              stddev: 0.09
-        - &conv
-          type: convolution
-          padding: same
-          # weight_initializer defaults to xavier
-          weights_regularizer:
-              type: tensorflow.contrib.layers.l2_regularizer
-              scale: 0.0005
-          <<: *init
-        - &fc
-          type: fully_connected
-          weights_initializer:
-              type: tensorflow.truncated_normal_initializer
-              stddev: 0.09
-          <<: *init
-    net:
-        - {name: conv1, <<: *conv, kernel_size: 11, stride: 4, num_outputs: 64}
-        - &pool
-          {name: pool1, type: max_pool, kernel_size: 3, stride: 2,
-           padding: valid}
-        - {name: conv2, <<: *conv, kernel_size: 5, stride: 1, num_outputs: 192}
-        - {name: pool2, <<: *pool}
-        - &conv_repeat
-          {name: conv3, <<: *conv, kernel_size: 3, stride: 1, num_outputs: 384}
-        - {name: conv4, <<: *conv_repeat, num_outputs: 256}
-        - {name: conv5, <<: *conv_repeat, num_outputs: 256}
-        - {name: pool5, <<: *pool}
-        - {name: flatten5, type: flatten}
-        - {name: fc6, <<: *fc, num_outputs: 4096}
-        - &dropout {name: dropout6, type: dropout, keep_prob: 0.5}
-        - {name: fc7, <<: *fc, num_outputs: 4096}
-        - {name: dropout7, <<: *dropout}
-        - {name: logits, <<: *fc,
-           num_outputs: num_classes, activation_fn: null,
-           biases_initializer: {type: tensorflow.zeros_initializer}}
-    logits: logits
+    layers:
+        _init: &init
+            biases_initializer:
+                type: tensorflow.constant_initializer
+                value: 0.01
+        _conv: &conv
+            type: convolution
+            padding: same
+            # weight_initializer defaults to xavier
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0005
+            <<: *init
+        _fc: &fc
+            type: fully_connected
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            <<: *init
+        conv1: {<<: *conv, kernel_size: 11, stride: 4, num_outputs: 64}
+        pool1: &pool
+            {type: max_pool, kernel_size: 3, stride: 2, padding: valid}
+        conv2: {<<: *conv, kernel_size: 5, stride: 1, num_outputs: 192}
+        pool2: *pool
+        conv3: &conv3
+            {<<: *conv, kernel_size: 3, stride: 1, num_outputs: 384}
+        conv4: &conv4 {<<: *conv3, num_outputs: 256}
+        conv5: *conv4
+        pool5: *pool
+        flatten5: {type: flatten}
+        fc6: {<<: *fc, num_outputs: 4096}
+        dropout6: &dropout {type: dropout, keep_prob: 0.5}
+        fc7: {<<: *fc, num_outputs: 4096}
+        dropout7: *dropout
+        logits:
+            <<: *fc
+            num_outputs: num_classes
+            activation_fn: null
+            biases_initializer: {type: tensorflow.zeros_initializer}
+    net: [
+        conv1, pool1, conv2, pool2, conv3, conv4, conv5, pool5,
+        flatten5, fc6, dropout6, fc7, dropout7, logits]

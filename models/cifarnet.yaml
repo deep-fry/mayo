@@ -18,55 +18,54 @@ model:
             https://github.com/tensorflow/models/blob/master/slim/nets/cifarnet.py
         The two models differs mainly in pooling kernel size, the former uses 3
         whereas the latter uses 2; here 3 is used.
-    hyper:
-        - &conv
-          type: convolution
-          padding: same
-          weights_initializer: &trunc_norm_init
-              type: tensorflow.truncated_normal_initializer
-              stddev: 0.05
-        - &pool
-          type: max_pool
-          kernel_size: 3
-          stride: 2
-          padding: valid
-        - &norm
-          type: local_response_normalization
-          depth_radius: 4
-          alpha: !arith 0.001 / 9.0
-          beta: 0.75
-          bias: 1.0
-        - &dropout {type: dropout, keep_prob: 0.5}
-        - &fc
-          type: fully_connected
-          weights_initializer:
-              <<: *trunc_norm_init
-              stddev: 0.04
-          biases_initializer: &bias_init
-              type: tensorflow.constant_initializer
-              value: 0.1
-          weights_regularizer:
-              type: tensorflow.contrib.layers.l2_regularizer
-              scale: 0.004
-    net:
-        - {name: conv1, <<: *conv, kernel_size: 5, num_outputs: 64}
-        - {name: pool1, <<: *pool}
-        - {name: norm1, <<: *norm}
-        - {name: conv2, <<: *conv, kernel_size: 5, num_outputs: 64,
-           biases_initializer: *bias_init}
-        - {name: norm2, <<: *norm}
-        - {name: pool2, <<: *pool}
-        - {name: flatten2, type: flatten}
-        - {name: fc3, <<: *fc, num_outputs: 384}
-        - {name: dropout3, <<: *dropout}
-        - {name: fc4, <<: *fc, num_outputs: 192}
-        - name: logits
-          <<: *fc
-          num_outputs: num_classes
-          biases_initializer: {type: tensorflow.zeros_initializer}
-          weights_initializer:
-              <<: *trunc_norm_init
-              stddev: !arith 1.0 / 192.0
-          weights_regularizer: null
-          activation_fn: null
-    logits: logits
+    layers:
+        _conv: &conv
+            type: convolution
+            padding: same
+            weights_initializer: &trunc_norm_init
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.05
+        _pool: &pool
+            type: max_pool
+            kernel_size: 3
+            stride: 2
+            padding: valid
+        _fc: &fc
+            type: fully_connected
+            weights_initializer:
+                <<: *trunc_norm_init
+                stddev: 0.04
+            biases_initializer: &bias_init
+                type: tensorflow.constant_initializer
+                value: 0.1
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.004
+        conv1: {<<: *conv, kernel_size: 5, num_outputs: 64}
+        pool1: *pool
+        norm1: &norm
+            type: local_response_normalization
+            depth_radius: 4
+            alpha: !arith 0.001 / 9.0
+            beta: 0.75
+            bias: 1.0
+        conv2: {
+            <<: *conv, kernel_size: 5, num_outputs: 64,
+            biases_initializer: *bias_init}
+        norm2: *norm
+        pool2: *pool
+        flatten2: {type: flatten}
+        fc3: {<<: *fc, num_outputs: 384}
+        dropout3: {type: dropout, keep_prob: 0.5}
+        fc4: {<<: *fc, num_outputs: 192}
+        logits:
+            <<: *fc
+            num_outputs: num_classes
+            biases_initializer: {type: tensorflow.zeros_initializer}
+            weights_initializer:
+                {<<: *trunc_norm_init, stddev: !arith 1.0 / 192.0}
+            weights_regularizer: null
+            activation_fn: null
+    net: [
+        conv1, pool1, norm1, conv2, norm2, pool2,
+        flatten2, fc3, dropout3, fc4, logits]

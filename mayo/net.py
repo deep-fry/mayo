@@ -152,7 +152,12 @@ class BaseNet(object):
         if not names:
             raise ValueError('No layers specified in "model.net".')
         for name in names:
-            params = self.config.model.layers[name]
+            try:
+                params = self.config.model.layers[name]
+            except KeyError:
+                raise KeyError(
+                    'Layer definition "model.layers" does not '
+                    'contain a definition for {!r}'.format(name))
             params, norm_scope, overrider_scope = transform(name, params)
             # get method by its name to instantiate a layer
             func, params = object_from_params(params, self, 'instantiate_')
