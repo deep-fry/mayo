@@ -22,10 +22,7 @@ class Session(object):
             config=tf.ConfigProto(allow_soft_placement=True))
         self.preprocessor = Preprocess(self.tf_session, config)
         self.checkpoint = CheckpointHandler(
-            self.tf_session,
-            config.system.checkpoint.load,
-            config.system.checkpoint.save,
-            config.system.search_path.checkpoint)
+            self.tf_session, config.system.search_path.checkpoint)
 
     def __del__(self):
         log.debug('Finishing...')
@@ -96,6 +93,7 @@ class Session(object):
         with self.as_default():
             return tf.moving_average_variables()
 
+    @memoize_method
     def moving_average_op(self):
         decay = self.config.get('train.moving_average_decay', 0)
         if not decay:

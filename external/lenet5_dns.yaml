@@ -5,5 +5,5 @@ model.layers:
             type: mayo.override.DNSPruner
             c_rate: 40
         biases_overrider: *pruner
-    conv1: *overrider
-    fc1: *overrider
+    conv1: {<<: *overrider}
+    fc1: {<<: *overrider}

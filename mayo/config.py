@@ -249,19 +249,15 @@ class BaseConfig(_DotDict):
     def yaml_update(self, file):
         with open(file, 'r') as f:
             dictionary = yaml.load(f)
-        try:
-            imports = dictionary.pop('_import')
-        except KeyError:
-            imports = None
+        imports = dictionary.pop('_import', None)
+        if imports:
+            if isinstance(imports, str):
+                imports = [imports]
+            for i in imports:
+                if not os.path.isabs(i):
+                    i = os.path.join(os.path.dirname(file), i)
+                self.yaml_update(i)
         self.merge(dictionary)
-        if not imports:
-            return
-        if isinstance(imports, str):
-            imports = [imports]
-        for i in imports:
-            if not os.path.isabs(i):
-                i = os.path.join(os.path.dirname(file), i)
-            self.yaml_update(i)
 
     def override_update(self, key, value):
         if isinstance(value, str):

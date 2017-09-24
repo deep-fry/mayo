@@ -19,11 +19,11 @@ class CheckpointManifestNotFoundError(FileNotFoundError):
 
 class CheckpointHandler(object):
     _checkpoint_basename = 'checkpoint'
+    _checkpoint_latest = 'latest'
 
-    def __init__(self, session, load, save, search_path):
+    def __init__(self, session, search_path):
         super().__init__()
         self._session = session
-        self._load, self._save = load, save
         self._search_path = search_path
         self._checkpoint_directories = {}
 
@@ -48,10 +48,6 @@ class CheckpointHandler(object):
         return glob.glob(os.path.join(
             directory, self._checkpoint_basename + '-*'))
 
-    def _epoch_path(self, epoch):
-        name = '{}-{}'.format(self._checkpoint_basename, epoch)
-        return os.path.join(self._directory(False), name)
-
     def list_epochs(self):
         files = self._directory_glob()
         checkpoints = []
@@ -62,15 +58,12 @@ class CheckpointHandler(object):
                 checkpoints.append(c)
         return sorted(checkpoints)
 
-    def _path(self, is_saving, load=None):
+    def _path(self, key, is_saving):
         directory = self._directory(is_saving)
-        log.debug('Using {!r} for checkpoints.'.format(directory))
-        if is_saving:
-            # ensure directory exists
-            os.makedirs(directory, exist_ok=True)
-            return os.path.join(directory, self._checkpoint_basename)
-        # loading
-        if self._load == 'latest':
+        log.debug('Using search path {!r} for checkpoints.'.format(directory))
+        if isinstance(key, int):
+            cp_name = '{}-{}'.format(self._checkpoint_basename, key)
+        elif key == self._checkpoint_latest and not is_saving:
             manifest_file = os.path.join(directory, 'checkpoint')
             try:
                 with open(manifest_file, 'r') as f:
@@ -79,10 +72,13 @@ class CheckpointHandler(object):
                 raise CheckpointManifestNotFoundError(
                     'Manifest for the latest checkpoint cannot be found.')
             cp_name = manifest['model_checkpoint_path']
-        elif isinstance(self._load, int):
-            cp_name = '{}-{}'.format(self._checkpoint_basename, self._load)
         else:
-            cp_name = self._load
+            cp_name = key
+        if is_saving:
+            # ensure directory exists
+            os.makedirs(directory, exist_ok=True)
+            return os.path.join(directory, cp_name)
+        # loading
         path = os.path.join(directory, cp_name)
         log.info('Loading checkpoint from {!r}...'.format(path))
         if not os.path.exists(path + '.index'):
@@ -94,18 +90,15 @@ class CheckpointHandler(object):
         with self._session.graph.as_default():
             return tf.global_variables()
 
-    def load(self, epoch=None):
-        if epoch is None and self._load is False:
+    def load(self, key=_checkpoint_latest):
+        if not key:
             log.debug('Checkpoint loading disabled.')
             return
-        if epoch is not None:
-            path = self._epoch_path(epoch)
-        else:
-            try:
-                path = self._path(False)
-            except CheckpointManifestNotFoundError as e:
-                log.warn('{} Abort load.'.format(e))
-                return
+        try:
+            path = self._path(key, False)
+        except CheckpointManifestNotFoundError as e:
+            log.warn('{} Abort load.'.format(e))
+            return
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
         restore_vars = []
@@ -133,16 +126,13 @@ class CheckpointHandler(object):
         restorer.restore(self._session, path)
         log.debug('Checkpoint restored.')
 
-    def save(self, epoch):
-        if not self._save:
-            return
-        cp_path = self._path(True)
-        if epoch == 'latest':
-            log.info('Saving latest checkpoint to {!r}...'.format(cp_path))
-        else:
+    def save(self, key):
+        cp_path = self._path(key, True)
+        if isinstance(key, int):
             log.info(
                 'Saving checkpoint at epoch {} to {!r}...'
-                .format(epoch, cp_path))
+                .format(key, cp_path))
+        else:
+            log.info('Saving checkpoint to {!r}...'.format(cp_path))
         saver = tf.train.Saver(self._global_variables())
-        step = 0 if epoch == 'latest' else epoch
-        saver.save(self._session, cp_path, global_step=step)
+        saver.save(self._session, cp_path, write_meta_graph=False)
