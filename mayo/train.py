@@ -172,8 +172,12 @@ class Train(Session):
                 valid += np.sum(mask_val)
                 layer_wise_info[var.name] = np.sum(mask_val) /\
                     float(mask_val.size)
-        display = 'Prune Info: {} elements are overriding, {} elements \
-        are still valid'.format(total, valid)
+        if valid == 0:
+            cr = None
+        else:
+            cr = total / float(valid)
+        display = "Prune Info: {} elements are overriding, {} elements" \
+            " are left, compression rate is {}".format(total, valid, cr)
         print(display)
 
     def once(self):

@@ -177,7 +177,10 @@ class BasePruner(BaseOverrider):
         self._mask = getter(
             name, dtype=tf.bool, shape=shape,
             initializer=tf.ones_initializer(), trainable=False)
-        return value * _cast(self._mask, float)
+        mask = _cast(self._mask, float)
+        self.total_elements = tf.reduce_sum(tf.ones_like(mask))
+        self.valid_elements = tf.reduce_sum(mask)
+        return value * mask
 
     def _updated_mask(self, var, mask):
         raise NotImplementedError(
@@ -203,7 +206,8 @@ class MeanStdPruner(BasePruner):
         self.alpha = alpha
 
     def _threshold(self, tensor):
-        axes = list(range(len(tensor.get_shape()) - 1))
+        # axes = list(range(len(tensor.get_shape()) - 1))
+        axes = list(range(len(tensor.get_shape())))
         mean, var = tf.nn.moments(tensor, axes=axes)
         return mean + self.alpha * tf.sqrt(var)
 

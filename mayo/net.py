@@ -237,6 +237,14 @@ class BaseNet(object):
         for name, layer in self.end_points.items():
             layer_table.append((name, format_shape(layer.shape)))
         layer_table = tabular(layer_table)
+        # seems like ov profiling requires a session
+        # if self.config.system.overrider_log.pruner:
+        #     prune_param_table = [('Param', 'original', 'now'), '-']
+        #     total = 0
+        #     for ov in self.overriders:
+        #         ov_total = ov.total_elements.eval()
+        #         print(ov_total)
+
         return param_table + '\n' + layer_table
 
 
