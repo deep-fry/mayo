@@ -114,6 +114,9 @@ class Session(object):
     def run(self, ops):
         return self.tf_session.run(ops)
 
+    def eval(self, ops):
+        return ops.eval(session=self.tf_session)
+
     def preprocess(self, mode):
         with self.as_default():
             if mode == 'train':
