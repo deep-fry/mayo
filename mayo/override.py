@@ -4,6 +4,8 @@ from functools import partial
 import numpy as np
 import tensorflow as tf
 
+from mayo.log import log
+
 
 def _is_constant(*args):
     return all(isinstance(a, (bool, int, float)) for a in args)
@@ -44,7 +46,11 @@ def _round(value):
 
 
 def _abs(value):
-    return abs(value) if _is_constant(value) else tf.abs(value)
+    if _is_constant(value):
+        return abs(value)
+    if _is_numpy(value):
+        return np.abs(value)
+    return tf.abs(value)
 
 
 def _binary_bool_operation(a, b, op):
@@ -128,7 +134,8 @@ class BaseOverrider(object):
         if not getattr(self, '_applied', False):
             raise self.__class__.OverrideNotAppliedError(
                 'Method "apply" must be invoked before call "update".')
-        return self._update(session)
+        self._update(session)
+        log.debug('Updated overrider {!r}'.format(self.info(session)))
 
     def info(self, session):
         return self._info(session)
@@ -317,11 +324,7 @@ class FixedPointQuantizer(BaseOverrider):
 
     def _update(self, session):
         if not isinstance(self.dynamic_range, tf.Variable):
-            raise TypeError(
-                'Unable to automatically assign a dynamic range as it was '
-                'supplied as a constant.  Please set "should_update" to False '
-                'when instantiating {!r} with a constant dynamic range.'
-                .format(self.__class__))
+            return
         dr = self._update_policy(session.run(self.before))
         session.run(tf.assign(self.dynamic_range, dr))
 
@@ -330,3 +333,15 @@ class FixedPointQuantizer(BaseOverrider):
         if isinstance(dr, tf.Variable):
             dr = session.run(dr)
         return self._info_tuple(width=self.width, dynamic_range=dr)
+
+
+class DynamicFixedPointQuantizer(FixedPointQuantizer):
+    """
+    Update policy uses https://arxiv.org/pdf/1412.7024.pdf
+    """
+    def __init__(self, width, overflow_rate, should_update=True):
+        super().__init__(
+            width, dynamic_range=None, should_update=should_update)
+
+    def _update_policy(self, tensor):
+        ...
