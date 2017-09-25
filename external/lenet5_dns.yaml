@@ -7,6 +7,18 @@ model.layers:
         biases_overrider:
             type: mayo.override.DNSPruner
             c_rate: 0
-    conv1: {<<: *overrider}
-    fc1: {<<: *overrider}
+    conv1:
+        weights_overrider:
+            type: mayo.override.DNSPruner
+            c_rate: 1
+        biases_overrider:
+            type: mayo.override.DNSPruner
+            c_rate: 0
+    fc1:
+        weights_overrider:
+            type: mayo.override.DNSPruner
+            c_rate: 2
+        biases_overrider:
+            type: mayo.override.DNSPruner
+            c_rate: 0
     logits: {<<: *overrider}
