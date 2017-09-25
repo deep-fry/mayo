@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from mayo.util import format_percent
-from mayo.util import log
+from mayo.log import log
 
 
 def _is_constant(*args):
