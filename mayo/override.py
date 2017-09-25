@@ -4,6 +4,7 @@ from functools import partial
 import numpy as np
 import tensorflow as tf
 
+from mayo.util import format_percent
 
 def _is_constant(*args):
     return all(isinstance(a, (bool, int, float)) for a in args)
@@ -208,6 +209,7 @@ class BasePruner(BaseOverrider):
     def _info(self, session):
         mask = session.run(self._mask).astype(int)
         density = np.sum(mask) / mask.size
+        density = format_percent(density)
         return self._info_tuple(
             mask=self._mask.name, density=density, count=mask.size)
 
