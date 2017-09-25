@@ -207,8 +207,9 @@ class BasePruner(BaseOverrider):
 
     def _info(self, session):
         mask = session.run(self._mask).astype(int)
-        sparcity = np.sum(mask) / mask.size
-        return self._info_tuple(mask=self._mask.name, sparcity=sparcity)
+        density = np.sum(mask) / mask.size
+        return self._info_tuple(
+            mask=self._mask.name, density=density, count=mask.size)
 
 
 class ThresholdPruner(BasePruner):
