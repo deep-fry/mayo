@@ -229,7 +229,7 @@ class MeanStdPruner(BasePruner):
     def _threshold(self, tensor):
         # axes = list(range(len(tensor.get_shape()) - 1))
         axes = list(range(len(tensor.get_shape())))
-        mean, var = tf.nn.moments(tensor, axes=axes)
+        mean, var = tf.nn.moments(_abs(tensor), axes=axes)
         return mean + self.alpha * tf.sqrt(var)
 
     def _updated_mask(self, var, mask):
