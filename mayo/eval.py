@@ -10,6 +10,8 @@ from mayo.session import Session
 
 
 class Evaluate(Session):
+    multi_gpus = False
+
     def __init__(self, config):
         super().__init__(config)
         with self.as_default():

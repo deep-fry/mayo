@@ -12,6 +12,8 @@ from mayo.preprocess import Preprocess
 
 
 class Session(object):
+    multi_gpus = True
+
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -31,7 +33,7 @@ class Session(object):
 
     def _auto_select_gpus(self):
         mem_bound = 500
-        num_gpus = self.config.system.num_gpus
+        num_gpus = self.config.system.num_gpus if self.multi_gpus else 1
         try:
             info = subprocess.check_output(
                 'nvidia-smi', shell=True, stderr=subprocess.STDOUT)
