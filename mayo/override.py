@@ -261,7 +261,7 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         threshold = self._threshold(var)
         on_mask = _abs(var) > self.on_factor * threshold
         mask = _logical_or(mask, on_mask)
-        off_mask = _abs(var) <= self.off_factor * threshold
+        off_mask = _abs(var) > self.off_factor * threshold
         return _logical_and(mask, off_mask)
 
 

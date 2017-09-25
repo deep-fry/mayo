@@ -17,7 +17,7 @@ model.layers:
     fc1:
         weights_overrider:
             type: mayo.override.DNSPruner
-            c_rate: 2
+            c_rate: 0.5
         biases_overrider:
             type: mayo.override.DNSPruner
             c_rate: 0
