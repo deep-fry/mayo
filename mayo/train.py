@@ -2,13 +2,13 @@ import time
 import math
 
 import tensorflow as tf
-import numpy as np
 
 from mayo.log import log
 from mayo.net import Net
 from mayo.util import (
     delta, every, moving_metrics, memoize_method, object_from_params)
 from mayo.session import Session
+from mayo.override import ChainOverrider
 
 
 class Train(Session):
@@ -161,25 +161,6 @@ class Train(Session):
         summary = self.run(self._summary_op)
         self._summary_writer.add_summary(summary, epoch)
 
-    def pruner_info(self):
-        total = 0
-        valid = 0
-        layer_wise_info = {}
-        for var in self.global_variables():
-            if 'mask' in var.name:
-                mask_val = self.eval(var).astype(int)
-                total += mask_val.size
-                valid += np.sum(mask_val)
-                layer_wise_info[var.name] = np.sum(mask_val) /\
-                    float(mask_val.size)
-        if valid == 0:
-            cr = None
-        else:
-            cr = total / float(valid)
-        display = "Prune Info: {} elements are overriding, {} elements" \
-            " are left, compression rate is {}".format(total, valid, cr)
-        print(display)
-
     def once(self):
         tasks = [
             self._train_op, self._loss, self._acc, self._imgs_seen_op]
@@ -191,7 +172,20 @@ class Train(Session):
         for n in self._nets:
             for o in n.overriders:
                 o.update(self)
-        self.pruner_info()
+
+    def overrider_info(self):
+        def flatten(overriders):
+            for o in overriders:
+                if isinstance(o, ChainOverrider):
+                    yield from flatten(o)
+                else:
+                    yield o
+        overrider_info = {}
+        for o in flatten(self._nets[0].overriders):
+            info = o.info(self)
+            info_list = overrider_info.setdefault(info.__class__.__name__, [])
+            info_list.append(info)
+        return overrider_info
 
     def train(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
@@ -200,8 +194,6 @@ class Train(Session):
         # train iterations
         system = self.config.system
         cp_interval = system.checkpoint.get('save.interval', 0)
-        if system.overrider_log.pruner:
-            self.pruner_info()
         try:
             while True:
                 loss, acc, imgs_seen = self.once()

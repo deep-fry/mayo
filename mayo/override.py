@@ -1,4 +1,4 @@
-import collections
+from collections import Sequence, namedtuple
 from functools import partial
 
 import numpy as np
@@ -130,6 +130,20 @@ class BaseOverrider(object):
                 'Method "apply" must be invoked before call "update".')
         return self._update(session)
 
+    def info(self, session):
+        return self._info(session)
+
+    def _info_tuple(self, **kwargs):
+        # relies on dict ordering
+        cls = self.__class__.__name__
+        cls_name = '{}Info'.format(cls)
+        Tuple = namedtuple(cls_name, [cls] + list(kwargs))
+        kwargs[cls] = self.name
+        return Tuple(**kwargs)
+
+    def _info(self, session):
+        return self._info_tuple()
+
     def __repr__(self):
         if not self.name:
             return super().__repr__()
@@ -137,7 +151,7 @@ class BaseOverrider(object):
             self.__class__.__qualname__, self.name)
 
 
-class ChainOverrider(BaseOverrider, collections.Sequence):
+class ChainOverrider(BaseOverrider, Sequence):
     def __init__(self, overriders, should_update=True):
         super().__init__(should_update)
         self._overriders = overriders
@@ -156,6 +170,9 @@ class ChainOverrider(BaseOverrider, collections.Sequence):
     def _update(self, session):
         for o in self._overriders:
             o.update(session)
+
+    def _info(self, session):
+        return self._info_tuple(overriders=self._overriders)
 
     def __repr__(self):
         return repr(self._overriders)
@@ -178,8 +195,6 @@ class BasePruner(BaseOverrider):
             name, dtype=tf.bool, shape=shape,
             initializer=tf.ones_initializer(), trainable=False)
         mask = _cast(self._mask, float)
-        self.total_elements = tf.reduce_sum(tf.ones_like(mask))
-        self.valid_elements = tf.reduce_sum(mask)
         return value * mask
 
     def _updated_mask(self, var, mask):
@@ -189,6 +204,11 @@ class BasePruner(BaseOverrider):
     def _update(self, session):
         mask = self._updated_mask(self.before, self._mask)
         return session.run(tf.assign(self._mask, mask))
+
+    def _info(self, session):
+        mask = session.run(self._mask).astype(int)
+        sparcity = np.sum(mask) / mask.size
+        return self._info_tuple(mask=self._mask.name, sparcity=sparcity)
 
 
 class ThresholdPruner(BasePruner):
@@ -291,6 +311,9 @@ class FixedPointQuantizer(BaseOverrider):
         # revert bit-shift earlier
         return value / shift
 
+    def _update_policy(self, tensor):
+        raise NotImplementedError
+
     def _update(self, session):
         if not isinstance(self.dynamic_range, tf.Variable):
             raise TypeError(
@@ -298,5 +321,11 @@ class FixedPointQuantizer(BaseOverrider):
                 'supplied as a constant.  Please set "should_update" to False '
                 'when instantiating {!r} with a constant dynamic range.'
                 .format(self.__class__))
-        dr = ...
+        dr = self._update_policy(session.run(self.before))
         session.run(tf.assign(self.dynamic_range, dr))
+
+    def _info(self, session):
+        dr = self.dynamic_range
+        if isinstance(dr, tf.Variable):
+            dr = session.run(dr)
+        return self._info_tuple(width=self.width, dynamic_range=dr)

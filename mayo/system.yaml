@@ -29,6 +29,3 @@ system:
         load: latest
         save: {interval: 1, countdown: 3}
     summary: {save: true}
-    overrider_log:
-        pruner: true
-        quantizer: false

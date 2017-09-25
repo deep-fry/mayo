@@ -112,10 +112,8 @@ class Session(object):
         return self.run(tf.variables_initializer(self.global_variables()))
 
     def run(self, ops):
+        log.debug('Running {!r}...'.format(ops))
         return self.tf_session.run(ops)
-
-    def eval(self, ops):
-        return ops.eval(session=self.tf_session)
 
     def preprocess(self, mode):
         with self.as_default():

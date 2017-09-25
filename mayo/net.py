@@ -1,13 +1,13 @@
 import itertools
 from contextlib import contextmanager
-from collections import OrderedDict
+from collections import OrderedDict, namedtuple
 
 import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
 from mayo.util import (
-    import_from_string, object_from_params, multi_objects_from_params, tabular)
+    import_from_string, object_from_params, multi_objects_from_params)
 from mayo.override import ChainOverrider
 
 
@@ -59,6 +59,8 @@ class _InstantiationParamTransformer(object):
         if activation_overrider:
             params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
                 activation_overrider.apply(tf.get_variable, x))
+        if activation_overrider:
+            self.overriders.append(activation_overrider)
 
         # num outputs
         if params.get('num_outputs', None) == 'num_classes':
@@ -218,34 +220,12 @@ class BaseNet(object):
         return acc
 
     def info(self):
-        def format_shape(shape):
-            return ' x '.join(str(s or '?') for s in shape.as_list())
-
-        param_table = [('Param', 'Shape', 'Count'), '-']
-        total = 0
-        for v in tf.trainable_variables():
-            shape = v.get_shape()
-            v_total = 1
-            for dim in shape:
-                v_total *= dim.value
-            total += v_total
-            param_table.append((v.name, format_shape(shape), v_total))
-        param_table += ['-', (None, '    Total:', total)]
-        param_table = tabular(param_table)
-
-        layer_table = [('Layer', 'Shape'), '-']
-        for name, layer in self.end_points.items():
-            layer_table.append((name, format_shape(layer.shape)))
-        layer_table = tabular(layer_table)
-        # seems like ov profiling requires a session
-        # if self.config.system.overrider_log.pruner:
-        #     prune_param_table = [('Param', 'original', 'now'), '-']
-        #     total = 0
-        #     for ov in self.overriders:
-        #         ov_total = ov.total_elements.eval()
-        #         print(ov_total)
-
-        return param_table + '\n' + layer_table
+        VarTuple = namedtuple('VarTuple', ['variable', 'shape'])
+        var_info = [VarTuple(v, v.shape) for v in tf.trainable_variables()]
+        LayerTuple = namedtuple('LayerTuple', ['layer', 'shape'])
+        layer_info = [
+            LayerTuple(n, l.shape) for n, l in self.end_points.items()]
+        return {'var_info': var_info, 'layer_info': layer_info}
 
 
 class Net(BaseNet):

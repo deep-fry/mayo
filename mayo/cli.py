@@ -11,6 +11,7 @@ from mayo.config import Config
 from mayo.eval import Evaluate
 from mayo.net import Net
 from mayo.train import Train
+from mayo.util import format_info
 
 
 _root = os.path.dirname(__file__)
@@ -179,7 +180,13 @@ Arguments:
         with tf.Graph().as_default():
             images = tf.placeholder(tf.float32, images_shape, 'images')
             labels = tf.placeholder(tf.int32, labels_shape, 'labels')
-            print(Net(config, images, labels, False).info())
+            info = Net(config, images, labels, False).info()
+        print(format_info(info['var_info'], {'shape': 'count'}))
+        print(format_info(info['layer_info']))
+        if not isinstance(self.session, Train):
+            return
+        for key, infos in self.session.overrider_info().items():
+            print(format_info(infos))
 
     def cli_override(self):
         """Updates variable overriders in the training session.  """

@@ -4,6 +4,7 @@ import collections
 from importlib.util import spec_from_file_location, module_from_spec
 
 import numpy as np
+import tensorflow as tf
 
 
 def memoize_method(func):
@@ -167,6 +168,39 @@ def tabular(data):
     return '\n'.join(table)
 
 
+def format_info(info, count=None):
+    count = count or {}
+    header = [h for h in info[0]._fields]
+    table = [header + [c for c in count.values()]] + ['-']
+    totals = {k: 0 for k in count}
+    for row in info[1:]:
+        new_row = []
+        row_totals = {k: 0 for k in count}
+        for col, item in enumerate(row):
+            if isinstance(item, tf.Variable):
+                item = item.name
+            if isinstance(item, tf.TensorShape):
+                total = item.num_elements()
+                item = format_shape(item)
+            if isinstance(item, (int, float)):
+                total = item
+            count_name = header[col]
+            if count_name in count:
+                row_totals[count_name] = total
+            new_row.append(item)
+        for name in count:
+            total = row_totals[name]
+            new_row.append(total)
+            totals[name] += total
+        table.append(new_row)
+    if totals:
+        table += ['-']
+        total_row = [None] * (len(header) - 1) + ['    Total:']
+        total_row += list(totals.values())
+        table += [total_row]
+    return tabular(table)
+
+
 def unique(items):
     found = set()
     keep = []
@@ -176,3 +210,11 @@ def unique(items):
         found.add(item)
         keep.append(item)
     return keep
+
+
+def flatten(items, skip_none=False):
+    for i in items:
+        if isinstance(i, list):
+            yield from flatten(i)
+        elif i is not None:
+            yield i
