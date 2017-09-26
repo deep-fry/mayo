@@ -2,6 +2,6 @@
 _import: exponential.yaml
 train:
     learning_rate:
-        _num_epochs_per_decay: 350
+        decay_steps: 350
     optimizer:
         type: tensorflow.train.GradientDescentOptimizer

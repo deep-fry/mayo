@@ -3,7 +3,7 @@ _import: exponential.yaml
 train:
     moving_average_decay: 0.9999
     learning_rate:
-        _num_epochs_per_decay: 20.0
+        decay_steps: 20.0
     optimizer:
         type: tensorflow.train.GradientDescentOptimizer
     pruner:

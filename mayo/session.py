@@ -75,13 +75,19 @@ class Session(object):
 
     @property
     @memoize_method
-    def global_step(self):
-        return self._tf_int('global_step', tf.int32)
+    def imgs_seen(self):
+        return self._tf_int('imgs_seen', tf.int64)
 
     @property
     @memoize_method
-    def imgs_seen(self):
-        return self._tf_int('imgs_seen', tf.int64)
+    def num_steps(self):
+        return self.imgs_seen / self.config.system.batch_size
+
+    @property
+    @memoize_method
+    def num_epochs(self):
+        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
+        return self.imgs_seen / imgs_per_epoch
 
     def global_variables(self):
         with self.as_default():
@@ -103,7 +109,7 @@ class Session(object):
         # instantiate moving average if moving_average_decay is supplied
         with self.as_default():
             var_avgs = tf.train.ExponentialMovingAverage(
-                self.config.train.moving_average_decay, self.global_step)
+                self.config.train.moving_average_decay, self.num_steps)
             avg_vars = tf.trainable_variables() + tf.moving_average_variables()
             return var_avgs.apply(avg_vars)
 

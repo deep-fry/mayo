@@ -14,6 +14,7 @@ from mayo.override import ChainOverrider
 class Train(Session):
     def __init__(self, config):
         super().__init__(config)
+        self._cp_epoch = ''
         self._nets = []
         with self.as_default():
             self._init()
@@ -24,12 +25,12 @@ class Train(Session):
         params = self.config.train.learning_rate
         lr_class, params = object_from_params(params)
         if lr_class is tf.train.piecewise_constant:
-            # tf.train.piecewise_constant uses argument name 'x' instead of
-            # 'global_step' just to make life more difficult
+            # `tf.train.piecewise_constant` uses argument name 'x' instead
+            # just to make life more difficult
             step_name = 'x'
         else:
             step_name = 'global_step'
-        params[step_name] = self.global_step
+        params[step_name] = self.num_epochs
         log.debug(
             'Using learning rate {!r} with params {}.'
             .format(lr_class.__name__, params))
@@ -107,8 +108,7 @@ class Train(Session):
         self._summary_op = tf.summary.merge(summaries)
 
     def _setup_train_operation(self):
-        app_grad_op = self.optimizer.apply_gradients(
-            self._gradients, global_step=self.global_step)
+        app_grad_op = self.optimizer.apply_gradients(self._gradients)
         ops = [app_grad_op]
         avg_op = self.moving_average_op()
         if avg_op:
@@ -163,9 +163,10 @@ class Train(Session):
 
     def once(self):
         tasks = [
-            self._train_op, self._loss, self._acc, self._imgs_seen_op]
-        _, loss, acc, imgs_seen = self.run(tasks)
-        return loss, acc, imgs_seen
+            self._train_op, self._imgs_seen_op,
+            self._loss, self._acc, self.num_epochs]
+        noop, imgs_seen, loss, acc, num_epochs = self.run(tasks)
+        return loss, acc, num_epochs
 
     def update_overriders(self):
         log.info('Updating overrider variables...')
@@ -187,35 +188,36 @@ class Train(Session):
             info_list.append(info)
         return overrider_info
 
-    def train(self):
-        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        log.debug('Training start.')
-        cp_epoch = ''
-        # train iterations
+    def _iteration(self):
         system = self.config.system
+        loss, acc, epoch = self.once()
+        if math.isnan(loss):
+            raise ValueError('Model diverged with a nan-valued loss.')
+        self._update_progress(epoch, loss, acc, self._cp_epoch)
+        summary_delta = delta('train.summary.epoch', epoch)
+        if system.summary.save and summary_delta >= 0.1:
+            self._save_summary(epoch)
+        floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
+        if every('train.checkpoint.epoch', floor_epoch, cp_interval):
+            self._update_progress(epoch, loss, acc, 'saving')
+            with log.demote():
+                self.checkpoint.save(floor_epoch)
+            self._cp_epoch = floor_epoch
+        if system.max_epochs and floor_epoch >= system.max_epochs:
+            log.info('Maximum epoch count reached.')
+            if self._cp_epoch and floor_epoch > self._cp_epoch:
+                log.info('Saving final checkpoint...')
+                self.checkpoint.save(floor_epoch)
+            return False
+        return True
+
+    def train(self):
+        log.debug('Training start.')
         try:
-            while True:
-                loss, acc, imgs_seen = self.once()
-                epoch = imgs_seen / imgs_per_epoch
-                if math.isnan(loss):
-                    raise ValueError('Model diverged with a nan-valued loss.')
-                self._update_progress(epoch, loss, acc, cp_epoch)
-                summary_delta = delta('train.summary.epoch', epoch)
-                if system.summary.save and summary_delta >= 0.1:
-                    self._save_summary(epoch)
-                floor_epoch = math.floor(epoch)
-                if every('train.checkpoint.epoch', floor_epoch, cp_interval):
-                    self._update_progress(epoch, loss, acc, 'saving')
-                    with log.demote():
-                        self.checkpoint.save(floor_epoch)
-                    cp_epoch = floor_epoch
-                if system.max_epochs and floor_epoch >= system.max_epochs:
-                    log.info('Maximum epoch count reached.')
-                    if cp_epoch and floor_epoch > cp_epoch:
-                        log.info('Saving final checkpoint...')
-                        self.checkpoint.save(floor_epoch)
-                    return
+            # train iterations
+            while self._iteration():
+                pass
         except KeyboardInterrupt:
             log.info('Stopped.')
             save = self.config.system.checkpoint.get('save', {})
