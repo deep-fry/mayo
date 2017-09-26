@@ -1,10 +1,10 @@
-from collections import Sequence, namedtuple
+import math
 from functools import partial
+from collections import Sequence, namedtuple
 
 import numpy as np
 import tensorflow as tf
 
-from mayo.util import format_percent
 from mayo.log import log
 
 
@@ -38,9 +38,27 @@ def _cast(value, dtype):
     return tf.cast(value, dtypes[dtype])
 
 
+def _sum(value):
+    if _is_constant(value):
+        raise TypeError
+    if _is_numpy(value):
+        return np.sum(value)
+    return tf.reduce_sum(value)
+
+
+def _count(value):
+    if _is_constant(value):
+        raise TypeError
+    if _is_numpy(value):
+        return value.size
+    return value.shape.num_elements()
+
+
 def _round(value):
     if _is_constant(value):
         return round(value)
+    if _is_numpy(value):
+        return np.round(value)
     omap = {'Round': 'Identity'}
     with tf.get_default_graph().gradient_override_map(omap):
         return tf.round(value)
@@ -214,9 +232,8 @@ class BasePruner(BaseOverrider):
         return session.run(tf.assign(self._mask, mask))
 
     def _info(self, session):
-        mask = session.run(self._mask).astype(int)
-        density = np.sum(mask) / mask.size
-        density = format_percent(density)
+        mask = _cast(session.run(self._mask), int)
+        density = _sum(mask) / _count(mask)
         return self._info_tuple(
             mask=self._mask.name, density=density, count=mask.size)
 
@@ -283,67 +300,88 @@ class FixedPointQuantizer(BaseOverrider):
         - width:
             The number of bits to use in number representation.
             If not specified, we do not limit the range of values.
-        - fractional_width:
-            The number of bits to use for fractional part.
-            If not specified, `.update()` can update the dynamic range of the
-            variable automatically.
+        - point:
+            The position of the binary point.
 
     References:
         [1] https://arxiv.org/pdf/1604.03168
-        [2] https://arxiv.org/pdf/1412.7024
     """
-    _full_precision = 32
-
-    def __init__(self, width=None, dynamic_range=None, should_update=True):
+    def __init__(self, point, width=None, should_update=True):
         super().__init__(should_update)
+        self.point = point
         self.width = width
         if width is not None and width < 1:
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
-        self.dynamic_range = dynamic_range
 
-    def _apply(self, getter, value):
-        if self.dynamic_range is None:
-            name = '{}/dynamic_range'.format(value.op.name)
-            self.dynamic_range = getter(
-                name, dtype=tf.int32, shape=[],
-                initializer=tf.constant_initializer(self._full_precision),
-                trainable=False)
-
-        shift = _cast(2 ** self.dynamic_range, float)
-        # x << dynamic_range
+    def _quantize(
+            self, value, point, compute_overflow_rate=False):
+        # x << point
+        shift = _cast(2 ** point, float)
         value = value * shift
         # quantize
         value = _round(value)
         # ensure number is representable without overflow
         max_value = _cast(2 ** (self.width - 1), float)
+        if compute_overflow_rate:
+            overflows = _logical_or(value < -max_value, value > max_value - 1)
+            return _sum(_cast(overflows, int)) / _count(overflows)
         value = _clip_by_value(value, -max_value, max_value - 1)
         # revert bit-shift earlier
         return value / shift
 
-    def _update_policy(self, tensor):
-        raise NotImplementedError
-
-    def _update(self, session):
-        if not isinstance(self.dynamic_range, tf.Variable):
-            return
-        dr = self._update_policy(session.run(self.before))
-        session.run(tf.assign(self.dynamic_range, dr))
+    def _apply(self, getter, value):
+        return self._quantize(value, self.point)
 
     def _info(self, session):
-        dr = self.dynamic_range
-        if isinstance(dr, tf.Variable):
-            dr = session.run(dr)
-        return self._info_tuple(width=self.width, dynamic_range=dr)
+        p = self.point
+        if isinstance(p, tf.Variable):
+            p = session.run(p)
+        return self._info_tuple(width=self.width, point=p)
 
 
 class DynamicFixedPointQuantizer(FixedPointQuantizer):
     """
-    Update policy uses https://arxiv.org/pdf/1412.7024.pdf
+    Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
+    dynamic range.
+
+    Args:
+        - width:
+            The number of bits to use in number representation.
+        - overflow_rate:
+            The percentage of tolerable overflow in a certain overridden
+            variable.  The method `._update_policy()` uses this information
+            to compute a corresponding binary point using an update policy
+            described in [1].
+
+    References:
+        [1] https://arxiv.org/pdf/1412.7024
     """
+    _attempts = 100
+
     def __init__(self, width, overflow_rate, should_update=True):
-        super().__init__(
-            width, dynamic_range=None, should_update=should_update)
+        super().__init__(None, width, should_update=should_update)
+        self.overflow_rate = overflow_rate
+        self._init_point = width - 1
+
+    def _apply(self, getter, value):
+        if self.point is None:
+            name = '{}/point'.format(value.op.name)
+            self.point = getter(
+                name, dtype=tf.int32, shape=[],
+                initializer=tf.constant_initializer(self._init_point),
+                trainable=False)
+        return self._quantize(value, self.point)
 
     def _update_policy(self, tensor):
-        ...
+        p = self._init_point
+        rate = self._quantize(tensor, p, compute_overflow_rate=True)
+        if rate > self.overflow_rate:
+            p -= 1
+        elif 2 * rate <= self.overflow_rate:
+            p += 1
+        return p
+
+    def _update(self, session):
+        p = self._update_policy(session.run(self.before))
+        session.run(tf.assign(self.point, p))
