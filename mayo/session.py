@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.net import Net
-from mayo.util import memoize_method, memoize_property
+from mayo.util import memoize_method, memoize_property, flatten
 from mayo.override import ChainOverrider
 from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
@@ -119,6 +119,10 @@ class Session(object):
     def moving_average_variables(self):
         with self.as_default():
             return tf.moving_average_variables()
+
+    def get_collection(self, key):
+        func = lambda net: tf.get_collection(key)
+        return flatten(self.net_map(func))
 
     @memoize_method
     def moving_average_op(self):

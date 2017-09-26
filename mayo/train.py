@@ -77,8 +77,7 @@ class Train(Session):
         if ma_op:
             ops['avg'] = ma_op
         # update ops
-        update_func = lambda net: tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        update_ops = list(flatten(self.net_map(update_func)))
+        update_ops = self.get_collection(tf.GraphKeys.UPDATE_OPS)
         ops['update'] = tf.group(*update_ops, name='update')
         log.debug('Using update operations: {}'.format(update_ops))
         log.debug('Using training operations: {}'.format(ops))
@@ -87,8 +86,7 @@ class Train(Session):
     def _setup_summaries(self):
         if not self.config.system.summary.save:
             return
-        summ_func = lambda net: tf.get_collection(tf.GraphKeys.SUMMARIES)
-        summaries = list(self.net_map(summ_func))
+        summaries = list(self.get_collection(tf.GraphKeys.SUMMARIES))
         summaries += [
             tf.summary.scalar('learning_rate', self.learning_rate),
             tf.summary.scalar('loss', self.loss)]
