@@ -70,6 +70,9 @@ class Logger(object):
         self._level = self._levels[value]
         self.debug('Log level: {}'.format(value))
 
+    def is_enabled(self, level):
+        return self._level <= self._levels[level]
+
     @contextmanager
     def use_level(self, level):
         prev_level = self.level
