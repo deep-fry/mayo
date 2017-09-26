@@ -1,53 +1,46 @@
 import time
 import math
 
-import tensorflow as tf
-
 from mayo.log import log
-from mayo.net import Net
 from mayo.util import delta, moving_metrics, format_percent, tabular
 from mayo.session import Session
 
 
 class Evaluate(Session):
-    multi_gpus = False
+    mode = 'validation'
 
     def __init__(self, config):
         super().__init__(config)
         with self.as_default():
             self._init()
 
+    def metrics(self, net):
+        return net.accuracy(), net.accuracy(5)
+
     def _init(self):
         log.debug('Instantiating...')
-        # network
-        images, labels = self.preprocess()
-        self._net = Net(self.config, images, labels, False)
-        logits = self._net.logits()
         # moving average decay
         avg_op = self.moving_average_op()
-        log.debug(
-            ('Using' if avg_op else 'Not using') +
-            ' exponential moving average.')
-        # metrics
-        self._top1_op = tf.nn.in_top_k(logits, labels, 1)
-        self._top5_op = tf.nn.in_top_k(logits, labels, 5)
+        using = 'Using' if avg_op else 'Not using'
+        log.debug(using + ' exponential moving average.')
+        # setup metrics
+        self._top1_op, self._top5_op = self.net_map(self.metrics)
         # initialization
         self.init()
 
     def _update_progress(self, step, top1, top5, num_iterations):
         interval = delta('eval.duration', time.time())
-        if interval != 0:
-            batch_size = self.config.system.batch_size
-            metric_count = self.config.system.log.metrics_history_count
-            imgs_per_sec = batch_size * delta('eval.step', step) / interval
-            imgs_per_sec = moving_metrics(
-                'eval.imgs_per_sec', imgs_per_sec,
-                std=False, over=metric_count)
-            percentage = step / num_iterations * 100
-            info = 'eval: {:.2f}% | top1: {:.2f}% | top5: {:.2f}% | {:.1f}/s'
-            info = info.format(
-                percentage, top1 * 100, top5 * 100, imgs_per_sec)
-            log.info(info, update=True)
+        if interval == 0:
+            return
+        batch_size = self.config.system.batch_size
+        metric_count = self.config.system.log.metrics_history_count
+        imgs_per_sec = batch_size * delta('eval.step', step) / interval
+        imgs_per_sec = moving_metrics(
+            'eval.imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
+        percentage = step / num_iterations * 100
+        info = 'eval: {:.2f}% | top1: {:.2f}% | top5: {:.2f}% | {:.1f}/s'
+        info = info.format(percentage, top1 * 100, top5 * 100, imgs_per_sec)
+        log.info(info, update=True)
 
     def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint

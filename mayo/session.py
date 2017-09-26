@@ -14,8 +14,7 @@ from mayo.preprocess import Preprocess
 
 
 class Session(object):
-    multi_gpus = True
-    preprocess_mode = None
+    mode = None
 
     def __init__(self, config):
         super().__init__()
@@ -28,7 +27,7 @@ class Session(object):
         self.preprocessor = Preprocess(self.tf_session, config)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
-        self._nets = []
+        self.nets = []
         self._instantiate_nets()
 
     def __del__(self):
@@ -38,7 +37,7 @@ class Session(object):
 
     @property
     def num_gpus(self):
-        return self.config.system.num_gpus if self.multi_gpus else 1
+        return self.config.system.num_gpus if self.mode == 'train' else 1
 
     def _auto_select_gpus(self):
         mem_bound = 500
@@ -46,7 +45,7 @@ class Session(object):
             info = subprocess.check_output(
                 'nvidia-smi', shell=True, stderr=subprocess.STDOUT)
             info = re.findall('(\d+)MiB\s/', info.decode('utf-8'))
-            log.debug('GPU memory usage (MB): {}'.format(', '.join(info)))
+            log.debug('GPU memory usages (MB): {}'.format(', '.join(info)))
             info = [int(m) for m in info]
             gpus = [i for i in range(len(info)) if info[i] <= mem_bound]
         except subprocess.CalledProcessError:
@@ -59,8 +58,11 @@ class Session(object):
 
     def _init_gpus(self):
         gpus = self.config.system.get('visible_gpus', 'auto')
-        if gpus != 'auto' and isinstance(gpus, list):
-            gpus = ','.join(str(g) for g in gpus)
+        if gpus != 'auto':
+            if isinstance(gpus, list):
+                gpus = ','.join(str(g) for g in gpus)
+            else:
+                gpus = str(gpus)
         else:
             gpus = self._auto_select_gpus()
         if gpus:
@@ -133,7 +135,7 @@ class Session(object):
                 else:
                     yield o
         overrider_info = {}
-        for o in flatten(self._nets[0].overriders):
+        for o in flatten(self.nets[0].overriders):
             info = o.info(self)
             info_list = overrider_info.setdefault(info.__class__.__name__, [])
             info_list.append(info)
@@ -145,14 +147,14 @@ class Session(object):
 
     def _preprocess(self):
         with self.as_default():
-            return self.preprocessor.preprocess(
-                self.preprocess_mode, self.num_gpus)
+            return self.preprocessor.preprocess(self.mode, self.num_gpus)
 
     @contextmanager
     def _gpu_context(self, gid):
-        with tf.device('/gpu:{}'.format(gid)):
-            with tf.name_scope('tower_{}'.format(gid)) as scope:
-                yield scope
+        with self.as_default():
+            with tf.device('/gpu:{}'.format(gid)):
+                with tf.name_scope('tower_{}'.format(gid)) as scope:
+                    yield scope
 
     def _instantiate_nets(self):
         log.debug('Instantiating...')
@@ -160,17 +162,20 @@ class Session(object):
         if self.config.system.batch_size % self.num_gpus != 0:
             raise ValueError(
                 'Batch size must be divisible by number of devices')
-        reuse = False
+        reuse = None
+        is_training = self.mode == 'train'
         for i, (images, labels) in enumerate(self._preprocess()):
             log.debug('Instantiating graph for GPU #{}...'.format(i))
             with self._gpu_context(i):
-                net = Net(self.config, images, labels, True, reuse=reuse)
-                self._nets.append(net)
+                net = Net(
+                    self.config, images, labels, is_training, reuse=reuse)
+                self.nets.append(net)
+            reuse = True
 
     def net_map(self, func):
-        for i, net in enumerate(self._nets):
-            with self._gpu_context(i) as scope:
-                yield func(net, scope)
+        for i, net in enumerate(self.nets):
+            with self._gpu_context(i):
+                yield func(net)
 
     def interact(self):
         from IPython import embed

@@ -214,7 +214,7 @@ def unique(items):
 
 def flatten(items, skip_none=False):
     for i in items:
-        if isinstance(i, list):
+        if isinstance(i, (list, tuple)):
             yield from flatten(i)
         elif i is not None:
             yield i

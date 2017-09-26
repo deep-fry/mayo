@@ -189,6 +189,9 @@ class BaseNet(object):
     def generic_instantiate(self, net, params):
         raise NotImplementedError
 
+    def labels(self):
+        return self.end_points['labels']
+
     def logits(self):
         return self.end_points['logits']
 
@@ -208,15 +211,16 @@ class BaseNet(object):
         self._add_end_point('loss', loss)
         return loss
 
-    def accuracy(self):
+    def accuracy(self, top_n=1):
+        name = 'accuracy_{}'.format(top_n)
         try:
-            return self.end_points['accuracy']
+            return self.end_points[name]
         except KeyError:
             pass
         logits = self.end_points['logits']
         labels = self.end_points['labels']
-        acc = tf.nn.in_top_k(logits, labels, 1)
-        self._add_end_point('accuracy', acc)
+        acc = tf.nn.in_top_k(logits, labels, top_n)
+        self._add_end_point(name, acc)
         return acc
 
     def info(self):

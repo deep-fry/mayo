@@ -5,12 +5,12 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    delta, every, moving_metrics, memoize_method, object_from_params)
+    delta, every, moving_metrics, memoize_method, object_from_params, flatten)
 from mayo.session import Session
 
 
 class Train(Session):
-    preprocess_mode = 'train'
+    mode = 'train'
 
     def __init__(self, config):
         super().__init__(config)
@@ -63,48 +63,42 @@ class Train(Session):
             average_grads.append(grad_and_var)
         return average_grads
 
-    def _gradient_iterator(self, net, scope):
+    def _gradient_iterator(self, net):
         loss = net.loss()
         net_acc = net.accuracy()
         accuracy = tf.reduce_sum(tf.cast(net_acc, tf.float32))
         accuracy /= net_acc.shape.num_elements()
         grads = self.optimizer.compute_gradients(loss)
-        bn_updates = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope)
+        updates = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
         summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
-        return loss, accuracy, grads, bn_updates, summaries
+        return loss, accuracy, grads, updates, summaries
 
     def _setup_gradients(self):
         log.debug('Initializing gradients...')
-        losses, accuracies, tower_grads, net_updates, net_summaries = zip(
+        losses, accuracies, tower_grads, updates, summaries = zip(
             *self.net_map(self._gradient_iterator))
         self._gradients = self._average_gradients(tower_grads)
         # update ops
-        updates = []
-        for each in net_updates:
-            updates += each
-        self._batch_norm_updates = updates
+        self._update_ops = flatten(updates)
         self._imgs_seen_op = tf.assign_add(
             self.imgs_seen, self.config.system.batch_size)
         # summaries
-        summaries = []
-        for each in net_summaries:
-            summaries += each
         self._loss = tf.reduce_sum(losses)
         self._acc = tf.reduce_mean(accuracies)
-        summaries += [
+        summaries += (
             tf.summary.scalar('learning_rate', self.learning_rate),
-            tf.summary.scalar('loss', self._loss)]
+            tf.summary.scalar('loss', self._loss))
         self._summary_op = tf.summary.merge(summaries)
 
     def _setup_train_operation(self):
         log.debug('Initializing training operations...')
         app_grad_op = self.optimizer.apply_gradients(self._gradients)
         ops = [app_grad_op]
-        avg_op = self.moving_average_op()
-        if avg_op:
-            ops.append(avg_op)
-        bn_op = tf.group(*self._batch_norm_updates)
-        ops.append(bn_op)
+        ma_op = self.moving_average_op()
+        if ma_op:
+            ops.append(ma_op)
+        ops += self._update_ops
+        log.debug('Train operations: {}'.format(ops))
         self._train_op = tf.group(*ops)
 
     def _init(self):
@@ -162,7 +156,7 @@ class Train(Session):
 
     def update_overriders(self):
         log.info('Updating overrider variables...')
-        for n in self._nets:
+        for n in self.nets:
             for o in n.overriders:
                 o.update(self)
 
