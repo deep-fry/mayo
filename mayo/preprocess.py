@@ -313,23 +313,12 @@ class Preprocess(object):
         images = tf.reshape(images, shape=shape)
         return images, tf.reshape(labels, [batch_size])
 
-    def inputs(self, mode):
+    def preprocess(self, mode, num_gpus):
+        if mode not in ['train', 'validate']:
+            raise ValueError(
+                'Unrecognized preprocessing mode {!r}'.format(mode))
         with tf.name_scope('batch_processing'):
             serialized = self._serialized_inputs(mode)
-            preprocessed = self._unserialize(serialized, mode)
-        self.start()
-        return preprocessed
-
-    def split_inputs(self, mode):
-        images, labels = self.inputs(mode)
-        num = self.config.system.num_gpus
-        split = lambda t: tf.split(axis=0, num_or_size_splits=num, value=t)
-        return split(images), split(labels)
-
-    @memoize_method
-    def preprocess_train(self):
-        return self.split_inputs('train')
-
-    @memoize_method
-    def preprocess_validate(self):
-        return self.inputs('validate')
+            images, labels = self._unserialize(serialized, mode)
+            self.start()
+            return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))

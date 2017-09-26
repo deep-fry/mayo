@@ -4,18 +4,17 @@ import math
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.net import Net
 from mayo.util import (
     delta, every, moving_metrics, memoize_method, object_from_params)
 from mayo.session import Session
-from mayo.override import ChainOverrider
 
 
 class Train(Session):
+    preprocess_mode = 'train'
+
     def __init__(self, config):
         super().__init__(config)
         self._cp_epoch = ''
-        self._nets = []
         with self.as_default():
             self._init()
 
@@ -46,11 +45,6 @@ class Train(Session):
         with self.as_default():
             return optimizer_class(self.learning_rate, **params)
 
-    def _tower_loss(self, images, labels, reuse):
-        net = Net(self.config, images, labels, True, reuse=reuse)
-        self._nets.append(net)
-        return net.loss(), net.accuracy()
-
     @staticmethod
     def _average_gradients(tower_grads):
         average_grads = []
@@ -69,45 +63,41 @@ class Train(Session):
             average_grads.append(grad_and_var)
         return average_grads
 
+    def _gradient_iterator(self, net, scope):
+        loss = net.loss()
+        net_acc = net.accuracy()
+        accuracy = tf.reduce_sum(tf.cast(net_acc, tf.float32))
+        accuracy /= net_acc.shape.num_elements()
+        grads = self.optimizer.compute_gradients(loss)
+        bn_updates = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope)
+        summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
+        return loss, accuracy, grads, bn_updates, summaries
+
     def _setup_gradients(self):
-        config = self.config.system
-        # ensure batch size is divisible by number of gpus
-        if config.batch_size % config.num_gpus != 0:
-            raise ValueError(
-                'Batch size must be divisible by number of devices')
-        # initialize images and labels
-        images_splits, labels_splits = self.preprocess('train')
-        # for each gpu
-        iterator = enumerate(zip(images_splits, labels_splits))
-        tower_grads = []
-        reuse = None
-        for i, (images_split, label_split) in iterator:
-            log.debug('Instantiating loss for GPU #{}.'.format(i))
-            # loss with the proper nested contexts
-            name = 'tower_{}'.format(i)
-            with tf.device('/gpu:{}'.format(i)), tf.name_scope(name):
-                # loss from the final tower
-                self._loss, self._acc = self._tower_loss(
-                    images_split, label_split, reuse)
-                reuse = True
-                # batch norm updates from the final tower
-                # summaries from the final tower
-                summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
-                self._batch_norm_updates = tf.get_collection(
-                    tf.GraphKeys.UPDATE_OPS, name)
-                # gradients from all towers
-                grads = self.optimizer.compute_gradients(self._loss)
-                tower_grads.append(grads)
+        log.debug('Initializing gradients...')
+        losses, accuracies, tower_grads, net_updates, net_summaries = zip(
+            *self.net_map(self._gradient_iterator))
         self._gradients = self._average_gradients(tower_grads)
-        # update num imgs
-        self._imgs_seen_op = tf.assign_add(self.imgs_seen, config.batch_size)
+        # update ops
+        updates = []
+        for each in net_updates:
+            updates += each
+        self._batch_norm_updates = updates
+        self._imgs_seen_op = tf.assign_add(
+            self.imgs_seen, self.config.system.batch_size)
         # summaries
+        summaries = []
+        for each in net_summaries:
+            summaries += each
+        self._loss = tf.reduce_sum(losses)
+        self._acc = tf.reduce_mean(accuracies)
         summaries += [
             tf.summary.scalar('learning_rate', self.learning_rate),
             tf.summary.scalar('loss', self._loss)]
         self._summary_op = tf.summary.merge(summaries)
 
     def _setup_train_operation(self):
+        log.debug('Initializing training operations...')
         app_grad_op = self.optimizer.apply_gradients(self._gradients)
         ops = [app_grad_op]
         avg_op = self.moving_average_op()
@@ -118,7 +108,6 @@ class Train(Session):
         self._train_op = tf.group(*ops)
 
     def _init(self):
-        log.debug('Instantiating...')
         self._setup_gradients()
         self._setup_train_operation()
         self.init()
@@ -139,10 +128,8 @@ class Train(Session):
         loss_mean, loss_std = moving_metrics(
             'train.loss', loss, over=metric_count)
         loss_std = '±{}%'.format(int(loss_std / loss_mean * 100))
-        acc_percent = sum(accuracy) / self.config.system.batch_size
-        acc_percent *= self.config.system.num_gpus * 100
         acc_mean = moving_metrics(
-            'train.accuracy', acc_percent, std=False, over=metric_count)
+            'train.accuracy', accuracy * 100, std=False, over=metric_count)
         info = info.format(epoch, loss_mean, loss_std, acc_mean, cp_epoch)
         # performance
         interval = delta('train.duration', time.time())
@@ -178,20 +165,6 @@ class Train(Session):
         for n in self._nets:
             for o in n.overriders:
                 o.update(self)
-
-    def overrider_info(self):
-        def flatten(overriders):
-            for o in overriders:
-                if isinstance(o, ChainOverrider):
-                    yield from flatten(o)
-                else:
-                    yield o
-        overrider_info = {}
-        for o in flatten(self._nets[0].overriders):
-            info = o.info(self)
-            info_list = overrider_info.setdefault(info.__class__.__name__, [])
-            info_list.append(info)
-        return overrider_info
 
     def _iteration(self):
         system = self.config.system

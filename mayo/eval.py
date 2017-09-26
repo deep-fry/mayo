@@ -20,7 +20,7 @@ class Evaluate(Session):
     def _init(self):
         log.debug('Instantiating...')
         # network
-        images, labels = self.preprocessor.preprocess_validate()
+        images, labels = self.preprocess()
         self._net = Net(self.config, images, labels, False)
         logits = self._net.logits()
         # moving average decay

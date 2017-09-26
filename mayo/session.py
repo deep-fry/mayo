@@ -6,13 +6,16 @@ from contextlib import contextmanager
 import tensorflow as tf
 
 from mayo.log import log
+from mayo.net import Net
 from mayo.util import memoize_method
+from mayo.override import ChainOverrider
 from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
 
 
 class Session(object):
     multi_gpus = True
+    preprocess_mode = None
 
     def __init__(self, config):
         super().__init__()
@@ -25,15 +28,20 @@ class Session(object):
         self.preprocessor = Preprocess(self.tf_session, config)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
+        self._nets = []
+        self._instantiate_nets()
 
     def __del__(self):
         log.debug('Finishing...')
         del self.preprocessor
         self.tf_session.close()
 
+    @property
+    def num_gpus(self):
+        return self.config.system.num_gpus if self.multi_gpus else 1
+
     def _auto_select_gpus(self):
         mem_bound = 500
-        num_gpus = self.config.system.num_gpus if self.multi_gpus else 1
         try:
             info = subprocess.check_output(
                 'nvidia-smi', shell=True, stderr=subprocess.STDOUT)
@@ -43,11 +51,11 @@ class Session(object):
             gpus = [i for i in range(len(info)) if info[i] <= mem_bound]
         except subprocess.CalledProcessError:
             gpus = []
-        if len(gpus) < num_gpus:
+        if len(gpus) < self.num_gpus:
             log.warn(
                 'Number of GPUs available {} is less than the number of '
-                'GPUs requested {}.'.format(len(gpus), num_gpus))
-        return ','.join(str(g) for g in gpus[:num_gpus])
+                'GPUs requested {}.'.format(len(gpus), self.num_gpus))
+        return ','.join(str(g) for g in gpus[:self.num_gpus])
 
     def _init_gpus(self):
         gpus = self.config.system.get('visible_gpus', 'auto')
@@ -117,17 +125,52 @@ class Session(object):
         log.debug('Initializing...')
         return self.run(tf.variables_initializer(self.global_variables()))
 
+    def overrider_info(self):
+        def flatten(overriders):
+            for o in overriders:
+                if isinstance(o, ChainOverrider):
+                    yield from flatten(o)
+                else:
+                    yield o
+        overrider_info = {}
+        for o in flatten(self._nets[0].overriders):
+            info = o.info(self)
+            info_list = overrider_info.setdefault(info.__class__.__name__, [])
+            info_list.append(info)
+        return overrider_info
+
     def run(self, ops):
         log.debug('Running {!r}...'.format(ops))
         return self.tf_session.run(ops)
 
-    def preprocess(self, mode):
+    def _preprocess(self):
         with self.as_default():
-            if mode == 'train':
-                return self.preprocessor.preprocess_train()
-            elif mode == 'validate':
-                return self.preprocessor.preprocess_validate()
-        raise TypeError('Unrecognized mode {!r}'.format(mode))
+            return self.preprocessor.preprocess(
+                self.preprocess_mode, self.num_gpus)
+
+    @contextmanager
+    def _gpu_context(self, gid):
+        with tf.device('/gpu:{}'.format(gid)):
+            with tf.name_scope('tower_{}'.format(gid)) as scope:
+                yield scope
+
+    def _instantiate_nets(self):
+        log.debug('Instantiating...')
+        # ensure batch size is divisible by number of gpus
+        if self.config.system.batch_size % self.num_gpus != 0:
+            raise ValueError(
+                'Batch size must be divisible by number of devices')
+        reuse = False
+        for i, (images, labels) in enumerate(self._preprocess()):
+            log.debug('Instantiating graph for GPU #{}...'.format(i))
+            with self._gpu_context(i):
+                net = Net(self.config, images, labels, True, reuse=reuse)
+                self._nets.append(net)
+
+    def net_map(self, func):
+        for i, net in enumerate(self._nets):
+            with self._gpu_context(i) as scope:
+                yield func(net, scope)
 
     def interact(self):
         from IPython import embed
