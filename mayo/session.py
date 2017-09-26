@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.net import Net
-from mayo.util import memoize_method
+from mayo.util import memoize_method, memoize_property
 from mayo.override import ChainOverrider
 from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
@@ -83,21 +83,30 @@ class Session(object):
                 name, [], initializer=tf.constant_initializer(0),
                 trainable=False, dtype=dtype)
 
-    @property
-    @memoize_method
+    @memoize_property
     def imgs_seen(self):
         return self._tf_int('imgs_seen', tf.int64)
 
-    @property
-    @memoize_method
+    @memoize_property
     def num_steps(self):
         return self.imgs_seen / self.config.system.batch_size
 
-    @property
-    @memoize_method
+    @memoize_property
     def num_epochs(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
         return self.imgs_seen / imgs_per_epoch
+
+    def _mean_metric(self, func):
+        with self.as_default():
+            return tf.reduce_mean(list(self.net_map(func)))
+
+    @memoize_property
+    def accuracy(self):
+        return self._mean_metric(lambda net: net.accuracy())
+
+    @memoize_property
+    def loss(self):
+        return self._mean_metric(lambda net: net.loss())
 
     def global_variables(self):
         with self.as_default():
@@ -126,6 +135,9 @@ class Session(object):
     def init(self):
         log.debug('Initializing...')
         return self.run(tf.variables_initializer(self.global_variables()))
+
+    def info(self):
+        return self.nets[0].info()
 
     def overrider_info(self):
         def flatten(overriders):
@@ -169,7 +181,7 @@ class Session(object):
             with self._gpu_context(i):
                 net = Net(
                     self.config, images, labels, is_training, reuse=reuse)
-                self.nets.append(net)
+            self.nets.append(net)
             reuse = True
 
     def net_map(self, func):

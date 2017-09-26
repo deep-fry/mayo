@@ -5,7 +5,8 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    delta, every, moving_metrics, memoize_method, object_from_params, flatten)
+    delta, every, moving_metrics,
+    memoize_property, object_from_params, flatten)
 from mayo.session import Session
 
 
@@ -18,8 +19,7 @@ class Train(Session):
         with self.as_default():
             self._init()
 
-    @property
-    @memoize_method
+    @memoize_property
     def learning_rate(self):
         params = self.config.train.learning_rate
         lr_class, params = object_from_params(params)
@@ -36,8 +36,7 @@ class Train(Session):
         with self.as_default():
             return lr_class(**params)
 
-    @property
-    @memoize_method
+    @memoize_property
     def optimizer(self):
         params = self.config.train.optimizer
         optimizer_class, params = object_from_params(params)
@@ -63,47 +62,41 @@ class Train(Session):
             average_grads.append(grad_and_var)
         return average_grads
 
-    def _gradient_iterator(self, net):
-        loss = net.loss()
-        net_acc = net.accuracy()
-        accuracy = tf.reduce_sum(tf.cast(net_acc, tf.float32))
-        accuracy /= net_acc.shape.num_elements()
-        grads = self.optimizer.compute_gradients(loss)
-        updates = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-        summaries = tf.get_collection(tf.GraphKeys.SUMMARIES)
-        return loss, accuracy, grads, updates, summaries
-
-    def _setup_gradients(self):
-        log.debug('Initializing gradients...')
-        losses, accuracies, tower_grads, updates, summaries = zip(
-            *self.net_map(self._gradient_iterator))
-        self._gradients = self._average_gradients(tower_grads)
-        # update ops
-        self._update_ops = flatten(updates)
-        self._imgs_seen_op = tf.assign_add(
-            self.imgs_seen, self.config.system.batch_size)
-        # summaries
-        self._loss = tf.reduce_sum(losses)
-        self._acc = tf.reduce_mean(accuracies)
-        summaries += (
-            tf.summary.scalar('learning_rate', self.learning_rate),
-            tf.summary.scalar('loss', self._loss))
-        self._summary_op = tf.summary.merge(summaries)
+    @memoize_property
+    def _gradients(self):
+        grads_func = lambda net: self.optimizer.compute_gradients(net.loss())
+        tower_grads = self.net_map(grads_func)
+        return self._average_gradients(tower_grads)
 
     def _setup_train_operation(self):
-        log.debug('Initializing training operations...')
-        app_grad_op = self.optimizer.apply_gradients(self._gradients)
-        ops = [app_grad_op]
+        ops = {}
+        ops['imgs_seen'] = tf.assign_add(
+            self.imgs_seen, self.config.system.batch_size)
+        ops['app_grad'] = self.optimizer.apply_gradients(self._gradients)
         ma_op = self.moving_average_op()
         if ma_op:
-            ops.append(ma_op)
-        ops += self._update_ops
-        log.debug('Train operations: {}'.format(ops))
-        self._train_op = tf.group(*ops)
+            ops['avg'] = ma_op
+        # update ops
+        update_func = lambda net: tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+        update_ops = list(flatten(self.net_map(update_func)))
+        ops['update'] = tf.group(*update_ops, name='update')
+        log.debug('Using update operations: {}'.format(update_ops))
+        log.debug('Using training operations: {}'.format(ops))
+        self._train_op = ops
+
+    def _setup_summaries(self):
+        if not self.config.system.summary.save:
+            return
+        summ_func = lambda net: tf.get_collection(tf.GraphKeys.SUMMARIES)
+        summaries = list(self.net_map(summ_func))
+        summaries += [
+            tf.summary.scalar('learning_rate', self.learning_rate),
+            tf.summary.scalar('loss', self.loss)]
+        self._summary_op = tf.summary.merge(summaries)
 
     def _init(self):
-        self._setup_gradients()
         self._setup_train_operation()
+        self._setup_summaries()
         self.init()
         self.checkpoint.load(self.config.system.checkpoint.load)
         # final debug outputs
@@ -137,8 +130,7 @@ class Train(Session):
             info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
         log.info(info, update=True)
 
-    @property
-    @memoize_method
+    @memoize_property
     def _summary_writer(self):
         path = self.config.system.search_path.summary[0]
         return tf.summary.FileWriter(path, graph=self.graph)
@@ -148,10 +140,8 @@ class Train(Session):
         self._summary_writer.add_summary(summary, epoch)
 
     def once(self):
-        tasks = [
-            self._train_op, self._imgs_seen_op,
-            self._loss, self._acc, self.num_epochs]
-        noop, imgs_seen, loss, acc, num_epochs = self.run(tasks)
+        tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
+        noop, loss, acc, num_epochs = self.run(tasks)
         return loss, acc, num_epochs
 
     def update_overriders(self):

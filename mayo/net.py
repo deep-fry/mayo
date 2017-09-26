@@ -211,15 +211,27 @@ class BaseNet(object):
         self._add_end_point('loss', loss)
         return loss
 
-    def accuracy(self, top_n=1):
-        name = 'accuracy_{}'.format(top_n)
+    def top(self, count=1):
+        name = 'top_{}'.format(count)
         try:
             return self.end_points[name]
         except KeyError:
             pass
         logits = self.end_points['logits']
         labels = self.end_points['labels']
-        acc = tf.nn.in_top_k(logits, labels, top_n)
+        top = tf.nn.in_top_k(logits, labels, count)
+        self._add_end_point(name, top)
+        return top
+
+    def accuracy(self, top_n=1):
+        name = 'accuracy_{}'.format(top_n)
+        try:
+            return self.end_points[name]
+        except KeyError:
+            pass
+        top = self.top(top_n)
+        acc = tf.reduce_sum(tf.cast(top, tf.float32))
+        acc /= top.shape.num_elements()
         self._add_end_point(name, acc)
         return acc
 

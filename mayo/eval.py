@@ -7,24 +7,23 @@ from mayo.session import Session
 
 
 class Evaluate(Session):
-    mode = 'validation'
+    mode = 'validate'
 
     def __init__(self, config):
         super().__init__(config)
         with self.as_default():
             self._init()
 
-    def metrics(self, net):
-        return net.accuracy(), net.accuracy(5)
-
     def _init(self):
         log.debug('Instantiating...')
         # moving average decay
         avg_op = self.moving_average_op()
         using = 'Using' if avg_op else 'Not using'
-        log.debug(using + ' exponential moving average.')
+        log.debug(using + ' exponential moving averages.')
         # setup metrics
-        self._top1_op, self._top5_op = self.net_map(self.metrics)
+        metrics_func = lambda net: (net.top(1), net.top(5))
+        metrics = list(self.net_map(metrics_func))
+        self._top1_op, self._top5_op = metrics.pop()
         # initialization
         self.init()
 
@@ -85,14 +84,12 @@ class Evaluate(Session):
         epochs = self.checkpoint.list_epochs()
         epochs_to_eval = ', '.join(str(e) for e in epochs)
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
-        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        imgs_seen = self.imgs_seen
         results = [('Epoch', 'Top 1', 'Top 5'), '-']
         try:
             for e in epochs:
                 with log.demote():
                     top1, top5 = self.eval(e, keyboard_interrupt=False)
-                epoch = self.run(imgs_seen) / imgs_per_epoch
+                epoch = self.run(self.num_epochs)
                 epoch_str = '{:.3f}'.format(epoch)
                 top1 = format_percent(top1)
                 top5 = format_percent(top5)

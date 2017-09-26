@@ -23,6 +23,10 @@ def memoize_method(func):
     return wrapped
 
 
+def memoize_property(func):
+    return property(memoize_method(func))
+
+
 _persistent_dict = {}
 
 
