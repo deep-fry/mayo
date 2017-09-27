@@ -1,4 +1,3 @@
-import math
 from functools import partial
 from collections import Sequence, namedtuple
 
@@ -6,6 +5,7 @@ import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
+from mayo.util import Percent
 
 
 def _is_constant(*args):
@@ -233,7 +233,7 @@ class BasePruner(BaseOverrider):
 
     def _info(self, session):
         mask = _cast(session.run(self._mask), int)
-        density = _sum(mask) / _count(mask)
+        density = Percent(_sum(mask) / _count(mask))
         return self._info_tuple(
             mask=self._mask.name, density=density, count=mask.size)
 

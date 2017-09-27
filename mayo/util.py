@@ -153,6 +153,11 @@ def format_percent(value):
     return '{:.2f}%'.format(value * 100)
 
 
+class Percent(int):
+    def __format__(self, _):
+        return format_percent(self)
+
+
 def tabular(data):
     data = ['-'] + data + ['-']
     valid_rows = [row for row in data if row != '-']
