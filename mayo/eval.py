@@ -2,7 +2,7 @@ import time
 import math
 
 from mayo.log import log
-from mayo.util import delta, moving_metrics, format_percent, tabular
+from mayo.util import delta, moving_metrics, Percent, Table
 from mayo.session import Session
 
 
@@ -76,7 +76,7 @@ class Evaluate(Session):
         else:
             log.info('Evaluation complete.')
             log.info('    top1: {}, top5: {} [{} images]'.format(
-                format_percent(top1_acc), format_percent(top5_acc), total))
+                Percent(top1_acc), Percent(top5_acc), total))
             return top1_acc, top5_acc
 
     def eval_all(self):
@@ -84,18 +84,18 @@ class Evaluate(Session):
         epochs = self.checkpoint.list_epochs()
         epochs_to_eval = ', '.join(str(e) for e in epochs)
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
-        results = [('Epoch', 'Top 1', 'Top 5'), '-']
+        results = Table(('Epoch', 'Top 1', 'Top 5'))
         try:
             for e in epochs:
                 with log.demote():
                     top1, top5 = self.eval(e, keyboard_interrupt=False)
                 epoch = self.run(self.num_epochs)
                 epoch_str = '{:.3f}'.format(epoch)
-                top1 = format_percent(top1)
-                top5 = format_percent(top5)
+                top1 = Percent(top1)
+                top5 = Percent(top5)
                 log.info('epoch: {}, top1: {}, top5: {}'.format(
                     epoch_str, top1, top5))
-                results.append((epoch_str, top1, top5))
+                results.add_row((epoch_str, top1, top5))
         except KeyboardInterrupt:
             pass
-        return tabular(results)
+        return results.format()

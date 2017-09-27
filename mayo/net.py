@@ -1,13 +1,13 @@
 import itertools
 from contextlib import contextmanager
-from collections import OrderedDict, namedtuple
+from collections import OrderedDict
 
 import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
 from mayo.util import (
-    import_from_string, object_from_params, multi_objects_from_params)
+    import_from_string, object_from_params, multi_objects_from_params, Table)
 from mayo.override import ChainOverrider
 
 
@@ -235,12 +235,15 @@ class BaseNet(object):
         return acc
 
     def info(self):
-        VarTuple = namedtuple('VarTuple', ['variable', 'shape'])
-        var_info = [VarTuple(v, v.shape) for v in tf.trainable_variables()]
-        LayerTuple = namedtuple('LayerTuple', ['layer', 'shape'])
-        layer_info = [
-            LayerTuple(n, l.shape) for n, l in self.end_points.items()]
-        return {'var_info': var_info, 'layer_info': layer_info}
+        var_info = Table(['variable', 'shape'])
+        var_info.add_rows((v, v.shape) for v in tf.trainable_variables())
+        var_info.add_column(
+            'count', lambda row: var_info[row, 'shape'].num_elements())
+        var_info.set_footer(
+            ['', '    total:', sum(var_info.get_column('count'))])
+        layer_info = Table(['layer', 'shape'])
+        layer_info.add_rows((n, l.shape) for n, l in self.end_points.items())
+        return {'variables': var_info, 'layers': layer_info}
 
 
 class Net(BaseNet):

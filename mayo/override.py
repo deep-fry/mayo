@@ -156,9 +156,6 @@ class BaseOverrider(object):
         self._update(session)
         log.debug('Updated overrider {!r}'.format(self.info(session)))
 
-    def info(self, session):
-        return self._info(session)
-
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
         cls = self.__class__.__name__
@@ -167,8 +164,12 @@ class BaseOverrider(object):
         kwargs[cls] = self.name
         return Tuple(**kwargs)
 
-    def _info(self, session):
+    def info(self, session):
         return self._info_tuple()
+
+    @classmethod
+    def finalize_info(cls, table):
+        pass
 
     def __repr__(self):
         if not self.name:
@@ -197,7 +198,7 @@ class ChainOverrider(BaseOverrider, Sequence):
         for o in self._overriders:
             o.update(session)
 
-    def _info(self, session):
+    def info(self, session):
         return self._info_tuple(overriders=self._overriders)
 
     def __repr__(self):
@@ -231,11 +232,18 @@ class BasePruner(BaseOverrider):
         mask = self._updated_mask(self.before, self._mask)
         return session.run(tf.assign(self._mask, mask))
 
-    def _info(self, session):
+    def info(self, session):
         mask = _cast(session.run(self._mask), int)
         density = Percent(_sum(mask) / _count(mask))
         return self._info_tuple(
-            mask=self._mask.name, density=density, count=mask.size)
+            mask=self._mask.name, density=density, count_=mask.size)
+
+    @classmethod
+    def finalize_info(cls, table):
+        densities = table.get_column('density')
+        count = table.get_column('count_')
+        avg_density = sum(d * c for d, c in zip(densities, count)) / sum(count)
+        table.set_footer([None, '    overall: ', Percent(avg_density), None])
 
 
 class ThresholdPruner(BasePruner):
@@ -333,10 +341,10 @@ class FixedPointQuantizer(BaseOverrider):
     def _apply(self, getter, value):
         return self._quantize(value, self.point)
 
-    def _info(self, session):
+    def info(self, session):
         p = self.point
         if isinstance(p, tf.Variable):
-            p = session.run(p)
+            p = int(session.run(p))
         return self._info_tuple(width=self.width, point=p)
 
 

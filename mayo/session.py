@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.net import Net
-from mayo.util import memoize_method, memoize_property, flatten
+from mayo.util import memoize_method, memoize_property, flatten, Table
 from mayo.override import ChainOverrider
 from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
@@ -152,8 +152,8 @@ class Session(object):
         overrider_info = {}
         for o in flatten(self.nets[0].overriders):
             info = o.info(self)
-            info_list = overrider_info.setdefault(info.__class__.__name__, [])
-            info_list.append(info)
+            table = overrider_info.setdefault(o.__class__, Table(info._fields))
+            table.add_row(info)
         return overrider_info
 
     def run(self, ops):
