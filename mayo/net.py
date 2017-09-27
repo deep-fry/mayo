@@ -121,8 +121,7 @@ class _InstantiationParamTransformer(object):
 
 
 class BaseNet(object):
-    def __init__(
-            self, config, images, labels, is_training, reuse=None):
+    def __init__(self, config, images, labels, is_training, reuse=None):
         super().__init__()
         self.config = config
         self.is_training = is_training

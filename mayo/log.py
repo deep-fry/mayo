@@ -68,7 +68,6 @@ class Logger(object):
     @level.setter
     def level(self, value):
         self._level = self._levels[value]
-        self.debug('Log level: {}'.format(value))
 
     def is_enabled(self, level):
         return self._level <= self._levels[level]

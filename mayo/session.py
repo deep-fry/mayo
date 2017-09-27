@@ -27,8 +27,7 @@ class Session(object):
         self.preprocessor = Preprocess(self.tf_session, config)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
-        self.nets = []
-        self._instantiate_nets()
+        self.nets = self._instantiate_nets()
 
     def __del__(self):
         log.debug('Finishing...')
@@ -158,7 +157,6 @@ class Session(object):
         return overrider_info
 
     def run(self, ops):
-        log.debug('Running {!r}...'.format(ops))
         return self.tf_session.run(ops)
 
     def _preprocess(self):
@@ -178,15 +176,14 @@ class Session(object):
         if self.config.system.batch_size % self.num_gpus != 0:
             raise ValueError(
                 'Batch size must be divisible by number of devices')
-        reuse = None
         is_training = self.mode == 'train'
+        nets = []
         for i, (images, labels) in enumerate(self._preprocess()):
             log.debug('Instantiating graph for GPU #{}...'.format(i))
             with self._gpu_context(i):
-                net = Net(
-                    self.config, images, labels, is_training, reuse=reuse)
-            self.nets.append(net)
-            reuse = True
+                net = Net(self.config, images, labels, is_training, bool(nets))
+            nets.append(net)
+        return nets
 
     def net_map(self, func):
         for i, net in enumerate(self.nets):
