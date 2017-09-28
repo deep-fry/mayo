@@ -36,9 +36,9 @@ class Evaluate(Session):
         imgs_per_sec = batch_size * delta('eval.step', step) / interval
         imgs_per_sec = moving_metrics(
             'eval.imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
-        percentage = step / num_iterations * 100
-        info = 'eval: {:.2f}% | top1: {:.2f}% | top5: {:.2f}% | {:.1f}/s'
-        info = info.format(percentage, top1 * 100, top5 * 100, imgs_per_sec)
+        info = 'eval: {} | top1: {} | top5: {:.2f} | {:.1f}/s'.format(
+            Percent(step / num_iterations), Percent(top1), Percent(top5),
+            imgs_per_sec)
         log.info(info, update=True)
 
     def eval(self, key=None, keyboard_interrupt=True):

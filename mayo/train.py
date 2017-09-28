@@ -5,8 +5,8 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    delta, every, moving_metrics,
-    memoize_property, object_from_params, flatten)
+    delta, every, moving_metrics, Percent,
+    memoize_property, object_from_params)
 from mayo.session import Session
 
 
@@ -107,15 +107,16 @@ class Train(Session):
         metric_count = self.config.system.log.metrics_history_count
         if not isinstance(cp_epoch, str):
             cp_epoch = '{:.2f}'.format(cp_epoch)
-        info = 'epoch: {:.2f} | loss: {:10f}{:5} | acc: {:5.2f}%'
+        info = 'epoch: {:.2f} | loss: {:10f}{:5} | acc: {}'
         if cp_epoch:
             info += ' | ckpt: {}'
         loss_mean, loss_std = moving_metrics(
             'train.loss', loss, over=metric_count)
-        loss_std = '±{}%'.format(int(loss_std / loss_mean * 100))
+        loss_std = '±{}'.format(Percent(loss_std / loss_mean))
         acc_mean = moving_metrics(
-            'train.accuracy', accuracy * 100, std=False, over=metric_count)
-        info = info.format(epoch, loss_mean, loss_std, acc_mean, cp_epoch)
+            'train.accuracy', accuracy, std=False, over=metric_count)
+        info = info.format(
+            epoch, loss_mean, loss_std, Percent(acc_mean), cp_epoch)
         # performance
         interval = delta('train.duration', time.time())
         if interval != 0:

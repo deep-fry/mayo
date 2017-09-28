@@ -149,13 +149,9 @@ def format_shape(shape):
     return ' x '.join(str(s) if s else '?' for s in shape)
 
 
-def format_percent(value):
-    return '{:.2f}%'.format(value * 100)
-
-
-class Percent(int):
+class Percent(float):
     def __format__(self, _):
-        return format_percent(self)
+        return '{:.2f}%'.format(self * 100)
 
 
 class Table(collections.Sequence):
