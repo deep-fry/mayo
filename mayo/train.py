@@ -137,6 +137,11 @@ class Train(Session):
         summary = self.run(self._summary_op)
         self._summary_writer.add_summary(summary, epoch)
 
+    def reset_num_epochs(self):
+        log.info('Reseting number of training epochs of the model...')
+        with self.as_default():
+            self.run(tf.assign(self.imgs_seen, 0))
+
     def once(self):
         tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
         noop, loss, acc, num_epochs = self.run(tasks)

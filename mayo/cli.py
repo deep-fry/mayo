@@ -188,6 +188,10 @@ Arguments:
             overrider_cls.finalize_info(table)
             print(table.format())
 
+    def cli_reset_num_epochs(self):
+        """Resets the number of training epochs.  """
+        self._get_session('train').reset_num_epochs()
+
     def cli_override(self):
         """Updates variable overriders in the training session.  """
         self._get_session('train').update_overriders()
