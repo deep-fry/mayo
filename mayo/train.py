@@ -148,11 +148,23 @@ class Train(Session):
         noop, loss, acc, num_epochs = self.run(tasks)
         return loss, acc, num_epochs
 
-    def update_overriders(self):
-        log.info('Updating overrider variables...')
-        for n in self.nets:
-            for o in n.overriders:
-                o.update(self)
+    def _overriders_call(self, func_name):
+        # it is sufficient to use the first net, as overriders
+        # share internal variables
+        for o in self.nets[0].overriders:
+            getattr(o, func_name)(self)
+
+    def overriders_assign(self):
+        log.info('Assigning overridden values of parameters to parameters...')
+        self._overriders_call('assign')
+
+    def overriders_update(self):
+        log.info('Updating overrider internal variables...')
+        self._overriders_call('update')
+
+    def overriders_reset(self):
+        log.info('Resetting overriders internal variables...')
+        self._overriders_call('reset')
 
     def _iteration(self):
         system = self.config.system

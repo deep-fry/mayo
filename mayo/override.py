@@ -110,6 +110,10 @@ def _clip_by_value(tensor, minimum, maximum, transparent_backprop=False):
         return tf.clip_by_value(tensor, minimum, maximum)
 
 
+class OverrideNotAppliedError(Exception):
+    """Invoke apply before update.  """
+
+
 class BaseOverrider(object):
     """
     Base class for applying overriding operations on a Net.  Please ensure
@@ -123,38 +127,57 @@ class BaseOverrider(object):
     def __init__(self, should_update=True):
         super().__init__()
         self.name = None
+        self.internals = {}
         self.should_update = should_update
-
-    class OverrideNotAppliedError(Exception):
-        """Invoke apply before update.  """
 
     def _apply(self, getter, value):
         """
-        Things to apply to the variable in `value`, returns the
-        overridden result.
+        Override this method called in `.apply()` to modify the
+        variable in `value`.
         """
         raise NotImplementedError(
             'Overrider method "apply" must be implemented.')
 
     def apply(self, getter, value):
+        """
+        Things to apply to the variable in `value`, returns the
+        overridden result.
+        """
+        def tracking_getter(name, *args, **kwargs):
+            var = getter(name, *args, **kwargs)
+            self.internals[name] = var
+            return var
         self._applied = True
         self.name = value.op.name
         self.before = value
-        self.after = self._apply(getter, value)
+        self.after = self._apply(tracking_getter, value)
         return self.after
 
     def _update(self, session):
-        """Update things to apply during training.  """
+        """
+        Override this method called in `.update()` to update internal
+        states of the overrider.
+        """
         pass
 
     def update(self, session):
+        """Update things to apply during training.  """
         if not self.should_update:
-            return None
+            return
         if not getattr(self, '_applied', False):
-            raise self.__class__.OverrideNotAppliedError(
+            raise OverrideNotAppliedError(
                 'Method "apply" must be invoked before call "update".')
         self._update(session)
         log.debug('Updated overrider {!r}'.format(self.info(session)))
+
+    def assign(self, session):
+        """Assign overridden values to parameters before overriding.  """
+        session.run(tf.assign(self._before, self._after))
+
+    def reset(self, session):
+        """Reset internal variables to their respective initial values.  """
+        for var in self.internals.values():
+            session.run(tf.assign(var, var.initial_value))
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
@@ -197,6 +220,10 @@ class ChainOverrider(BaseOverrider, Sequence):
     def _update(self, session):
         for o in self._overriders:
             o.update(session)
+
+    def reset(self, session):
+        for o in self._overriders:
+            o.reset(session)
 
     def info(self, session):
         return self._info_tuple(overriders=self._overriders)

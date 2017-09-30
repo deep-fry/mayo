@@ -91,9 +91,12 @@ Arguments:
 
     def usage(self):
         usage_meta = meta()
+        commands = self.commands()
+        name_len = max(len(name) for name in commands)
         commands = '\n'.join(
-            '{}[ {:8} ]\t{}'.format(' ' * 9, name, func.__doc__.strip())
-            for name, func in self.commands().items())
+            '{}{:{l}} {}'.format(
+                ' ' * 9, name, func.__doc__.strip(), l=name_len)
+            for name, func in commands.items())
         usage_meta['commands'] = commands
         return self.doc() + self._USAGE.format(**usage_meta)
 
@@ -149,6 +152,7 @@ Arguments:
             raise TypeError('Action {!r} not recognized.'.format(action))
         self._validate_config(keys, action)
         if not isinstance(self.session, cls):
+            log.info('Starting a {} session...'.format(action))
             self.session = cls(self.config)
         return self.session
 
@@ -192,9 +196,17 @@ Arguments:
         """Resets the number of training epochs.  """
         self._get_session('train').reset_num_epochs()
 
-    def cli_override(self):
+    def cli_overriders_update(self):
         """Updates variable overriders in the training session.  """
-        self._get_session('train').update_overriders()
+        self._get_session('train').overriders_update()
+
+    def cli_overriders_assign(self):
+        """Assign overridden values to original parameters.  """
+        self._get_session('train').overriders_assign()
+
+    def cli_overriders_reset(self):
+        """Reset the internal state of overriders.  """
+        self._get_session('train').overriders_reset()
 
     def cli_save(self):
         """Saves the latest checkpoint.  """
