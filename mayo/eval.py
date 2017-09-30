@@ -37,8 +37,7 @@ class Evaluate(Session):
         imgs_per_sec = moving_metrics(
             'eval.imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
         info = 'eval: {} | top1: {} | top5: {:.2f} | {:.1f}/s'.format(
-            Percent(step / num_iterations), Percent(top1), Percent(top5),
-            imgs_per_sec)
+            Percent(step / num_iterations), top1, top5, imgs_per_sec)
         log.info(info, update=True)
 
     def eval(self, key=None, keyboard_interrupt=True):
@@ -65,8 +64,8 @@ class Evaluate(Session):
                     total += batch_size
                 top1s += sum(top1)
                 top5s += sum(top5)
-                top1_acc = top1s / total
-                top5_acc = top5s / total
+                top1_acc = Percent(top1s / total)
+                top5_acc = Percent(top5s / total)
                 step += 1
                 self._update_progress(step, top1_acc, top5_acc, num_iterations)
         except KeyboardInterrupt as e:
@@ -76,7 +75,7 @@ class Evaluate(Session):
         else:
             log.info('Evaluation complete.')
             log.info('    top1: {}, top5: {} [{} images]'.format(
-                Percent(top1_acc), Percent(top5_acc), total))
+                top1_acc, top5_acc, total))
             return top1_acc, top5_acc
 
     def eval_all(self):
