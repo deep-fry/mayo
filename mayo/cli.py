@@ -160,6 +160,10 @@ Arguments:
         """Performs training.  """
         return self._get_session('train').train()
 
+    def cli_retrain(self):
+        """Performs training.  """
+        return self._get_session('train').retrain()
+
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """
         return self._get_session('validate').eval()

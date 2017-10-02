@@ -251,12 +251,12 @@ class BasePruner(BaseOverrider):
         mask = _cast(self._mask, float)
         return value * mask
 
-    def _updated_mask(self, var, mask):
+    def _updated_mask(self, var, mask, session):
         raise NotImplementedError(
             'Method to compute an updated mask is not implemented.')
 
     def _update(self, session):
-        mask = self._updated_mask(self.before, self._mask)
+        mask = self._updated_mask(self.before, self._mask, session)
         return session.run(tf.assign(self._mask, mask))
 
     def info(self, session):
@@ -278,7 +278,7 @@ class ThresholdPruner(BasePruner):
         super().__init__(should_update)
         self.threshold = threshold
 
-    def _updated_mask(self, var, mask):
+    def _updated_mask(self, var, mask, session):
         return _binarize(var, self.threshold)
 
 
@@ -293,7 +293,7 @@ class MeanStdPruner(BasePruner):
         mean, var = tf.nn.moments(_abs(tensor), axes=axes)
         return mean + self.alpha * tf.sqrt(var)
 
-    def _updated_mask(self, var, mask):
+    def _updated_mask(self, var, mask, session):
         return _binarize(var, self._threshold(var))
 
 
@@ -309,7 +309,7 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         self.on_factor = on_factor
         self.off_factor = off_factor
 
-    def _updated_mask(self, var, mask):
+    def _updated_mask(self, var, mask, session):
         threshold = self._threshold(var)
         on_mask = _abs(var) > self.on_factor * threshold
         mask = _logical_or(mask, on_mask)
@@ -318,6 +318,23 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
 
 
 DNSPruner = DynamicNetworkSurgeryPruner
+
+
+class Mayo_DNSPruner(DynamicNetworkSurgeryPruner):
+    def __init__(
+            self, c_rate, on_factor=1.1, off_factor=0.9, should_update=True):
+        super().__init__(c_rate, on_factor, off_factor, should_update)
+
+    def _updated_mask(self, var, mask, session):
+        return super()._updated_mask(var, mask, session)
+
+    def _threshold_update(self, session, scale_interval, iter_max_epoch, num_epochs):
+        epochs = session.run(num_epochs)
+        if epochs % iter_max_epoch == 0:
+            self.alpha += scale_interval
+
+
+MayoDNSPruner = Mayo_DNSPruner
 
 
 class Rounder(BaseOverrider):
