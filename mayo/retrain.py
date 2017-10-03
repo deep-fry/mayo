@@ -96,7 +96,6 @@ class Retrain(Train):
             return True
 
     def _log_thresholds(self, loss):
-        print(self.log)
         tolerance = self.config.model.layers.tolerance
         _, prev_loss = self.log.get(self.target_layer, [None, None])
         for n in self.nets:
