@@ -18,6 +18,8 @@ class Retrain(Train):
             self.best_ckpt = None
             self._profile_pruner()
             self._profile_loss()
+            self._increment_c_rate()
+            self.overriders_update()
             while self._retrain_iteration():
                 pass
         except KeyboardInterrupt:
@@ -30,7 +32,6 @@ class Retrain(Train):
 
     def _retrain_iteration(self):
         system = self.config.system
-        self._increment_c_rate()
         loss, acc, epoch = self.once()
 
         self.loss_total += loss
@@ -60,9 +61,10 @@ class Retrain(Train):
                     + str(floor_epoch)
                 self._cp_epoch = floor_epoch
                 self.prune_cnt += 1
+                self._increment_c_rate()
+                self.overriders_update()
                 self.reset_num_epochs()
-                self.loss_total = 0
-                self.step = 0
+                return True
 
             iter_max_epoch = self.config.model.layers.iter_max_epoch
             if epoch >= iter_max_epoch and epoch > 0:
@@ -72,8 +74,6 @@ class Retrain(Train):
                 ))
                 self.prune_cnt += 1
                 self.reset_num_epochs()
-                self.loss_total = 0
-                self.step = 0
                 self._log_thresholds(self.loss_avg)
                 # all layers done
                 if self.priority_list == []:
@@ -86,6 +86,7 @@ class Retrain(Train):
                     # fetch a new layer to retrain
                     self.target_layer = self.priority_list.pop()
                     self._control_updates()
+                    self._increment_c_rate()
                     self.overriders_update()
         return True
 
@@ -140,6 +141,7 @@ class Retrain(Train):
         ))
 
     def _profile_pruner(self):
+        self.best_ckp = 'prtrained'
         self.priority_list = []
         d = {}
         self.layerwise_losses = {}
