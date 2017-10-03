@@ -11,6 +11,7 @@ from mayo.config import Config
 from mayo.eval import Evaluate
 from mayo.net import Net
 from mayo.train import Train
+from mayo.retrain import Retrain
 
 
 _root = os.path.dirname(__file__)
@@ -145,6 +146,9 @@ Arguments:
         if action == 'train':
             cls = Train
             keys += self._train_keys
+        elif action == 'retrain':
+            cls = Retrain
+            keys += self._train_keys
         elif action == 'validate':
             cls = Evaluate
             keys += self._validate_keys
@@ -162,7 +166,7 @@ Arguments:
 
     def cli_retrain(self):
         """Performs training.  """
-        return self._get_session('train').retrain()
+        return self._get_session('retrain').retrain()
 
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """
