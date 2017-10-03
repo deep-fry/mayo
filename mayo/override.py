@@ -328,7 +328,7 @@ class Mayo_DNSPruner(DynamicNetworkSurgeryPruner):
     def _updated_mask(self, var, mask, session):
         return super()._updated_mask(var, mask, session)
 
-    def _threshold_update(self, session, scale_interval, iter_max_epoch, num_epochs):
+    def _threshold_update(self, session, scale_interval, iter_max_epoch):
         epochs = session.run(session.num_epochs)
         if epochs % iter_max_epoch == 0:
             self.alpha += scale_interval
