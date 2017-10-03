@@ -63,7 +63,7 @@ class Retrain(Train):
                 with log.demote():
                     self.checkpoint.save(
                         'prune-' + str(self.prune_cnt) + '-' + str(floor_epoch))
-                self.best_ckpt = 'prune' + str(self.prune_cnt) + '-' \
+                self.best_ckpt = 'prune-' + str(self.prune_cnt) + '-' \
                     + str(floor_epoch)
                 self._cp_epoch = floor_epoch
                 self.prune_cnt += 1
