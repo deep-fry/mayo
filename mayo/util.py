@@ -41,8 +41,8 @@ def retrain_every(name, value, interval):
     if interval <= 0:
         return False
     name += '.every'
-    if value == 0 and _persistent_dict != {}:
-        _persistent_dict = {}
+    if value == 0 and (name in _persistent_dict.keys()):
+        _persistent_dict.pop(name)
     next_value = _persistent_dict.setdefault(name, value) + interval
     if value < next_value:
         return False
