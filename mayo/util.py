@@ -37,6 +37,19 @@ def delta(name, value):
     return value - prev_value
 
 
+def retrain_every(name, value, interval):
+    if interval <= 0:
+        return False
+    name += '.every'
+    if value == 0:
+        _persistent_dict = {}
+    next_value = _persistent_dict.setdefault(name, value) + interval
+    if value < next_value:
+        return False
+    _persistent_dict[name] = value
+    return True
+
+
 def every(name, value, interval):
     if interval <= 0:
         return False

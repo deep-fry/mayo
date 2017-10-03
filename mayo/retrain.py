@@ -1,6 +1,6 @@
 import math
 
-from mayo.util import delta, every
+from mayo.util import delta, every, retrain_every
 from mayo.log import log
 from mayo.train import Train
 
@@ -45,7 +45,7 @@ class Retrain(Train):
             self._save_summary(epoch)
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
-        if every('train.checkpoint.epoch', floor_epoch, cp_interval):
+        if retrain_every('train.checkpoint.epoch', floor_epoch, cp_interval):
             self.curr_loss_avg = self.loss_total / float(self.step)
             self.loss_total = 0
             self.step = 0
@@ -75,8 +75,8 @@ class Retrain(Train):
             self.reset_num_epochs()
             self.loss_total = 0
             self.step = 0
-            self.loss_avg = None
             is_layer_continue = self._log_thresholds(self.loss_avg)
+            self.loss_avg = None
             if is_layer_continue:
                 return True
             else:
@@ -96,6 +96,7 @@ class Retrain(Train):
             return True
 
     def _log_thresholds(self, loss):
+        print(self.log)
         tolerance = self.config.model.layers.tolerance
         _, prev_loss = self.log.get(self.target_layer, [None, None])
         for n in self.nets:
