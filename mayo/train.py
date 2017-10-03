@@ -250,12 +250,12 @@ class Train(Session):
                 self._update_progress(epoch, loss, acc, 'saving')
                 with log.demote():
                     self.checkpoint.save(
-                        str(self.prune_cnt) + '-' + str(floor_epoch))
+                        'prune' + str(self.prune_cnt) + '-' + str(floor_epoch))
                 self._cp_epoch = floor_epoch
                 self.loss_avg = self.curr_loss_avg
         iter_max_epoch = self.config.model.layers.iter_max_epoch
         if epoch >= iter_max_epoch and epoch > 0:
-            self.reset_num_epochs()
+            self.curr_loss_avg = self.loss_total / float(self.step)
             if self.loss_avg is None or self.loss_avg > self.curr_loss_avg:
                 self.checkpoint.save(
                     'prune' + str(self.prune_cnt) + '-' + str(floor_epoch))
@@ -266,6 +266,9 @@ class Train(Session):
                 self._cp_epoch
             ))
             self.prune_cnt += 1
+            self.reset_num_epochs()
+            self.loss_total = 0
+            self.step = 0
             is_layer_continue = self._log_thresholds(self.loss_avg)
             if is_layer_continue:
                 return True
