@@ -213,6 +213,7 @@ class Train(Session):
             self.step = 0
             self.target_layer = None
             self.loss_avg = None
+            self.prune_cnt = 0
             self._profile_pruner()
             self.reset_num_epochs()
             while self._retrain_iteration():
@@ -248,20 +249,23 @@ class Train(Session):
             if self.loss_avg is None or self.loss_avg > self.curr_loss_avg:
                 self._update_progress(epoch, loss, acc, 'saving')
                 with log.demote():
-                    self.checkpoint.save(floor_epoch)
+                    self.checkpoint.save(
+                        str(self.prune_cnt) + '-' + str(floor_epoch))
                 self._cp_epoch = floor_epoch
                 self.loss_avg = self.curr_loss_avg
         iter_max_epoch = self.config.model.layers.iter_max_epoch
         if epoch >= iter_max_epoch and epoch > 0:
             self.reset_num_epochs()
             if self.loss_avg is None or self.loss_avg > self.curr_loss_avg:
-                self.checkpoint.save(floor_epoch)
+                self.checkpoint.save(
+                    str(self.prune_cnt) + '-' + str(floor_epoch))
                 self.loss_avg = self.curr_loss_avg
                 self._cp_epoch = floor_epoch
             print('Best loss avg {}, found at {}'.format(
                 self.loss_avg,
                 self._cp_epoch
             ))
+            self.prune_cnt += 1
             is_layer_continue = self._log_thresholds(self.loss_avg)
             if is_layer_continue:
                 return True
