@@ -258,7 +258,7 @@ class Train(Session):
             self.reset_num_epochs()
             if self.loss_avg is None or self.loss_avg > self.curr_loss_avg:
                 self.checkpoint.save(
-                    str(self.prune_cnt) + '-' + str(floor_epoch))
+                    'prune' + str(self.prune_cnt) + '-' + str(floor_epoch))
                 self.loss_avg = self.curr_loss_avg
                 self._cp_epoch = floor_epoch
             print('Best loss avg {}, found at {}'.format(
