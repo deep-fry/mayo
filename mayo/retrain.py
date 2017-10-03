@@ -57,7 +57,6 @@ class Retrain(Train):
                 self.loss_avg = self.curr_loss_avg
         iter_max_epoch = self.config.model.layers.iter_max_epoch
         if epoch >= iter_max_epoch and epoch > 0:
-            self.curr_loss_avg = self.loss_total / float(self.step)
             if self.loss_avg is None or self.loss_avg > self.curr_loss_avg:
                 self.checkpoint.save(
                     'prune' + str(self.prune_cnt) + '-' + str(floor_epoch))
@@ -112,8 +111,7 @@ class Retrain(Train):
             for o in n.overriders:
                 if o._mask.name == self.target_layer:
                     o._threshold_update(
-                        self.tf_session, scale_interval, iter_max_epoch,
-                        self.num_epochs)
+                        self.tf_session, scale_interval, iter_max_epoch)
 
     def _control_updates(self):
         for n in self.nets:
