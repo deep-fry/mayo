@@ -63,7 +63,6 @@ class Retrain(Train):
                 self.reset_num_epochs()
                 self.loss_total = 0
                 self.step = 0
-                return True
 
             iter_max_epoch = self.config.model.layers.iter_max_epoch
             if epoch >= iter_max_epoch and epoch > 0:
@@ -88,9 +87,7 @@ class Retrain(Train):
                     self.target_layer = self.priority_list.pop()
                     self._control_updates()
                     self.overriders_update()
-                    return True
-        else:
-            return True
+        return True
 
     def _log_thresholds(self, loss):
         _, prev_loss = self.log.get(self.target_layer, [None, None])
