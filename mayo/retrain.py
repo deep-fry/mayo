@@ -105,13 +105,10 @@ class Retrain(Train):
                 return True
 
     def _increment_c_rate(self):
-        scale_interval = self.config.model.layers.scale
-        iter_max_epoch = self.config.model.layers.iter_max_epoch
         for n in self.nets:
             for o in n.overriders:
                 if o._mask.name == self.target_layer:
-                    o._threshold_update(
-                        self.tf_session, scale_interval, iter_max_epoch)
+                    o._threshold_update(self)
 
     def _control_updates(self):
         for n in self.nets:
