@@ -1,6 +1,5 @@
 import math
 
-from mayo.util import delta, every, retrain_every
 from mayo.log import log
 from mayo.train import Train
 
@@ -40,12 +39,12 @@ class Retrain(Train):
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         self._update_progress(epoch, loss, acc, self._cp_epoch)
-        summary_delta = delta('train.summary.epoch', epoch)
+        summary_delta = self.change.delta('summary.epoch', epoch)
         if system.summary.save and summary_delta >= 0.1:
             self._save_summary(epoch)
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
-        if retrain_every('train.checkpoint.epoch', floor_epoch, cp_interval):
+        if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self.curr_loss_avg = self.loss_total / float(self.step)
             self.loss_total = 0
             self.step = 0

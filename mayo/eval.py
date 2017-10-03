@@ -2,7 +2,7 @@ import time
 import math
 
 from mayo.log import log
-from mayo.util import delta, moving_metrics, Percent, Table
+from mayo.util import Percent, Table
 from mayo.session import Session
 
 
@@ -28,14 +28,14 @@ class Evaluate(Session):
         self.init()
 
     def _update_progress(self, step, top1, top5, num_iterations):
-        interval = delta('eval.duration', time.time())
+        interval = self.change.delta('step.duration', time.time())
         if interval == 0:
             return
         batch_size = self.config.system.batch_size
         metric_count = self.config.system.log.metrics_history_count
-        imgs_per_sec = batch_size * delta('eval.step', step) / interval
-        imgs_per_sec = moving_metrics(
-            'eval.imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
+        imgs_per_sec = batch_size * self.change.delta('step', step) / interval
+        imgs_per_sec = self.change.moving_metrics(
+            'imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
         info = 'eval: {} | top1: {} | top5: {:.2f} | {:.1f}/s'.format(
             Percent(step / num_iterations), top1, top5, imgs_per_sec)
         log.info(info, update=True)

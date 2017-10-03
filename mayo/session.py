@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.net import Net
-from mayo.util import memoize_method, memoize_property, flatten, Table
+from mayo.util import memoize_method, memoize_property, Change, flatten, Table
 from mayo.override import ChainOverrider
 from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
@@ -19,6 +19,7 @@ class Session(object):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.change = Change()
         self._init_gpus()
         self.graph = tf.Graph()
         self.tf_session = tf.Session(

@@ -27,50 +27,43 @@ def memoize_property(func):
     return property(memoize_method(func))
 
 
-_persistent_dict = {}
+class Change(object):
+    def __init__(self):
+        super().__init__()
+        self._persistence = {}
 
+    def delta(self, name, value):
+        name += '.delta'
+        prev_value = self._persistence.get(name, value)
+        self._persistence[name] = value
+        return value - prev_value
 
-def delta(name, value):
-    name += '.delta'
-    prev_value = _persistent_dict.get(name, value)
-    _persistent_dict[name] = value
-    return value - prev_value
+    def every(self, name, value, interval):
+        if interval <= 0:
+            return False
+        name += '.every'
+        next_value = self._persistence.setdefault(name, value) + interval
+        if value < next_value:
+            return False
+        self._persistence[name] = value
+        return True
 
+    def moving_metrics(self, name, value, std=True, over=100):
+        name += '.moving'
+        history = self._persistence.setdefault(name, [])
+        while len(history) >= over:
+            history.pop(0)
+        history.append(value)
+        mean = np.mean(history)
+        if not std:
+            return mean
+        return mean, np.std(history)
 
-def retrain_every(name, value, interval):
-    if interval <= 0:
-        return False
-    name += '.every'
-    if value == 0 and (name in _persistent_dict.keys()):
-        _persistent_dict.pop(name)
-    next_value = _persistent_dict.setdefault(name, value) + interval
-    if value < next_value:
-        return False
-    _persistent_dict[name] = value
-    return True
-
-
-def every(name, value, interval):
-    if interval <= 0:
-        return False
-    name += '.every'
-    next_value = _persistent_dict.setdefault(name, value) + interval
-    if value < next_value:
-        return False
-    _persistent_dict[name] = value
-    return True
-
-
-def moving_metrics(name, value, std=True, over=100):
-    name += '.moving'
-    history = _persistent_dict.setdefault(name, [])
-    while len(history) >= over:
-        history.pop(0)
-    history.append(value)
-    mean = np.mean(history)
-    if not std:
-        return mean
-    return mean, np.std(history)
+    def reset(self, name):
+        for key in list(self._persistence):
+            if not key.startswith(name + '.'):
+                continue
+            del self._persistence[key]
 
 
 @functools.lru_cache(maxsize=None)

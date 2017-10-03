@@ -4,9 +4,7 @@ import math
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import (
-    delta, every, moving_metrics, Percent,
-    memoize_property, object_from_params)
+from mayo.util import Percent, memoize_property, object_from_params
 from mayo.session import Session
 
 
@@ -110,22 +108,21 @@ class Train(Session):
         info = 'epoch: {:.2f} | loss: {:10f}{:5} | acc: {}'
         if cp_epoch:
             info += ' | ckpt: {}'
-        loss_mean, loss_std = moving_metrics(
-            'train.loss', loss, over=metric_count)
+        loss_mean, loss_std = self.change.moving_metrics(
+            'loss', loss, over=metric_count)
         loss_std = '±{}'.format(Percent(loss_std / loss_mean))
-        acc_mean = moving_metrics(
-            'train.accuracy', accuracy, std=False, over=metric_count)
+        acc_mean = self.change.moving_metrics(
+            'accuracy', accuracy, std=False, over=metric_count)
         info = info.format(
             epoch, loss_mean, loss_std, Percent(acc_mean), cp_epoch)
         # performance
-        interval = delta('train.duration', time.time())
+        interval = self.change.delta('step.duration', time.time())
         if interval != 0:
             imgs = epoch * self.config.dataset.num_examples_per_epoch.train
-            imgs_per_step = delta('train.step.imgs', imgs)
+            imgs_per_step = self.change.delta('step.images', imgs)
             imgs_per_sec = imgs_per_step / float(interval)
-            imgs_per_sec = moving_metrics(
-                'train.imgs_per_sec', imgs_per_sec,
-                std=False, over=metric_count)
+            imgs_per_sec = self.change.moving_metrics(
+                'imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
             info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
         log.info(info, update=True)
 
@@ -142,6 +139,7 @@ class Train(Session):
         log.info('Reseting number of training epochs of the model...')
         with self.as_default():
             self.run(tf.assign(self.imgs_seen, 0))
+        self.change.reset('checkpoint.epoch')
 
     def once(self):
         tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
@@ -172,12 +170,12 @@ class Train(Session):
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         self._update_progress(epoch, loss, acc, self._cp_epoch)
-        summary_delta = delta('train.summary.epoch', epoch)
+        summary_delta = self.change.delta('summary.epoch', epoch)
         if system.summary.save and summary_delta >= 0.1:
             self._save_summary(epoch)
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
-        if every('train.checkpoint.epoch', floor_epoch, cp_interval):
+        if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self._update_progress(epoch, loss, acc, 'saving')
             with log.demote():
                 self.checkpoint.save(floor_epoch)
