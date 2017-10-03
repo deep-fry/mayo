@@ -16,6 +16,7 @@ class Retrain(Train):
             self.target_layer = None
             self.loss_avg = None
             self.prune_cnt = 0
+            self.best_ckpt = None
             self._profile_pruner()
             self.reset_num_epochs()
             while self._retrain_iteration():
@@ -53,6 +54,8 @@ class Retrain(Train):
                 with log.demote():
                     self.checkpoint.save(
                         'prune' + str(self.prune_cnt) + '-' + str(floor_epoch))
+                self.best_ckpt = 'prune' + str(self.prune_cnt) + '-' \
+                    + str(floor_epoch)
                 self._cp_epoch = floor_epoch
                 self.loss_avg = self.curr_loss_avg
         iter_max_epoch = self.config.model.layers.iter_max_epoch
@@ -62,6 +65,8 @@ class Retrain(Train):
                     'prune' + str(self.prune_cnt) + '-' + str(floor_epoch))
                 self.loss_avg = self.curr_loss_avg
                 self._cp_epoch = floor_epoch
+                self.best_ckpt = 'prune' + str(self.prune_cnt) + '-' \
+                    + str(floor_epoch)
             print('Best loss avg {}, found at {}'.format(
                 self.loss_avg,
                 self._cp_epoch
@@ -70,6 +75,7 @@ class Retrain(Train):
             self.reset_num_epochs()
             self.loss_total = 0
             self.step = 0
+            self.loss_avg = None
             is_layer_continue = self._log_thresholds(self.loss_avg)
             if is_layer_continue:
                 return True
@@ -78,6 +84,9 @@ class Retrain(Train):
                 if self.priority_list == []:
                     return False
                 else:
+                    # current layer is done
+                    # trace back the ckpt
+                    self.checkpoint.load(self.best_ckpt)
                     # fetch a new layer to retrain
                     self.target_layer = self.priority_list.pop()
                     self._control_updates()
