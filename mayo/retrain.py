@@ -11,6 +11,7 @@ class Retrain(Train):
             # train iterations
             self.log = {}
             self.loss_total = 0
+            self.acc_total = 0
             self.step = 0
             self.target_layer = None
             self.loss_avg = None
@@ -35,6 +36,7 @@ class Retrain(Train):
         loss, acc, epoch = self.once()
 
         self.loss_total += loss
+        self.acc_total += acc
         self.step += 1
 
         if math.isnan(loss):
@@ -49,10 +51,14 @@ class Retrain(Train):
 
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self.loss_avg = self.loss_total / float(self.step)
+            self.acc_avg = self.acc_total / float(self.step)
             self.loss_total = 0
+            self.acc_total = 0
             self.step = 0
 
-            if self.loss_avg <= self.loss_baseline:
+            # if self.loss_avg <= self.loss_baseline:
+            if self.acc_avg >= self.acc_base:
+                self._log_thresholds(self.loss_avg, self.acc_avg)
                 self._update_progress(epoch, loss, acc, 'saving')
                 with log.demote():
                     self.checkpoint.save(
@@ -68,13 +74,10 @@ class Retrain(Train):
 
             iter_max_epoch = self.config.model.layers.iter_max_epoch
             if epoch >= iter_max_epoch and epoch > 0:
-                print('Best loss avg {}, found at {}'.format(
-                    self.loss_avg,
-                    self._cp_epoch
-                ))
                 self.prune_cnt += 1
                 self.reset_num_epochs()
-                self._log_thresholds(self.loss_avg)
+                self._log_thresholds(self.loss_avg, self.acc_avg)
+                print('log: {}'.format(self.log))
                 # all layers done
                 if self.priority_list == []:
                     print('pruning done')
@@ -90,21 +93,21 @@ class Retrain(Train):
                     self.overriders_update()
         return True
 
-    def _log_thresholds(self, loss):
-        _, prev_loss = self.log.get(self.target_layer, [None, None])
+    def _log_thresholds(self, loss, acc):
+        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
         for n in self.nets:
             for o in n.overriders:
                 if o._mask.name == self.target_layer:
                     value = o.alpha
                     break
         if prev_loss is None:
-            self.log[self.target_layer] = (value, loss)
+            self.log[self.target_layer] = (value, loss, acc)
             return True
         else:
             if loss > self.loss_baseline:
                 return False
             else:
-                self.log[self.target_layer] = (value, loss)
+                self.log[self.target_layer] = (value, loss, acc)
                 return True
 
     def _increment_c_rate(self):
