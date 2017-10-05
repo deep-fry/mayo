@@ -1,6 +1,7 @@
 import math
 import sys
 import pdb
+import numpy as np
 
 from mayo.log import log
 from mayo.train import Train
@@ -19,7 +20,7 @@ class Retrain(Train):
             self.loss_avg = None
             self.prune_cnt = 0
             self.best_ckpt = None
-            self._profile_pruner()
+            self._profile_pruner(start = True)
             self._profile_loss()
             self._increment_c_rate()
             self.overriders_update()
@@ -61,8 +62,8 @@ class Retrain(Train):
 
             # if self.loss_avg <= self.loss_baseline:
             if self.acc_avg >= self.acc_base:
-                log.info('Increase c rate on {}'.format(self.target_layer))
-                log.info('log: {}'.format(self.log))
+                log.debug('Increase c rate on {}'.format(self.target_layer))
+                log.debug('log: {}'.format(self.log))
                 # self._update_progress(epoch, loss, acc, 'saving')
                 with log.demote():
                     self.checkpoint.save(
@@ -72,6 +73,8 @@ class Retrain(Train):
                 self._cp_epoch = floor_epoch
                 self.prune_cnt += 1
                 self._log_thresholds(self.loss_avg, self.acc_avg)
+                self._profile_pruner()
+                self._control_updates()
                 self._increment_c_rate()
                 self.overriders_update()
                 self.reset_num_epochs()
@@ -84,17 +87,19 @@ class Retrain(Train):
                 self._log_thresholds(self.loss_avg, self.acc_avg)
                 # all layers done
                 if self.priority_list == []:
-                    print('pruning done')
+                    log.info('pruning done')
                     return False
                 else:
                     # current layer is done
+                    self.cont[self.target_layer] = False
                     # trace back the ckpt
                     self.checkpoint.load(self.best_ckpt)
                     # fetch a new layer to retrain
-                    self.target_layer = self.priority_list.pop()
+                    self._profile_pruner()
                     self._control_updates()
                     self._increment_c_rate()
                     self.overriders_update()
+                    self.reset_num_epochs()
         return True
 
     def _fetch_c_rates(self):
@@ -122,10 +127,9 @@ class Retrain(Train):
                     o._threshold_update(self)
 
     def _control_updates(self):
-        for n in self.nets:
-            for o in n.overriders:
-                if o._mask.name == self.target_layer:
-                    o.should_update = True
+        for o in self.nets[0].overriders:
+            if o._mask.name == self.target_layer:
+                o.should_update = True
 
     def _profile_loss(self):
         log.info('Start profiling for one epoch')
@@ -143,23 +147,32 @@ class Retrain(Train):
         self.loss_baseline = loss_total / float(step) * (1 + tolerance)
         self.acc_base = acc_total / float(step) * (1 - tolerance)
         self.reset_num_epochs()
-        log.info('profiled baselines, loss is {}, acc is {}'.format(
+        log.debug('profiled baselines, loss is {}, acc is {}'.format(
             self.loss_baseline,
             self.acc_base,
         ))
 
-    def _profile_pruner(self):
-        self.best_ckp = 'prtrained'
+    def _profile_pruner(self, start = False):
         self.priority_list = []
+        if start:
+            self.best_ckp = 'prtrained'
+            self.cont = {}
+            for o in self.nets[0].overriders:
+                name = o._mask.name
+                self.cont[name] = True
+                o.should_update = False
         d = {}
-        self.layerwise_losses = {}
         for o in self.nets[0].overriders:
             name = o._mask.name
-            d[name] = o._mask.shape.num_elements()
-            self.layerwise_losses[name] = []
+            d[name] = np.count_nonzero(self.run(o._mask))
         for key in sorted(d, key=d.get):
-            self.priority_list.append(key)
-        for n in self.nets:
-            for o in n.overriders:
-                o.should_update = False
+            log.debug('key is {} cont is {}'.format(key, self.cont[key]))
+            if self.cont[key]:
+                self.priority_list.append(key)
+        log.debug('display profiling info')
+        log.debug('{}'.format(d))
+        log.debug('display priority list info')
+        log.debug('{}'.format(self.priority_list))
+        # log.debug('display cont info')
+        # log.debug('{}'.format(self.cont))
         self.target_layer = self.priority_list.pop()
