@@ -334,6 +334,7 @@ class Mayo_DNSPruner(DynamicNetworkSurgeryPruner):
         # epochs = session.run(session.num_epochs)
         # if epochs % iter_max_epoch == 0:
         self.alpha += scale_interval
+        log.info('inside overrider, alpha is {}'.format(self.alpha))
 
 
 MayoDNSPruner = Mayo_DNSPruner

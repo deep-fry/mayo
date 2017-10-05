@@ -1,4 +1,6 @@
 import math
+import sys
+import pdb
 
 from mayo.log import log
 from mayo.train import Train
@@ -21,6 +23,7 @@ class Retrain(Train):
             self._profile_loss()
             self._increment_c_rate()
             self.overriders_update()
+            self._control_updates()
             while self._retrain_iteration():
                 pass
         except KeyboardInterrupt:
@@ -58,8 +61,9 @@ class Retrain(Train):
 
             # if self.loss_avg <= self.loss_baseline:
             if self.acc_avg >= self.acc_base:
-                self._log_thresholds(self.loss_avg, self.acc_avg)
-                self._update_progress(epoch, loss, acc, 'saving')
+                log.info('Increase c rate on {}'.format(self.target_layer))
+                log.info('log: {}'.format(self.log))
+                # self._update_progress(epoch, loss, acc, 'saving')
                 with log.demote():
                     self.checkpoint.save(
                         'prune-' + str(self.prune_cnt) + '-' + str(floor_epoch))
@@ -67,6 +71,7 @@ class Retrain(Train):
                     + str(floor_epoch)
                 self._cp_epoch = floor_epoch
                 self.prune_cnt += 1
+                self._log_thresholds(self.loss_avg, self.acc_avg)
                 self._increment_c_rate()
                 self.overriders_update()
                 self.reset_num_epochs()
@@ -77,7 +82,6 @@ class Retrain(Train):
                 self.prune_cnt += 1
                 self.reset_num_epochs()
                 self._log_thresholds(self.loss_avg, self.acc_avg)
-                print('log: {}'.format(self.log))
                 # all layers done
                 if self.priority_list == []:
                     print('pruning done')
@@ -93,6 +97,11 @@ class Retrain(Train):
                     self.overriders_update()
         return True
 
+    def _fetch_c_rates(self):
+        for o in self.nets[0].overriders:
+            if o._mask.name == self.target_layer:
+                return o.alpha
+
     def _log_thresholds(self, loss, acc):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
         for n in self.nets:
@@ -102,13 +111,9 @@ class Retrain(Train):
                     break
         if prev_loss is None:
             self.log[self.target_layer] = (value, loss, acc)
-            return True
         else:
-            if loss > self.loss_baseline:
-                return False
-            else:
+            if acc > self.acc_base:
                 self.log[self.target_layer] = (value, loss, acc)
-                return True
 
     def _increment_c_rate(self):
         for n in self.nets:
@@ -138,7 +143,7 @@ class Retrain(Train):
         self.loss_baseline = loss_total / float(step) * (1 + tolerance)
         self.acc_base = acc_total / float(step) * (1 - tolerance)
         self.reset_num_epochs()
-        log.info('profiled baselines, acc is {}, loss is {}'.format(
+        log.info('profiled baselines, loss is {}, acc is {}'.format(
             self.loss_baseline,
             self.acc_base,
         ))
