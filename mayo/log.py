@@ -3,6 +3,7 @@ import sys
 import time
 import atexit
 import shutil
+import inspect
 import itertools
 from contextlib import contextmanager
 
@@ -35,19 +36,25 @@ class Logger(object):
     _spinner = itertools.cycle('⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏')
     _spinner_done = '⣿'
 
+    _default_width = 80
+
     def __init__(self):
         super().__init__()
         self.level = 'info'
         self.pause_level = 'error'
+        self.frame = False
         self.color = 'color' in os.environ['TERM']
-        self.width = 80
         self._last_is_update = False
         self._last_use_spinner = True
         self._last_level = self.level
 
     @property
     def width(self):
-        width, _ = shutil.get_terminal_size((self._width, 24))
+        try:
+            return self._width
+        except AttributeError:
+            pass
+        width, _ = shutil.get_terminal_size((self._default_width, 24))
         return width
 
     @width.setter
@@ -105,12 +112,42 @@ class Logger(object):
         self.key = _key
         self.info = _info
 
+    def colored(self, text, level):
+        return colored(text, self._colors[level])
+
+    def debug_colored(self, text):
+        return self.colored(text, 'debug')
+
+    def info_colored(self, text):
+        return self.colored(text, 'info')
+
+    def key_colored(self, text):
+        return self.colored(text, 'key')
+
+    def warn_colored(self, text):
+        return self.colored(text, 'warn')
+
+    def error_colored(self, text):
+        return self.colored(text, 'error')
+
+    def _frame_info(self):
+        # facepalm
+        frame = inspect.currentframe().f_back.f_back.f_back.f_back
+        file_name = frame.f_code.co_filename
+        file_name = os.path.split(file_name)[1]
+        file_name = os.path.splitext(file_name)[0]
+        func_name = frame.f_code.co_name
+        line_no = frame.f_lineno
+        return '{}:{}#{}'.format(file_name, func_name, line_no)
+
     def _header(self, text, level, spinner):
         if spinner:
             sign = next(self._spinner)
         else:
             sign = self._signs[level]
-        return '{} {}'.format(colored(sign, self._colors[level]), text)
+        if self.frame:
+            sign = self._frame_info()
+        return '{} {}'.format(self.colored(sign, level), text)
 
     def log(self, text, level='info', update=False, spinner=True):
         num_level = self._levels[level]
@@ -129,8 +166,7 @@ class Logger(object):
         text = self._header(text, level, update and spinner)
         if not update and self._last_is_update:
             if self._last_use_spinner:
-                tick = colored(
-                    self._spinner_done, self._colors[self._last_level])
+                tick = self.colored(self._spinner_done, self._last_level)
                 begin = '\r{}\n{}'.format(tick, begin)
             else:
                 begin = '\n{}'.format(begin)

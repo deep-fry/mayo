@@ -13,7 +13,8 @@ system:
             - KeyboardInterrupt
             - FileNotFoundError
     log:
-        mayo: info
+        level: info
+        frame: false
         tensorflow: 2
         metrics_history_count: 200
     search_path:

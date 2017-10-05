@@ -8,6 +8,8 @@ import collections
 
 import yaml
 
+from mayo.log import log
+
 
 class YamlTag(object):
     tag = None
@@ -338,9 +340,7 @@ class Config(BaseConfig):
         sys.excepthook = self._excepthook
 
     def _setup_log_level(self):
-        level = self.get('system.log.mayo', 'info')
-        if level != 'info':
-            from mayo.log import log
-            log.level = level
-        level = self.get('system.log.tensorflow', 0)
-        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(level)
+        log.level = self.get('system.log.level', 'info')
+        log.frame = self.get('system.log.frame', False)
+        tf_level = self.get('system.log.tensorflow', 0)
+        os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(tf_level)
