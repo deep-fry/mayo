@@ -11,20 +11,7 @@ class Retrain(Train):
     def retrain(self):
         log.debug('Retraining start.')
         try:
-            # train iterations
-            self.log = {}
-            self.loss_total = 0
-            self.acc_total = 0
-            self.step = 0
-            self.target_layer = None
-            self.loss_avg = None
-            self.prune_cnt = 0
-            self.best_ckpt = None
-            self._profile_pruner(start = True)
-            self._profile_loss()
-            self._increment_c_rate()
-            self.overriders_update()
-            self._control_updates()
+            self._init_prune()
             while self._retrain_iteration():
                 pass
         except KeyboardInterrupt:
@@ -34,6 +21,25 @@ class Retrain(Train):
                 countdown = save.get('countdown', 0)
                 if log.countdown('Saving checkpoint', countdown):
                     self.checkpoint.save('latest')
+
+    def _init_prune(self):
+        self.log = {}
+        # train iterations
+        self.loss_total = 0
+        self.acc_total = 0
+        self.step = 0
+        self.target_layer = None
+        self.loss_avg = None
+        self.prune_cnt = 0
+        self.best_ckpt = None
+        for o in self.nets[0].overriders:
+            o._set_up_scale(self)
+        # profile
+        self._profile_pruner(start = True)
+        self._profile_loss()
+        self._increment_c_rate()
+        self.overriders_update()
+        self._control_updates()
 
     def _retrain_iteration(self):
         system = self.config.system
@@ -87,11 +93,12 @@ class Retrain(Train):
                 self._log_thresholds(self.loss_avg, self.acc_avg)
                 # all layers done
                 if self.priority_list == []:
-                    log.info('pruning done')
+                    log.info('pruning done, model stored at {}'.format(
+                    self.best_ckpt))
                     return False
                 else:
                     # current layer is done
-                    self.cont[self.target_layer] = False
+                    self._control_c_rates()
                     # trace back the ckpt
                     self.checkpoint.load(self.best_ckpt)
                     # fetch a new layer to retrain
@@ -102,29 +109,41 @@ class Retrain(Train):
                     self.reset_num_epochs()
         return True
 
-    def _fetch_c_rates(self):
+    def _control_c_rates(self):
+        if self._fetch_scale() >= self.config.model.layers.min_scale:
+            self._decrease_scale()
+        else:
+            self.cont[self.target_layer] = False
+
+
+    def _fetch_scale(self):
         for o in self.nets[0].overriders:
             if o._mask.name == self.target_layer:
-                return o.alpha
+                return o.scale
 
     def _log_thresholds(self, loss, acc):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
-        for n in self.nets:
-            for o in n.overriders:
-                if o._mask.name == self.target_layer:
-                    value = o.alpha
-                    break
+        for o in self.nets[0].overriders:
+            if o._mask.name == self.target_layer:
+                value = o.alpha
+                break
         if prev_loss is None:
             self.log[self.target_layer] = (value, loss, acc)
         else:
             if acc > self.acc_base:
                 self.log[self.target_layer] = (value, loss, acc)
 
+    def _decrease_scale(self):
+        for o in self.nets[0].overriders:
+            if o._mask.name == self.target_layer:
+                o._scale_update(0.5)
+                record = o.scale
+        log.debug('decrease scaling factor to {}'.format(record))
+
     def _increment_c_rate(self):
-        for n in self.nets:
-            for o in n.overriders:
-                if o._mask.name == self.target_layer:
-                    o._threshold_update(self)
+        for o in self.nets[0].overriders:
+            if o._mask.name == self.target_layer:
+                o._threshold_update()
 
     def _control_updates(self):
         for o in self.nets[0].overriders:
