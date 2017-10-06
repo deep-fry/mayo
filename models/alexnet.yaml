@@ -52,11 +52,12 @@ model:
         conv4: &conv4 {<<: *conv3, num_outputs: 256}
         conv5: *conv4
         pool5: *pool
+        dropout5: {type: dropout, keep_prob: 0.5}
         flatten5: {type: flatten}
         fc6: {<<: *fc, num_outputs: 4096}
         dropout6: &dropout {type: dropout, keep_prob: 0.5}
         fc7: {<<: *fc, num_outputs: 4096}
-        dropout7: *dropout
+        # dropout7: *dropout
         logits:
             <<: *fc
             num_outputs: num_classes
