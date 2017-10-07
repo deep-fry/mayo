@@ -35,7 +35,7 @@ class Retrain(Train):
         for o in self.nets[0].overriders:
             o._set_up_scale(self)
         # profile
-        self._profile_pruner(start = True)
+        self._profile_pruner(start=True)
         self._profile_loss()
         self._increment_c_rate()
         self.overriders_update()
@@ -94,7 +94,7 @@ class Retrain(Train):
                 # all layers done
                 if self.priority_list == []:
                     log.info('pruning done, model stored at {}'.format(
-                    self.best_ckpt))
+                        self.best_ckpt))
                     return False
                 else:
                     # current layer is done
@@ -114,7 +114,6 @@ class Retrain(Train):
             self._decrease_scale()
         else:
             self.cont[self.target_layer] = False
-
 
     def _fetch_scale(self):
         for o in self.nets[0].overriders:
@@ -171,7 +170,7 @@ class Retrain(Train):
             self.acc_base,
         ))
 
-    def _profile_pruner(self, start = False):
+    def _profile_pruner(self, start=False):
         self.priority_list = []
         if start:
             self.best_ckp = 'prtrained'
@@ -181,13 +180,21 @@ class Retrain(Train):
                 self.cont[name] = True
                 o.should_update = False
         d = {}
+        cRates = {}
+        cRates_scale = {}
         for o in self.nets[0].overriders:
             name = o._mask.name
             d[name] = np.count_nonzero(self.run(o._mask))
+            cRates[name] = o.alpha
+            cRates_scale[name] = o.scale
         for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            if self.cont[key]:
+            if self.cont[key] and ('biases' not in key):
                 self.priority_list.append(key)
+        log.debug('display cRates')
+        log.debug('{}'.format(cRates))
+        log.debug('display cRates scale')
+        log.debug('{}'.format(cRates_scale))
         log.debug('display profiling info')
         log.debug('{}'.format(d))
         log.debug('display priority list info')

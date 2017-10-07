@@ -2,8 +2,9 @@
 model.layers:
     mode: auto
     scale: 0.5
+    scale_update_factor: 0.5
     iter_max_epoch: 100
-    tolerance: 0.005
+    tolerance: 0.01
     conv0: &overrider
         weights_overrider: &pruner
             type: mayo.override.MayoDNSPruner
