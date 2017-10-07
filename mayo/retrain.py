@@ -92,7 +92,9 @@ class Retrain(Train):
                 self.reset_num_epochs()
                 self._log_thresholds(self.loss_avg, self.acc_avg)
                 # all layers done
-                if self.priority_list == []:
+                scale_finished = self._fetch_scale() < \
+                    self.config.model.layers.min_scale
+                if self.priority_list == [] and scale_finished:
                     log.info('pruning done, model stored at {}'.format(
                         self.best_ckpt))
                     return False
