@@ -202,4 +202,7 @@ class Retrain(Train):
         log.debug('{}'.format(self.priority_list))
         # log.debug('display cont info')
         # log.debug('{}'.format(self.cont))
-        self.target_layer = self.priority_list.pop()
+        if self.priority_list == []:
+            log.debug('list is empty!!')
+        else:
+            self.target_layer = self.priority_list.pop()

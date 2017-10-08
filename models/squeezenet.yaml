@@ -47,14 +47,12 @@ model:
         fire2: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
         fire3: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
         fire4: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
-        pool4: &pool
-            {type: max_pool, kernel_size: 3, stride: 2}
+        pool4: {type: max_pool, kernel_size: 3, stride: 2}
         fire5: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
         fire6: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
         fire7: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
         fire8: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
-        pool8: &pool
-            {type: max_pool, kernel_size: 3, stride: 2}
+        pool8: {type: max_pool, kernel_size: 3, stride: 2}
         fire9: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
         dropout9: &dropout {type: dropout, keep_prob: 0.5}
         conv10: {<<: *conv, kernel_size: 1, stride: 1, num_outputs: num_classes}

@@ -253,26 +253,27 @@ class Net(BaseNet):
     def instantiate_fire_module(self, net, params):
         squeeze_depth = params.pop('squeeze_depth')
         expand_depth = params.pop('expand_depth')
-        net = self.squeeze(net, squeeze_depth, params)
-        net = self.expand(net, expand_depth, params)
+        scope = params.pop('scope')
+        net = self.squeeze(net, squeeze_depth, scope, params)
+        net = self.expand(net, expand_depth, scope, params)
         return net
 
     @staticmethod
-    def squeeze(net, num_outputs, params):
-        scope = params['scope']
+    def squeeze(net, num_outputs, scope, params):
         return slim.conv2d(
             net, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
             scope='{}_squeeze'.format(scope), **params)
 
     @staticmethod
-    def expand(net, num_outputs, params):
-        scope = params['scope']
+    def expand(net, num_outputs, scope, params):
         e1x1 = slim.conv2d(
             net, num_outputs=num_outputs, kernel_size=[1, 1],
             stride=1, scope='{}_expand_e1x1'.format(scope), **params)
+        print(e1x1)
         e3x3 = slim.conv2d(
             net, num_outputs=num_outputs, kernel_size=[3, 3],
             stride=1, scope='{}_expand_e3x3'.format(scope), **params)
+        print(e3x3)
         return tf.concat(3, [e1x1, e3x3])
 
     def instantiate_depthwise_separable_convolution(self, net, params):
