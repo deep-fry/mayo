@@ -134,7 +134,7 @@ class Retrain(Train):
                 self.log[self.target_layer] = (value, loss, acc)
 
     def _decrease_scale(self):
-        factor = self.config.model.layers.min_scale.scale_update_factor
+        factor = self.config.model.layers.scale_update_factor
         for o in self.nets[0].overriders:
             if o._mask.name == self.target_layer:
                 o._scale_roll_back()
