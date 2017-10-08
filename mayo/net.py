@@ -269,12 +269,10 @@ class Net(BaseNet):
         e1x1 = slim.conv2d(
             net, num_outputs=num_outputs, kernel_size=[1, 1],
             stride=1, scope='{}_expand_e1x1'.format(scope), **params)
-        print(e1x1)
         e3x3 = slim.conv2d(
             net, num_outputs=num_outputs, kernel_size=[3, 3],
             stride=1, scope='{}_expand_e3x3'.format(scope), **params)
-        print(e3x3)
-        return tf.concat(3, [e1x1, e3x3])
+        return tf.concat([e1x1, e3x3], 3)
 
     def instantiate_depthwise_separable_convolution(self, net, params):
         scope = params.pop('scope')

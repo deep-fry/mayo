@@ -335,6 +335,9 @@ class Mayo_DNSPruner(DynamicNetworkSurgeryPruner):
         self.alpha += self.scale
         log.info('inside overrider, alpha is {}'.format(self.alpha))
 
+    def _scale_roll_back(self):
+        self.alpha -= self.scale
+
     def _scale_update(self, update_factor):
         self.scale = self.scale * update_factor
 
