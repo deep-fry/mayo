@@ -65,7 +65,7 @@ class Retrain(Train):
                 self.reset_num_epochs()
                 return True
 
-            iter_max_epoch = self.config.model.layers.iter_max_epoch
+            iter_max_epoch = self.config.retrain.iter_max_epoch
 
             if epoch >= iter_max_epoch and epoch > 0:
                 self.retrain_cnt += 1
