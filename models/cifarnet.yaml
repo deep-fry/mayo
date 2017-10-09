@@ -66,6 +66,10 @@ model:
                 {<<: *trunc_norm_init, stddev: !arith 1.0 / 192.0}
             weights_regularizer: null
             activation_fn: null
-    net: [
-        conv1, pool1, norm1, conv2, norm2, pool2,
-        flatten2, fc3, dropout3, fc4, logits]
+    graph:
+        from: images
+        with: [
+            conv1, pool1, norm1,
+            conv2, norm2, pool2, flatten2,
+            fc3, dropout3, fc4, logits]
+        to: logits
