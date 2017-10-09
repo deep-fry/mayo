@@ -111,8 +111,8 @@ Arguments:
 
     _model_keys = [
         'model.name',
-        'model.net',
         'model.layers',
+        'model.graph',
         'dataset.num_classes',
         'dataset.preprocess.shape',
         'dataset.background_class.use',
