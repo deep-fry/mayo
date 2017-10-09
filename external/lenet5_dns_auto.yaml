@@ -1,0 +1,30 @@
+---
+model.layers:
+    conv0: &overrider
+        weights_overrider: &pruner
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+        biases_overrider:
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+    conv1:
+        weights_overrider:
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+        biases_overrider:
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+    fc1:
+        weights_overrider:
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+        biases_overrider:
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+    logits: {<<: *overrider}

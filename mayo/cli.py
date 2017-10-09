@@ -11,8 +11,8 @@ from mayo.config import Config
 from mayo.eval import Evaluate
 from mayo.net import Net
 from mayo.train import Train
-from mayo.retrain import Retrain
-
+# from mayo.retrain import Retrain
+from mayo.retrain_dev import Retrain 
 
 _root = os.path.dirname(__file__)
 

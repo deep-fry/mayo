@@ -96,6 +96,9 @@ class Retrain(Train):
                 if self.priority_list == [] and finished:
                     log.info('pruning done, model stored at {}'.format(
                         self.best_ckpt))
+                    for o in self.nets[0].overriders:
+                        log.info('layer name: {}, crate:{}, scale:{}'.format(
+                            o._mask.name, o.alpha , o.scale))
                     return False
                 else:
                     # current layer is done
@@ -114,6 +117,9 @@ class Retrain(Train):
         if self._fetch_scale() >= self.config.model.layers.min_scale:
             self._decrease_scale()
         else:
+            for o in self.nets[0].overriders:
+                if o._mask.name == self.target_layer:
+                    o._scale_roll_back()
             self.cont[self.target_layer] = False
 
     def _fetch_scale(self):

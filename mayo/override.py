@@ -341,6 +341,9 @@ class Mayo_DNSPruner(DynamicNetworkSurgeryPruner):
     def _scale_update(self, update_factor):
         self.scale = self.scale * update_factor
 
+    def _setup(self, session):
+        self.scale = session.config.retrain.scale
+
 
 
 
