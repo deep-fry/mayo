@@ -12,8 +12,8 @@ dataset:
 model:
     name: squeezenet
     description: |
+        AlexNet-level accuracy with 50x fewer parameters and <0.5MB model size.
         This implementation is based on::
-          SqueezeNet: AlexNet-level accuracy with 50x fewer parameters and <0.5MB model size
           https://arxiv.org/abs/1602.07360
         We use the following reference models::
           https://github.com/vonclites/squeezenet
@@ -27,6 +27,8 @@ model:
         _conv: &conv
             type: convolution
             padding: same
+            kernel_size: 1
+            stride: 1
             # weight_initializer defaults to xavier
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
@@ -39,8 +41,24 @@ model:
                 stddev: 0.09
             <<: *init
         _fire: &fire
-            type: fire_module
-            <<: *init
+            type: module
+            kwargs: [squeeze_depth, expand_depth]
+            layers:
+                squeeze:
+                    <<: *conv
+                    num_outputs: ^squeeze_depth
+                expand1: &expand1
+                    <<: *conv
+                    num_outputs: ^expand_depth
+                expand3: {<<: *expand1, kernel_size: 3}
+                concat:
+                    type: concat
+                    axis: 3
+            graph:
+                - {from: input, with: squeeze, to: squeezed}
+                - {from: squeezed, with: expand1, to: expanded1}
+                - {from: squeezed, with: expand3, to: expanded3}
+                - {from: [expanded1, expanded3], with: concat, to: output}
         conv1: {<<: *conv, kernel_size: 7, stride: 2, num_outputs: 96}
         pool1: &pool
             {type: max_pool, kernel_size: 3, stride: 2}
@@ -55,9 +73,14 @@ model:
         pool8: {type: max_pool, kernel_size: 3, stride: 2}
         fire9: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
         dropout9: &dropout {type: dropout, keep_prob: 0.5}
-        conv10: {<<: *conv, kernel_size: 1, stride: 1, num_outputs: num_classes}
+        conv10: {<<: *conv, num_outputs: num_classes}
         pool10: {type: average_pool, kernel_size: 13, stride: 1}
         logits: {type: squeeze, axis: [1, 2]}
-    net: [
-        conv1, pool1, fire2, fire3, fire4, pool4, fire5, fire6, fire7, fire8,
-        pool8, fire9, dropout9, conv10, pool10, logits]
+    graph:
+        from: images
+        with:
+            [conv1, pool1,
+             fire2, fire3, fire4, pool4,
+             fire5, fire6, fire7, fire8, pool8,
+             fire9, dropout9, conv10, pool10, logits]
+        to: logits

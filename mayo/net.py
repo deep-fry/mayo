@@ -1,14 +1,30 @@
+import functools
 import itertools
+import collections
 from contextlib import contextmanager
-from collections import OrderedDict
 
 import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
 from mayo.util import (
-    import_from_string, object_from_params, multi_objects_from_params, Table)
+    import_from_string, object_from_params, multi_objects_from_params, Table,
+    ensure_list)
 from mayo.override import ChainOverrider
+
+
+def _null_scope():
+    return slim.arg_scope([])
+
+
+def one_to_one(inst_method):
+    @functools.wraps(inst_method)
+    def wrapper(self, tensors, params):
+        if len(tensors) != 1:
+            raise ValueError(
+                'We expect exactly one input for {!r}'.format(inst_method))
+        return [inst_method(self, tensors[0], params)]
+    return wrapper
 
 
 class _InstantiationParamTransformer(object):
@@ -17,6 +33,26 @@ class _InstantiationParamTransformer(object):
         self.num_classes = num_classes
         self.is_training = is_training
         self.overriders = []
+
+    @classmethod
+    def _recursive_replace(cls, value, replace):
+        if isinstance(value, str):
+            if value.startswith('^'):
+                return replace[value[1:]]
+            return value
+        if isinstance(value, list):
+            return cls._recursive_replace(value, replace)
+        if isinstance(value, collections.Mapping):
+            for k, v in value.items():
+                value[k] = cls._recursive_replace(v, replace)
+            return value
+        return value
+
+    def _repace_module_kwargs(self, params):
+        if params['type'] != 'module':
+            return
+        replace = {key: params[key] for key in params['kwargs']}
+        params['layers'] = self._recursive_replace(params['layers'], replace)
 
     def _create_hyperobjects(self, params):
         def _create_object_for_key(params, key):
@@ -77,7 +113,7 @@ class _InstantiationParamTransformer(object):
         # so arg_scope must be used
         norm_params = params.pop('normalizer_fn', None)
         if not norm_params:
-            return slim.arg_scope([])
+            return _null_scope()
         obj, norm_params = object_from_params(norm_params)
         norm_params['is_training'] = self.is_training
         params['normalizer_fn'] = obj
@@ -102,13 +138,15 @@ class _InstantiationParamTransformer(object):
             self.overriders.append(overrider)
             return ov
 
-        # we do not have direct access to slim.model_variable creation,
-        # so arg_scope must be used
+        # we do not have direct access to variable creation,
+        # so scope must be used
         scope = tf.get_variable_scope()
         return tf.variable_scope(scope, custom_getter=custom_getter)
 
     def transform(self, name, params):
         params = dict(params)
+        # replace module kwargs with values
+        self._repace_module_kwargs(params)
         # weight and bias hyperparams
         self._create_hyperobjects(params)
         # layer configs
@@ -126,9 +164,12 @@ class BaseNet(object):
         self.config = config
         self.is_training = is_training
         self._reuse = reuse
-        self.end_points = OrderedDict()
-        self.end_points['images'] = images
-        self.end_points['labels'] = labels
+        self._transformer = _InstantiationParamTransformer(
+            self.config.num_classes(), self.is_training)
+        self.tensors = collections.OrderedDict()
+        self.tensors['images'] = images
+        self.tensors['labels'] = labels
+        self.layers = collections.OrderedDict()
         self.instantiate()
 
     @contextmanager
@@ -138,100 +179,148 @@ class BaseNet(object):
         with var_ctx, cpu_ctx as scope:
             yield scope
 
-    def _add_end_point(self, key, layer):
-        if key in self.end_points:
-            raise KeyError(
-                'layer {!r} already exists in end_points.'.format(layer))
-        self.end_points[key] = layer
+    def overriders(self):
+        return self._transformer.overriders()
 
-    def _instantiate(self):
-        transformer = _InstantiationParamTransformer(
-            self.config.num_classes(), self.is_training)
-        transform = transformer.transform
-        net = self.end_points['images']
-        names = self.config.model.net
-        if not names:
-            raise ValueError('No layers specified in "model.net".')
-        for name in names:
+    def _use_name_not_scope(self, params):
+        params['name'] = params.pop('scope')
+        return params
+
+    def _instantiate_edge(self, edge, layers, iodef, module):
+        try:
+            from_tensors = ensure_list(edge['from'])
+            to_tensors = ensure_list(edge['to'])
+            with_layers = ensure_list(edge['with'])
+        except KeyError:
+            raise KeyError(
+                'Graph edge definition expects keys "from", "with" and "to".')
+        log.debug(
+            'Instantiating edge from {!r} to {!r} with layers {!r}...'
+            .format(from_tensors, to_tensors, with_layers))
+        try:
+            tensors = [iodef[t] for t in from_tensors]
+        except KeyError as e:
+            raise KeyError('Tensor not found: {!r}'.format(e))
+        for layer_name in with_layers:
             try:
-                params = self.config.model.layers[name]
+                params = layers[layer_name]
             except KeyError:
                 raise KeyError(
-                    'Layer definition "model.layers" does not '
-                    'contain a definition for {!r}'.format(name))
-            params, norm_scope, overrider_scope = transform(name, params)
+                    'Layer definition does not contain a definition for {!r}.'
+                    .format(layer_name))
+            params, norm_scope, overrider_scope = \
+                self._transformer.transform(layer_name, params)
             # get method by its name to instantiate a layer
             func, params = object_from_params(params, self, 'instantiate_')
             # instantiation
             log.debug(
-                'Instantiating {!r} with params {}...'.format(name, params))
-            with norm_scope, overrider_scope:
-                net = func(net, params)
-            # save end points
-            if name == self.config.model.pop('logits', 'logits'):
-                log.debug('Using layer named {!r} as logits.'.format(name))
-                self._add_end_point('logits', net)
-            else:
-                self._add_end_point(name, net)
-        if 'logits' not in self.end_points:
-            log.debug(
-                'Logits layer not specified, defaulting to the last '
-                'layer {!r}.'.format(name))
-        # overriders
-        self.overriders = transformer.overriders
+                'Instantiating {!r} with params {}...'
+                .format(layer_name, params))
+            # module scope
+            var_scope = tf.variable_scope(module) if module else _null_scope()
+            with norm_scope, overrider_scope, var_scope:
+                tensors = func(tensors, params)
+            # module prefix
+            if module:
+                layer_name = '{}/{}'.format(module, layer_name)
+            # add to layers
+            if layer_name in self.layers:
+                raise KeyError('Layer {!r} already exists.'.format(layer_name))
+            self.layers[layer_name] = tensors
+        # add to iodef
+        if len(to_tensors) != len(tensors):
+            raise ValueError(
+                'We expect the number of final layer outputs to match the '
+                'expected size in "to" in edge definition.')
+        for to_name, tensor in zip(to_tensors, tensors):
+            iodef[to_name] = tensor
+
+    def _instantiate_graph(self, graph, layers, iodef, module=''):
+        if not isinstance(graph, list):
+            graph = [graph]
+        if not graph:
+            raise ValueError('No edges specified in "model.graph".')
+        for edge in graph:
+            self._instantiate_edge(edge, layers, iodef, module)
 
     def instantiate(self):
         # force all Variables to reside on the CPU
+        model = self.config.model
         with self.context():
-            self._instantiate()
+            self._instantiate_graph(model.graph, model.layers, self.tensors)
+        if 'logits' not in self.tensors:
+            raise ValueError('Logits layer not specified.')
 
-    def generic_instantiate(self, net, params):
+    def instantiate_module(self, tensors, params):
+        scope = params.pop('scope')
+        input_names = params.get('inputs', ['input'])
+        # set up inputs
+        if len(tensors) != len(input_names):
+            raise ValueError(
+                'Received number of inputs does not match module {!r} '
+                'defined size.'.format(scope))
+        iodef = {name: value for name, value in zip(input_names, tensors)}
+        # graph instantiation
+        self._instantiate_graph(
+            params['graph'], params['layers'], iodef, scope)
+        # set up outputs
+        outputs = []
+        for name in params.get('outputs', ['output']):
+            try:
+                outputs.append(iodef[name])
+            except KeyError:
+                raise KeyError(
+                    'Output named missing {!r} from the module {!r}.'
+                    .format(name, scope))
+        return outputs
+
+    def generic_instantiate(self, tensors, params):
         raise NotImplementedError
 
     def labels(self):
-        return self.end_points['labels']
+        return self.tensors['labels']
 
     def logits(self):
-        return self.end_points['logits']
+        return self.tensors['logits']
 
     def loss(self):
         try:
-            return self.end_points['loss']
+            return self.tensors['loss']
         except KeyError:
             pass
-        labels = self.end_points['labels']
-        logits = self.end_points['logits']
+        labels = self.labels()
+        logits = self.logits()
         with tf.name_scope('loss'):
             labels = slim.one_hot_encoding(labels, logits.shape[1])
             loss = tf.losses.softmax_cross_entropy(
                 logits=logits, onehot_labels=labels)
             loss = tf.reduce_mean(loss)
             tf.add_to_collection('losses', loss)
-        self._add_end_point('loss', loss)
+        self.tensors['loss'] = loss
         return loss
 
     def top(self, count=1):
         name = 'top_{}'.format(count)
         try:
-            return self.end_points[name]
+            return self.tensors[name]
         except KeyError:
             pass
-        logits = self.end_points['logits']
-        labels = self.end_points['labels']
+        logits = self.tensors['logits']
+        labels = self.tensors['labels']
         top = tf.nn.in_top_k(logits, labels, count)
-        self._add_end_point(name, top)
+        self.tensors[name] = top
         return top
 
     def accuracy(self, top_n=1):
         name = 'accuracy_{}'.format(top_n)
         try:
-            return self.end_points[name]
+            return self.tensors[name]
         except KeyError:
             pass
         top = self.top(top_n)
         acc = tf.reduce_sum(tf.cast(top, tf.float32))
         acc /= top.shape.num_elements()
-        self._add_end_point(name, acc)
+        self.tensors[name] = acc
         return acc
 
     def info(self):
@@ -242,39 +331,19 @@ class BaseNet(object):
         var_info.set_footer(
             ['', '    total:', sum(var_info.get_column('count'))])
         layer_info = Table(['layer', 'shape'])
-        layer_info.add_rows((n, l.shape) for n, l in self.end_points.items())
+        for name, tensors in self.layers.items():
+            for tensor in tensors:
+                layer_info.add_row((name, tensor.shape))
         return {'variables': var_info, 'layers': layer_info}
 
 
 class Net(BaseNet):
-    def instantiate_convolution(self, net, params):
-        return slim.conv2d(net, **params)
+    @one_to_one
+    def instantiate_convolution(self, tensor, params):
+        return slim.conv2d(tensor, **params)
 
-    def instantiate_fire_module(self, net, params):
-        squeeze_depth = params.pop('squeeze_depth')
-        expand_depth = params.pop('expand_depth')
-        scope = params.pop('scope')
-        net = self.squeeze(net, squeeze_depth, scope, params)
-        net = self.expand(net, expand_depth, scope, params)
-        return net
-
-    @staticmethod
-    def squeeze(net, num_outputs, scope, params):
-        return slim.conv2d(
-            net, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
-            scope='{}_squeeze'.format(scope), **params)
-
-    @staticmethod
-    def expand(net, num_outputs, scope, params):
-        e1x1 = slim.conv2d(
-            net, num_outputs=num_outputs, kernel_size=[1, 1],
-            stride=1, scope='{}_expand_e1x1'.format(scope), **params)
-        e3x3 = slim.conv2d(
-            net, num_outputs=num_outputs, kernel_size=[3, 3],
-            stride=1, scope='{}_expand_e3x3'.format(scope), **params)
-        return tf.concat([e1x1, e3x3], 3)
-
-    def instantiate_depthwise_separable_convolution(self, net, params):
+    @one_to_one
+    def instantiate_depthwise_separable_convolution(self, tensor, params):
         scope = params.pop('scope')
         num_outputs = params.pop('num_outputs')
         stride = params.pop('stride')
@@ -284,7 +353,7 @@ class Net(BaseNet):
         pointwise_regularizer = params.pop('pointwise_regularizer')
         # depthwise layer
         depthwise = slim.separable_conv2d(
-            net, num_outputs=None, kernel_size=kernel, stride=stride,
+            tensor, num_outputs=None, kernel_size=kernel, stride=stride,
             weights_regularizer=depthwise_regularizer,
             depth_multiplier=1, scope='{}_depthwise'.format(scope), **params)
         # pointwise layer
@@ -309,31 +378,41 @@ class Net(BaseNet):
         # tensorflow complains when stride > kernel size
         params['stride'] = min(stride, kernel[0], kernel[1])
 
-    def instantiate_average_pool(self, net, params):
-        self._reduce_kernel_size_for_small_input(params, net)
-        return slim.avg_pool2d(net, **params)
+    @one_to_one
+    def instantiate_average_pool(self, tensor, params):
+        self._reduce_kernel_size_for_small_input(params, tensor)
+        return slim.avg_pool2d(tensor, **params)
 
-    def instantiate_max_pool(self, net, params):
-        self._reduce_kernel_size_for_small_input(params, net)
-        return slim.max_pool2d(net, **params)
+    @one_to_one
+    def instantiate_max_pool(self, tensor, params):
+        self._reduce_kernel_size_for_small_input(params, tensor)
+        return slim.max_pool2d(tensor, **params)
 
-    def instantiate_fully_connected(self, net, params):
-        return slim.fully_connected(net, **params)
+    @one_to_one
+    def instantiate_fully_connected(self, tensor, params):
+        return slim.fully_connected(tensor, **params)
 
-    def instantiate_softmax(self, net, params):
-        return slim.softmax(net, **params)
+    @one_to_one
+    def instantiate_softmax(self, tensor, params):
+        return slim.softmax(tensor, **params)
 
-    def instantiate_dropout(self, net, params):
+    @one_to_one
+    def instantiate_dropout(self, tensor, params):
         params['is_training'] = self.is_training
-        return slim.dropout(net, **params)
+        return slim.dropout(tensor, **params)
 
-    def instantiate_squeeze(self, net, params):
-        params['name'] = params.pop('scope')
-        return tf.squeeze(net, **params)
+    @one_to_one
+    def instantiate_local_response_normalization(self, tensor, params):
+        return tf.nn.local_response_normalization(
+            tensor, **self._use_name_not_scope(params))
 
-    def instantiate_flatten(self, net, params):
-        return slim.flatten(net, **params)
+    @one_to_one
+    def instantiate_squeeze(self, tensor, params):
+        return tf.squeeze(tensor, **self._use_name_not_scope(params))
 
-    def instantiate_local_response_normalization(self, net, params):
-        params['name'] = params.pop('scope')
-        return tf.nn.local_response_normalization(net, **params)
+    @one_to_one
+    def instantiate_flatten(self, tensor, params):
+        return slim.flatten(tensor, **params)
+
+    def instantiate_concat(self, tensors, params):
+        return [tf.concat(tensors, **self._use_name_not_scope(params))]

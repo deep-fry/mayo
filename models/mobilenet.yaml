@@ -66,6 +66,9 @@ model:
             normalizer_fn: null
             weights_regularizer: *regularizer
         logits: {type: squeeze, axis: [1, 2]}
-    net: [
-        conv0, conv1, conv2, conv3, conv4, conv5, conv6, conv7, conv8, conv9,
-        conv10, conv11, conv12, conv13, pool, dropout, fc, logits]
+    graph:
+        from: images
+        with: [
+            conv0, conv1, conv2, conv3, conv4, conv5, conv6, conv7, conv8,
+            conv9, conv10, conv11, conv12, conv13, pool, dropout, fc, logits]
+        to: logits

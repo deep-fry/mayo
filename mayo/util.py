@@ -319,3 +319,11 @@ def flatten(items, skip_none=False):
             yield from flatten(i)
         elif i is not None:
             yield i
+
+
+def ensure_list(str_or_list):
+    if isinstance(str_or_list, str):
+        return [str_or_list]
+    if isinstance(str_or_list, list):
+        return str_or_list
+    raise TypeError('Unrecognized type.')
