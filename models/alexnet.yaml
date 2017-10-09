@@ -57,7 +57,6 @@ model:
         fc6: {<<: *fc, num_outputs: 4096}
         dropout6: &dropout {type: dropout, keep_prob: 0.5}
         fc7: {<<: *fc, num_outputs: 4096}
-        # dropout7: *dropout
         logits:
             <<: *fc
             num_outputs: num_classes
@@ -67,7 +66,6 @@ model:
         from: images
         with: [
             conv1, pool1, conv2, pool2,
-            conv3, conv4, conv5, pool5,
-            dropout5, flatten5,
+            conv3, conv4, conv5, pool5, dropout5, flatten5,
             fc6, dropout6, fc7, logits]
         to: logits

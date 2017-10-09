@@ -18,11 +18,6 @@ model:
 
         We use the following reference models::
             https://github.com/tensorflow/models/blob/master/slim/nets/alexnet.py
-            https://github.com/pytorch/vision/blob/master/torchvision/models/alexnet.py
-
-        Unfortunately there are some discrepancies between the above models,
-        namely `conv4` uses different output sizes (384 vs. 256), and padding
-        of `conv1` is different (valid vs. same).
     layers:
         _conv: &conv
             type: convolution
@@ -57,6 +52,10 @@ model:
             num_outputs: num_classes
             activation_fn: null
             biases_initializer: {type: tensorflow.zeros_initializer}
-    net: [
-        conv1, pool1, conv2, pool2, conv3, conv4, conv5, pool5,
-        dropout5, flatten5, fc6, dropout6, fc7, dropout7, logits]
+    graph:
+        from: images
+        with: [
+            conv1, pool1, conv2, pool2,
+            conv3, conv4, conv5, pool5, dropout5, flatten5,
+            fc6, dropout6, fc7, dropout7, logits]
+        to: logits
