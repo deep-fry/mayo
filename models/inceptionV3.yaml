@@ -1,0 +1,75 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 299
+            width: 299
+            channels: 3
+        validate: []
+        final:
+            - {type: normalize_channels}
+model:
+    name: inceptionV3
+    description: |
+        This implementation is based on::
+          Rethinking the Inception Architecture for Computer Vision
+          https://arxiv.org/abs/1512.00567
+        We use the following reference models::
+          https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/slim/python/slim/nets/inception_v3.py
+    layers:
+        _init: &init
+            biases_initializer:
+                type: tensorflow.constant_initializer
+                value: 0.01
+        _conv: &conv
+            type: convolution
+            padding: valid
+            kernel_size: 3
+            stride: 1
+            # weight_initializer defaults to xavier
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0005
+            <<: *init
+        _fc: &fc
+            type: fully_connected
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            <<: *init
+        _mixed: &mixed
+          type: module
+            kwargs: [squeeze_depth, expand_depth]
+            layers:
+                b0:
+                    <<: *conv
+                    num_outputs: 64
+                expand1: &expand1
+                    <<: *conv
+                    num_outputs: ^expand_depth
+                expand3: {<<: *expand1, kernel_size: 3}
+                concat:
+                    type: concat
+                    axis: 3
+            graph:
+                - {from: input, with: squeeze, to: squeezed}
+                - {from: squeezed, with: expand1, to: expanded1}
+                - {from: squeezed, with: expand3, to: expanded3}
+                - {from: [expanded1, expanded3], with: concat, to: output}
+        conv1a: {<<: *conv, stride: 2, num_outputs: 32}
+        conv2a: {<<: *conv, stride: 1, num_outputs: 32}
+        conv2b: {<<: *conv, stride: 1, padding: same, num_outputs: 64}
+        pool3a: {type: average_pool, kernel_size: 3, stride: 2, padding: valid}
+        conv3b: {<<: *conv, stride: 1, num_outputs: 80}
+        conv4a: {<<: *conv, stride: 1, num_outputs: 192}
+        pool5a: {type: average_pool, kernel_size: 3, stride: 2, padding: valid}
+        logits: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: images
+        with:
+            [conv1, pool1,
+             fire2, fire3, fire4, pool4,
+             fire5, fire6, fire7, fire8, pool8,
+             fire9, dropout9, conv10, pool10, logits]
+        to: logits
