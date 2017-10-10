@@ -179,8 +179,9 @@ class BaseNet(object):
         with var_ctx, cpu_ctx as scope:
             yield scope
 
+    @property
     def overriders(self):
-        return self._transformer.overriders()
+        return self._transformer.overriders
 
     def _use_name_not_scope(self, params):
         params['name'] = params.pop('scope')
