@@ -64,7 +64,6 @@ class Retrain(Train):
                 self.profile_overrider(self.threshold_name, 'scale')
                 self.overriders_refresh()
                 self.reset_num_epochs()
-                pdb.set_trace()
                 return True
 
             iter_max_epoch = self.config.retrain.iter_max_epoch

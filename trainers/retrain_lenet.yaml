@@ -1,5 +1,7 @@
 retrain:
     mode: auto
+    bias: True
+    name: alpha
     scale: 0.1
     min_scale: 0.001
     scale_update_factor: 0.5
