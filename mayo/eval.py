@@ -11,11 +11,6 @@ class Evaluate(Session):
 
     def __init__(self, config):
         super().__init__(config)
-        with self.as_default():
-            self._init()
-
-    def _init(self):
-        log.debug('Instantiating...')
         # moving average decay
         avg_op = self.moving_average_op()
         using = 'Using' if avg_op else 'Not using'
@@ -24,8 +19,6 @@ class Evaluate(Session):
         metrics_func = lambda net: (net.top(1), net.top(5))
         metrics = list(self.net_map(metrics_func))
         self._top1_op, self._top5_op = metrics.pop()
-        # initialization
-        self.init()
 
     def _update_progress(self, step, top1, top5, num_iterations):
         interval = self.change.delta('step.duration', time.time())

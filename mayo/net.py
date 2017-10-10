@@ -67,10 +67,6 @@ class _InstantiationParamTransformer(object):
                 else:
                     params[key] = ChainOverrider(overriders)
             else:
-                # FIXME '_inherit' is pickle-initializier specific
-                p = dict(p)
-                for k in p.get('_inherit', []):
-                    p[k] = params[k]
                 cls, p = object_from_params(p)
                 params[key] = cls(**p)
 

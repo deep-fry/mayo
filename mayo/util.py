@@ -144,11 +144,9 @@ def object_from_params(params, import_from=None, import_from_prefix=''):
 
 
 def multi_objects_from_params(params, import_from=None, import_from_prefix=''):
-    if not isinstance(params, collections.Sequence):
-        params = [params]
     return [
         object_from_params(p, import_from, import_from_prefix)
-        for p in params]
+        for p in ensure_list(params)]
 
 
 def format_shape(shape):

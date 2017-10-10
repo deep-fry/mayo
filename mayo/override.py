@@ -320,7 +320,7 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
 DNSPruner = DynamicNetworkSurgeryPruner
 
 
-class Mayo_DNSPruner(DynamicNetworkSurgeryPruner):
+class MayoDNSPruner(DynamicNetworkSurgeryPruner):
     def __init__(
             self, c_rate, on_factor=1.1, off_factor=0.9, should_update=True):
         super().__init__(c_rate, on_factor, off_factor, should_update)
@@ -343,11 +343,6 @@ class Mayo_DNSPruner(DynamicNetworkSurgeryPruner):
 
     def _setup(self, session):
         self.scale = session.config.retrain.scale
-
-
-
-
-MayoDNSPruner = Mayo_DNSPruner
 
 
 class Rounder(BaseOverrider):

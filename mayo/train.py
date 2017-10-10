@@ -13,9 +13,11 @@ class Train(Session):
 
     def __init__(self, config):
         super().__init__(config)
-        self._cp_epoch = ''
         with self.as_default():
+            self._setup_train_operation()
+            self._setup_summaries()
             self._init()
+        self._cp_epoch = ''
 
     @memoize_property
     def learning_rate(self):
@@ -91,9 +93,6 @@ class Train(Session):
         self._summary_op = tf.summary.merge(summaries)
 
     def _init(self):
-        self._setup_train_operation()
-        self._setup_summaries()
-        self.init()
         self.checkpoint.load(self.config.system.checkpoint.load)
         # final debug outputs
         if not log.is_enabled('debug'):
