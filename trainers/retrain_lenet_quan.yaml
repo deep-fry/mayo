@@ -1,6 +1,8 @@
 retrain:
     mode: auto
-    scale: 2
+    name: width
+    bias: True
+    scale: 4
     min_scale: 1
     scale_update_factor: 0.5
     iter_max_epoch: 40
