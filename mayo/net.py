@@ -171,7 +171,6 @@ class BaseNet(object):
         self.tensors['labels'] = labels
         self.layers = collections.OrderedDict()
         self.instantiate()
-        self.overriders = self._transformer.overriders
 
     @contextmanager
     def context(self):
@@ -179,6 +178,9 @@ class BaseNet(object):
         cpu_ctx = slim.arg_scope([slim.model_variable], device='/cpu:0')
         with var_ctx, cpu_ctx as scope:
             yield scope
+
+    def overriders(self):
+        return self._transformer.overriders()
 
     def _use_name_not_scope(self, params):
         params['name'] = params.pop('scope')
