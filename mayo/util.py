@@ -320,7 +320,7 @@ def flatten(items, skip_none=False):
 
 
 def ensure_list(str_or_list):
-    if isinstance(str_or_list, str):
+    if isinstance(str_or_list, (str, collections.Mapping)):
         return [str_or_list]
     if isinstance(str_or_list, list):
         return str_or_list
