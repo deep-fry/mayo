@@ -67,7 +67,6 @@ class Retrain(Train):
                 return True
 
             iter_max_epoch = self.config.retrain.iter_max_epoch
-            pdb.set_trace()
 
             if epoch >= iter_max_epoch and epoch > 0:
                 self.retrain_cnt += 1
@@ -90,6 +89,7 @@ class Retrain(Train):
                     # trace back the ckpt
                     self.checkpoint.load(self.best_ckpt)
                     # fetch a new layer to retrain
+                    self.profile_overrider(self.threshold_name, 'scale')
                     self.overriders_refresh()
                     self.reset_num_epochs()
         return True
@@ -97,6 +97,11 @@ class Retrain(Train):
     def _control_threholds(self):
         if self._fetch_scale() >= self.config.retrain.min_scale:
             self._decrease_scale()
+            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
+            log.debug('decrease threholds at {}, decreased result is {}'.format(
+                self.target_layer,
+                self._fetch_scale()
+            ))
         else:
             for o in self.nets[0].overriders:
                 if o.name == self.target_layer:
