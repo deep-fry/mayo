@@ -8,11 +8,11 @@ from docopt import docopt
 
 from mayo.log import log
 from mayo.config import Config
-from mayo.eval import Evaluate
+from mayo.eval import Evaluate, FastEvaluate
 from mayo.net import Net
 from mayo.train import Train
 # from mayo.retrain import Retrain
-from mayo.retrain_dev import Retrain 
+from mayo.retrain_dev import Retrain
 
 _root = os.path.dirname(__file__)
 
@@ -152,6 +152,9 @@ Arguments:
         elif action == 'validate':
             cls = Evaluate
             keys += self._validate_keys
+        elif action == 'fast_validate':
+            cls = FastEvaluate
+            keys += self._validate_keys
         else:
             raise TypeError('Action {!r} not recognized.'.format(action))
         self._validate_config(keys, action)
@@ -167,6 +170,13 @@ Arguments:
     def cli_retrain(self):
         """Performs training.  """
         return self._get_session('retrain').retrain()
+
+    def cli_fast_eval(self):
+        """
+        Evaluates the approximate accuracy of a saved model with
+        multiple threads.
+        """
+        return self._get_session('fast_validate').eval()
 
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """

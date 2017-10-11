@@ -15,6 +15,7 @@ from mayo.preprocess import Preprocess
 
 class Session(object):
     mode = None
+    concurrent = False
 
     def __init__(self, config):
         super().__init__()
@@ -25,7 +26,8 @@ class Session(object):
         self.tf_session = tf.Session(
             graph=self.graph,
             config=tf.ConfigProto(allow_soft_placement=True))
-        self.preprocessor = Preprocess(self.tf_session, config)
+        self.preprocessor = Preprocess(
+            self.tf_session, self.mode, self.concurrent, config)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
@@ -38,7 +40,7 @@ class Session(object):
 
     @property
     def num_gpus(self):
-        return self.config.system.num_gpus if self.mode == 'train' else 1
+        return self.config.system.num_gpus if self.concurrent else 1
 
     def _auto_select_gpus(self):
         mem_bound = 500
@@ -164,7 +166,7 @@ class Session(object):
 
     def _preprocess(self):
         with self.as_default():
-            return self.preprocessor.preprocess(self.mode, self.num_gpus)
+            return self.preprocessor.preprocess(self.num_gpus)
 
     @contextmanager
     def _gpu_context(self, gid):

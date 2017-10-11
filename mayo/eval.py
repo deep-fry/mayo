@@ -8,6 +8,7 @@ from mayo.session import Session
 
 class Evaluate(Session):
     mode = 'validate'
+    concurrent = False
 
     def __init__(self, config):
         super().__init__(config)
@@ -91,3 +92,7 @@ class Evaluate(Session):
         except KeyboardInterrupt:
             pass
         return results.format()
+
+
+class FastEvaluate(Evaluate):
+    concurrent = True

@@ -10,6 +10,7 @@ from mayo.session import Session
 
 class Train(Session):
     mode = 'train'
+    concurrent = True
 
     def __init__(self, config):
         super().__init__(config)
