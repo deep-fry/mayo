@@ -101,7 +101,7 @@ class _InstantiationParamTransformer(object):
         params['scope'] = name
         try:
             params['padding'] = params['padding'].upper()
-        except KeyError:
+        except (KeyError, AttributeError):
             pass
 
     def _norm_scope(self, params):
@@ -183,6 +183,16 @@ class BaseNet(object):
         params['name'] = params.pop('scope')
         return params
 
+    def _instantiate_numeric_padding(self, tensors, params):
+        pad = params.get('padding')
+        if not isinstance(pad, int):
+            return tensors
+        # disable pad for next layer
+        params['padding'] = 'VALID'
+        # 4D tensor NxHxWxC, pad H and W
+        paddings = [[0, 0], [pad, pad], [pad, pad], [0, 0]]
+        return [tf.pad(t, paddings) for t in tensors]
+
     def _instantiate_edge(self, edge, layers, iodef, module):
         try:
             from_tensors = ensure_list(edge['from'])
@@ -216,6 +226,7 @@ class BaseNet(object):
             # module scope
             var_scope = tf.variable_scope(module) if module else _null_scope()
             with norm_scope, overrider_scope, var_scope:
+                tensors = self._instantiate_numeric_padding(tensors, params)
                 tensors = func(tensors, params)
             # module prefix
             if module:

@@ -16,13 +16,12 @@ model:
             One weird trick for parallelizing convolutional neural networks
             (Alex Krizhevsky, 2014)
 
-        We use the following reference models::
-            https://github.com/tensorflow/models/blob/master/slim/nets/alexnet.py
+        We use the following reference model::
             https://github.com/pytorch/vision/blob/master/torchvision/models/alexnet.py
 
-        Unfortunately there are some discrepancies between the above models,
-        namely `conv4` uses different output sizes (384 vs. 256), and padding
-        of `conv1` is different (valid vs. same).
+        Unfortunately there are some discrepancies between this pytorch model
+        and tensorflow/slim, namely `conv4` uses different output sizes (384
+        vs. 256), and padding of `conv1` is different (valid vs. same).
     layers:
         _init: &init
             biases_initializer:
@@ -30,7 +29,7 @@ model:
                 value: 0.01
         _conv: &conv
             type: convolution
-            padding: same
+            padding: 2
             # weight_initializer defaults to xavier
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
@@ -48,7 +47,7 @@ model:
         conv2: {<<: *conv, kernel_size: 5, stride: 1, num_outputs: 192}
         pool2: *pool
         conv3: &conv3
-            {<<: *conv, kernel_size: 3, stride: 1, num_outputs: 384}
+            {<<: *conv, kernel_size: 3, stride: 1, padding: 1, num_outputs: 384}
         conv4: &conv4 {<<: *conv3, num_outputs: 256}
         conv5: *conv4
         pool5: *pool
