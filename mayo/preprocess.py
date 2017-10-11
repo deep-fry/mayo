@@ -3,7 +3,7 @@ import collections
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize_method, multi_objects_from_params
+from mayo.util import multi_objects_from_params
 
 
 class _ImagePreprocess(object):
@@ -61,15 +61,37 @@ class _ImagePreprocess(object):
             i = func(i)
         return tf.clip_by_value(i, 0.0, 1.0)
 
-    def central_crop(self, i, central_fraction=0.875):
-        return tf.image.central_crop(i, central_fraction=central_fraction)
+    def central_crop(self, i, fraction=0.875):
+        return tf.image.central_crop(i, central_fraction=fraction)
 
-    def random_crop(self, i):
-        return tf.random_crop(i, self.shape)
+    def random_crop(self, i, height=None, width=None):
+        shape = self.shape
+        if height and width:
+            channels = self.shape[-1]
+            shape = [height, width, channels]
+        return tf.random_crop(i, shape)
 
-    def resize_with_crop_or_pad(self, i):
-        height, width, _ = self.shape
+    def crop_or_pad(self, i, height=None, width=None):
+        if height is None or width is None:
+            height, width, _ = self.shape
         return tf.image.resize_image_with_crop_or_pad(i, height, width)
+
+    def resize(self, i, height=None, width=None, preserve_aspect_ratio=False):
+        if height is None or width is None:
+            height, width, channels = self.shape
+        else:
+            channels = self.shape[-1]
+        if preserve_aspect_ratio:
+            aspect_ratio = tf.constant(width / height)
+            ho, wo, _ = tf.unstack(tf.cast(tf.shape(i), tf.float32), channels)
+            wo = tf.minimum(tf.round(ho * aspect_ratio), wo)
+            ho = tf.minimum(tf.round(wo / aspect_ratio), ho)
+            wo = tf.cast(wo, tf.int32)
+            ho = tf.cast(ho, tf.int32)
+            i = self.crop_or_pad(i, ho, wo)
+        i = tf.expand_dims(i, 0)
+        i = tf.image.resize_bilinear(i, [height, width], align_corners=False)
+        return tf.squeeze(i, [0])
 
     def random_flip(self, i):
         return tf.image.random_flip_left_right(i)
@@ -133,10 +155,9 @@ class _ImagePreprocess(object):
                     'into one with {} channels.'.format(pc, c))
         if ph == h or pw == w:
             return i
+        log.debug('Ensuring size of image is as expected by our inputs.')
         # rescale image
-        i = tf.expand_dims(i, 0)
-        i = tf.image.resize_bilinear(i, [h, w], align_corners=False)
-        return tf.squeeze(i, [0])
+        return self.resize(i, h, w)
 
     def preprocess(self, image, actions):
         with tf.name_scope(values=[image], name='preprocess_image'):

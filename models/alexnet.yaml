@@ -6,7 +6,10 @@ dataset:
             height: 224
             width: 224
             channels: 3
-        validate: []
+        validate:
+            - {type: resize, height: 256, width: 256,
+               preserve_aspect_ratio: true}
+            - {type: crop_or_pad, height: 224, width: 224}
         final:
             - {type: normalize_channels}
 model:
@@ -51,11 +54,11 @@ model:
         conv4: &conv4 {<<: *conv3, num_outputs: 256}
         conv5: *conv4
         pool5: *pool
-        dropout5: {type: dropout, keep_prob: 0.5}
+        dropout5: &dropout {type: dropout, keep_prob: 0.5}
         flatten5: {type: flatten}
-        fc6: {<<: *fc, num_outputs: 4096}
-        dropout6: &dropout {type: dropout, keep_prob: 0.5}
-        fc7: {<<: *fc, num_outputs: 4096}
+        fc6: &fc6 {<<: *fc, num_outputs: 4096}
+        dropout6: *dropout
+        fc7: *fc6
         logits:
             <<: *fc
             num_outputs: num_classes
