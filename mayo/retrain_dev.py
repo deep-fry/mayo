@@ -27,7 +27,8 @@ class Retrain(Train):
         self._reset_vars()
         for o in self.nets[0].overriders:
             o._setup(self)
-        self.profile_overrider('alpha', 'scale', start=True)
+        self.threshold_name = str(self.config.retrain.name)
+        self.profile_overrider(self.threshold_name, 'scale', start=True)
         self.profile_for_one_epoch()
         self._reset_stats()
         self.overriders_refresh()
@@ -60,12 +61,13 @@ class Retrain(Train):
                 self._cp_epoch = floor_epoch
                 self.retrain_cnt += 1
                 self._log_thresholds(self.loss_avg, self.acc_avg)
-                self.profile_overrider('alpha', 'scale')
+                self.profile_overrider(self.threshold_name, 'scale')
                 self.overriders_refresh()
                 self.reset_num_epochs()
                 return True
 
             iter_max_epoch = self.config.retrain.iter_max_epoch
+            pdb.set_trace()
 
             if epoch >= iter_max_epoch and epoch > 0:
                 self.retrain_cnt += 1
@@ -78,7 +80,9 @@ class Retrain(Train):
                         self.best_ckpt))
                     for o in self.nets[0].overriders:
                         log.info('layer name: {}, crate:{}, scale:{}'.format(
-                            o.name, o.alpha , o.scale))
+                            o.name,
+                            getattr(o, self.threshold_name),
+                            o.scale))
                     return False
                 else:
                     # current layer is done
@@ -123,24 +127,26 @@ class Retrain(Train):
                 name = o.name
                 self.cont[name] = True
                 o.should_update = False
-        d = {}
+        # d = {}
         thresholds = {}
         scales = {}
         for o in self.nets[0].overriders:
             name = o.name
-            d[name] = np.count_nonzero(self.run(o._mask))
+            # d[name] = np.count_nonzero(self.run(o._mask))
             thresholds[name] = getattr(o, threshold_name)
             scales[name] = getattr(o, scale_name)
-        for key in sorted(d, key=d.get):
+        check_bias = self.config.retrain.bias
+        for key in sorted(thresholds, key=thresholds.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            if self.cont[key] and ('biases' not in key):
+            if (self.cont[key] and ('biases' not in key) and check_bias) or \
+                (self.cont[key] and not check_bias):
                 self.priority_list.append(key)
         log.debug('display thresholds')
         log.debug('{}'.format(thresholds))
         log.debug('display scales')
         log.debug('{}'.format(scales))
-        log.debug('display profiling info')
-        log.debug('{}'.format(d))
+        # log.debug('display profiling info')
+        # log.debug('{}'.format(d))
         log.debug('display priority list info')
         log.debug('{}'.format(self.priority_list))
         if self.priority_list == []:
@@ -152,7 +158,7 @@ class Retrain(Train):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
-                value = o.alpha
+                value = getattr(o, self.threshold_name)
                 break
         if prev_loss is None:
             self.log[self.target_layer] = (value, loss, acc)

@@ -328,9 +328,6 @@ class MayoDNSPruner(DynamicNetworkSurgeryPruner):
     def _updated_mask(self, var, mask, session):
         return super()._updated_mask(var, mask, session)
 
-    def _set_up_scale(self, session):
-        self.scale = session.config.model.layers.scale
-
     def _threshold_update(self):
         self.alpha += self.scale
         log.info('inside overrider, alpha is {}'.format(self.alpha))
@@ -445,3 +442,23 @@ class DynamicFixedPointQuantizer(FixedPointQuantizer):
     def _update(self, session):
         p = self._update_policy(session.run(self.before))
         session.run(tf.assign(self.point, p))
+
+
+class Mayo_DFP_Quantizer(DynamicFixedPointQuantizer):
+    def __init__(self, width, overflow_rate, should_update=True):
+        super().__init__(width, overflow_rate, should_update)
+
+    def _threshold_update(self):
+        self.width -= self.scale
+
+    def _scale_roll_back(self):
+        self.width += self.scale
+
+    def _scale_update(self, update_factor):
+        self.scale = round(self.scale * update_factor)
+        if self.point < 1:
+            raise ValueError(
+                'DFP {}, Bitwidth should be bigger than 1'.format(self.point))
+
+    def _setup(self, session):
+        self.scale = round(session.config.retrain.scale)
