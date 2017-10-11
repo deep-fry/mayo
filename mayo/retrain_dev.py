@@ -7,7 +7,7 @@ from mayo.log import log
 from mayo.train import Train
 
 
-class Retrain(Train):
+class Retrain_Base(Train):
     def retrain(self):
         log.debug('Retraining start.')
         try:
@@ -51,77 +51,34 @@ class Retrain(Train):
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self._avg_stats()
             if self.acc_avg >= self.acc_base:
-                log.debug('Targeting on {}'.format(self.target_layer))
-                log.debug('log: {}'.format(self.log))
-                with log.demote():
-                    self.checkpoint.save(
-                        'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
-                self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
-                    + str(floor_epoch)
-                self._cp_epoch = floor_epoch
-                self.retrain_cnt += 1
-                self._log_thresholds(self.loss_avg, self.acc_avg)
-                self.profile_overrider(self.threshold_name, 'scale')
-                self.overriders_refresh()
-                self.reset_num_epochs()
-                return True
+                return self.forward_policy(floor_epoch)
 
             iter_max_epoch = self.config.retrain.iter_max_epoch
 
             if epoch >= iter_max_epoch and epoch > 0:
                 self.retrain_cnt += 1
                 self.reset_num_epochs()
-                self._log_thresholds(self.loss_avg, self.acc_avg)
+                self.log_thresholds(self.loss_avg, self.acc_avg)
                 # all layers done
-                finished = self.cont[self.target_layer] is False
-                if self.priority_list == [] and finished:
-                    log.info('overrider is done, model stored at {}'.format(
-                        self.best_ckpt))
-                    for o in self.nets[0].overriders:
-                        log.info('layer name: {}, crate:{}, scale:{}'.format(
-                            o.name,
-                            getattr(o, self.threshold_name),
-                            o.scale))
-                    return False
-                else:
-                    # current layer is done
-                    self._control_threholds()
-                    # trace back the ckpt
-                    self.checkpoint.load(self.best_ckpt)
-                    # fetch a new layer to retrain
-                    self.profile_overrider(self.threshold_name, 'scale')
-                    self.overriders_refresh()
-                    self.reset_num_epochs()
+                return self.update_policy()
         return True
 
-    def _control_threholds(self):
-        if self._fetch_scale() >= self.config.retrain.min_scale:
-            self._decrease_scale()
-            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
-            log.debug('decrease threholds at {}, decreased result is {}'.format(
-                self.target_layer,
-                self._fetch_scale()
-            ))
-        else:
-            for o in self.nets[0].overriders:
-                if o.name == self.target_layer:
-                    o._scale_roll_back()
-            self.cont[self.target_layer] = False
+    def update_policy(self):
+        raise NotImplementedError(
+            'Method of update policy is not implemented.')
+
+    def forward_policy(self, floor_epoch):
+        raise NotImplementedError(
+            'Method of forward policy is not implemented.')
+
+    def log_thresholds(self, loss, acc):
+        raise NotImplementedError(
+            'Method of logging threholds is not implemented.')
 
     def _fetch_scale(self):
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
                 return o.scale
-
-    def _decrease_scale(self):
-        # decrease scale factor, for quantizer, this factor might be 1
-        factor = self.config.retrain.scale_update_factor
-        for o in self.nets[0].overriders:
-            if o.name == self.target_layer:
-                o._scale_roll_back()
-                o._scale_update(factor)
-                record = o.scale
-        log.debug('decrease scaling factor to {}'.format(record))
 
     def profile_overrider(self, threshold_name, scale_name, start=False):
         self.priority_list = []
@@ -158,18 +115,6 @@ class Retrain(Train):
             log.debug('list is empty!!')
         else:
             self.target_layer = self.priority_list.pop()
-
-    def _log_thresholds(self, loss, acc):
-        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
-        for o in self.nets[0].overriders:
-            if o.name == self.target_layer:
-                value = getattr(o, self.threshold_name)
-                break
-        if prev_loss is None:
-            self.log[self.target_layer] = (value, loss, acc)
-        else:
-            if acc > self.acc_base:
-                self.log[self.target_layer] = (value, loss, acc)
 
     def profile_for_one_epoch(self):
         log.info('Start profiling for one epoch')
@@ -215,8 +160,136 @@ class Retrain(Train):
         self.best_ckpt = None
 
     def overriders_refresh(self):
+        raise NotImplementedError(
+            'Method to refresh overriders is not implemented.')
+
+
+class Retrain_global(Retrain_Base):
+    def overriders_refresh(self):
+        for o in self.nets[0].overriders:
+            o._threshold_update()
+            o.should_update = True
+        self.overriders_update()
+
+    def forward_policy(self, floor_epoch):
+        log.debug('Targeting on {}'.format(self.target_layer))
+        log.debug('log: {}'.format(self.log))
+        with log.demote():
+            self.checkpoint.save(
+                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
+            + str(floor_epoch)
+        self._cp_epoch = floor_epoch
+        self.retrain_cnt += 1
+        self.log_thresholds(self.loss_avg, self.acc_avg)
+        self.profile_overrider(self.threshold_name, 'scale')
+        self.overriders_refresh()
+        self.reset_num_epochs()
+        return True
+
+    def log_thresholds(self, loss, acc):
+        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
+        for o in self.nets[0].overriders:
+            value = getattr(o, self.threshold_name)
+            if prev_loss is None:
+                self.log[o.name] = (value, loss, acc)
+            else:
+                if acc > self.acc_base:
+                    self.log[self.target_layer] = (value, loss, acc)
+
+    def update_policy(self):
+        if self._fetch_scale() >= self.config.retrain.min_scale:
+            self._decrease_scale()
+            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
+            log.debug('decrease threholds to {}'.format(
+                self._fetch_scale()
+            ))
+            return True
+        else:
+            for o in self.nets[0].overriders:
+                self.cont[self.target_layer] = False
+            log.debug('all layers done')
+            return False
+
+
+class Retrain_layerwise(Retrain_Base):
+    def overriders_refresh(self):
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
                 o._threshold_update()
                 o.should_update = True
         self.overriders_update()
+
+    def forward_policy(self, floor_epoch):
+        log.debug('Targeting on {}'.format(self.target_layer))
+        log.debug('log: {}'.format(self.log))
+        with log.demote():
+            self.checkpoint.save(
+                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
+            + str(floor_epoch)
+        self._cp_epoch = floor_epoch
+        self.retrain_cnt += 1
+        self.log_thresholds(self.loss_avg, self.acc_avg)
+        self.profile_overrider(self.threshold_name, 'scale')
+        self.overriders_refresh()
+        self.reset_num_epochs()
+        return True
+
+    def update_policy(self):
+        finished = self.cont[self.target_layer] is False
+        if self.priority_list == [] and finished:
+            log.info('overrider is done, model stored at {}'.format(
+                self.best_ckpt))
+            for o in self.nets[0].overriders:
+                log.info('layer name: {}, crate:{}, scale:{}'.format(
+                    o.name,
+                    getattr(o, self.threshold_name),
+                    o.scale))
+            return False
+        else:
+            # current layer is done
+            self._control_threholds()
+            # trace back the ckpt
+            self.checkpoint.load(self.best_ckpt)
+            # fetch a new layer to retrain
+            self.profile_overrider(self.threshold_name, 'scale')
+            self.overriders_refresh()
+            self.reset_num_epochs()
+            return True
+
+    def _control_threholds(self):
+        if self._fetch_scale() >= self.config.retrain.min_scale:
+            self._decrease_scale()
+            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
+            log.debug('decrease threholds at {}, decreased result is {}'.format(
+                self.target_layer,
+                self._fetch_scale()
+            ))
+        else:
+            for o in self.nets[0].overriders:
+                if o.name == self.target_layer:
+                    o._scale_roll_back()
+            self.cont[self.target_layer] = False
+
+    def _decrease_scale(self):
+        # decrease scale factor, for quantizer, this factor might be 1
+        factor = self.config.retrain.scale_update_factor
+        for o in self.nets[0].overriders:
+            if o.name == self.target_layer:
+                o._scale_roll_back()
+                o._scale_update(factor)
+                record = o.scale
+        log.debug('decrease scaling factor to {}'.format(record))
+
+    def log_thresholds(self, loss, acc):
+        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
+        for o in self.nets[0].overriders:
+            if o.name == self.target_layer:
+                value = getattr(o, self.threshold_name)
+                break
+        if prev_loss is None:
+            self.log[self.target_layer] = (value, loss, acc)
+        else:
+            if acc > self.acc_base:
+                self.log[self.target_layer] = (value, loss, acc)

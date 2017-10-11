@@ -12,7 +12,7 @@ from mayo.eval import Evaluate, FastEvaluate
 from mayo.net import Net
 from mayo.train import Train
 # from mayo.retrain import Retrain
-from mayo.retrain_dev import Retrain
+from mayo.retrain_dev import Retrain_layerwise, Retrain_global
 
 _root = os.path.dirname(__file__)
 
@@ -146,8 +146,11 @@ Arguments:
         if action == 'train':
             cls = Train
             keys += self._train_keys
-        elif action == 'retrain':
-            cls = Retrain
+        elif action == 'retrain_layer':
+            cls = Retrain_layerwise
+            keys += self._train_keys
+        elif action == 'retrain_global':
+            cls = Retrain_global
             keys += self._train_keys
         elif action == 'validate':
             cls = Evaluate
@@ -167,9 +170,13 @@ Arguments:
         """Performs training.  """
         return self._get_session('train').train()
 
-    def cli_retrain(self):
-        """Performs training.  """
-        return self._get_session('retrain').retrain()
+    def cli_retrain_layer(self):
+        """Performs retraining.  """
+        return self._get_session('retrain_layer').retrain()
+
+    def cli_retrain_global(self):
+        """Performs retraining.  """
+        return self._get_session('retrain_global').retrain()
 
     def cli_fast_eval(self):
         """
