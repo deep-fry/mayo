@@ -14,12 +14,11 @@ class _ImagePreprocess(object):
         self.bbox = bbox
         self.tid = tid
 
-    def distort_bbox(self, i):
+    def distort_bbox(self, i, area=(0.05, 1.0), aspect_ratio=(0.75, 1.33)):
         # distort bbox
         bbox_begin, bbox_size, _ = tf.image.sample_distorted_bounding_box(
-            tf.shape(i), bounding_boxes=self.bbox,
-            min_object_covered=0.1, aspect_ratio_range=[0.75, 1.33],
-            area_range=[0.05, 1.0],
+            tf.shape(i), bounding_boxes=self.bbox, min_object_covered=0.1,
+            aspect_ratio_range=aspect_ratio, area_range=area,
             max_attempts=100, use_image_if_no_bounding_boxes=True)
         # distorted image
         i = tf.slice(i, bbox_begin, bbox_size)
@@ -67,8 +66,7 @@ class _ImagePreprocess(object):
     def random_crop(self, i, height=None, width=None):
         shape = self.shape
         if height and width:
-            channels = self.shape[-1]
-            shape = [height, width, channels]
+            shape = [height, width, self.shape[-1]]
         return tf.random_crop(i, shape)
 
     def crop_or_pad(self, i, height=None, width=None):
