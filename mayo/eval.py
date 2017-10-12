@@ -1,6 +1,8 @@
 import time
 import math
 
+import tensorflow as tf
+
 from mayo.log import log
 from mayo.util import Percent, Table
 from mayo.session import Session
@@ -18,8 +20,10 @@ class Evaluate(Session):
         log.debug(using + ' exponential moving averages.')
         # setup metrics
         metrics_func = lambda net: (net.top(1), net.top(5))
-        metrics = list(self.net_map(metrics_func))
-        self._top1_op, self._top5_op = metrics.pop()
+        top1s, top5s = zip(*self.net_map(metrics_func))
+        with self.as_default():
+            self._top1_op = tf.concat(top1s, axis=0)
+            self._top5_op = tf.concat(top5s, axis=0)
 
     def _update_progress(self, step, top1, top5, num_iterations):
         interval = self.change.delta('step.duration', time.time())
