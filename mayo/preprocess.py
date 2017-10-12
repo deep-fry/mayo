@@ -76,12 +76,14 @@ class _ImagePreprocess(object):
             height, width, _ = self.shape
         return tf.image.resize_image_with_crop_or_pad(i, height, width)
 
-    def resize(self, i, height=None, width=None, preserve_aspect_ratio=False):
+    def resize(self, i, height=None, width=None, fill=False):
         if height is None or width is None:
             height, width, channels = self.shape
         else:
             channels = self.shape[-1]
-        if preserve_aspect_ratio:
+        # fill preserves aspect ratio, resizes the image with minimal cropping
+        # and no padding.
+        if fill:
             aspect_ratio = tf.constant(width / height)
             ho, wo, _ = tf.unstack(tf.cast(tf.shape(i), tf.float32), channels)
             wo = tf.minimum(tf.round(ho * aspect_ratio), wo)
@@ -157,7 +159,7 @@ class _ImagePreprocess(object):
             return i
         log.debug('Ensuring size of image is as expected by our inputs.')
         # rescale image
-        return self.resize(i, h, w)
+        return self.resize(i, h, w, fill=True)
 
     def preprocess(self, image, actions):
         with tf.name_scope(values=[image], name='preprocess_image'):

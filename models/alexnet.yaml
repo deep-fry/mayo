@@ -7,8 +7,7 @@ dataset:
             width: 224
             channels: 3
         validate:
-            - {type: resize, height: 256, width: 256,
-               preserve_aspect_ratio: true}
+            - {type: resize, height: 256, width: 256, fill: true}
             - {type: crop_or_pad, height: 224, width: 224}
         final:
             - {type: normalize_channels}
