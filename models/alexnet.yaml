@@ -7,8 +7,10 @@ dataset:
             width: 224
             channels: 3
         validate:
-            - {type: resize, height: 256, width: 256, fill: true}
-            - {type: crop_or_pad, height: 224, width: 224}
+            # alternative validate preprocessing pipeline
+            # - {type: resize, height: 256, width: 256, fill: true}
+            # - {type: crop_or_pad, height: 224, width: 224}
+            - {type: central_crop, fraction: 0.875}
         final:
             - {type: normalize_channels}
 model:
@@ -23,7 +25,7 @@ model:
 
         Unfortunately there are some discrepancies between this pytorch model
         and tensorflow/slim, namely `conv4` uses different output sizes (384
-        vs. 256), and padding of `conv1` is different (valid vs. same).
+        vs. 256), and paddings are differnt.
     layers:
         _init: &init
             biases_initializer:
