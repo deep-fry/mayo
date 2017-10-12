@@ -2,11 +2,11 @@
 model.layers:
     conv0: &overrider
         weights_overrider: &pruner
-            type: mayo.override.Mayo_DFP_Quantizer
+            type: mayo.override.MayoDFPQuantizer
             overflow_rate: 0.01
             width: 16
         biases_overrider:
-            type: mayo.override.Mayo_DFP_Quantizer
+            type: mayo.override.MayoDFPQuantizer
             overflow_rate: 0.01
             width: 16
     conv1: {<<: *overrider}

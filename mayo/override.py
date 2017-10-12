@@ -358,7 +358,7 @@ class FixedPointQuantizer(BaseOverrider):
             The number of bits to use in number representation.
             If not specified, we do not limit the range of values.
         - point:
-            The position of the binary point.
+            The position of the binary point, counting from the MSB.
 
     References:
         [1] https://arxiv.org/pdf/1604.03168
@@ -372,14 +372,14 @@ class FixedPointQuantizer(BaseOverrider):
                 'Width of quantized value must be greater than 0.')
 
     def _quantize(
-            self, value, point, compute_overflow_rate=False):
-        # x << point
-        shift = _cast(2 ** point, float)
+            self, value, width, point, compute_overflow_rate=False):
+        # x << (width - point)
+        shift = _cast(2 ** (width - point), float)
         value = value * shift
         # quantize
         value = _round(value)
         # ensure number is representable without overflow
-        max_value = _cast(2 ** (self.width - 1), float)
+        max_value = _cast(2 ** (width - 1), float)
         if compute_overflow_rate:
             overflows = _logical_or(value < -max_value, value > max_value - 1)
             return _sum(_cast(overflows, int)) / _count(overflows)
@@ -388,7 +388,7 @@ class FixedPointQuantizer(BaseOverrider):
         return value / shift
 
     def _apply(self, getter, value):
-        return self._quantize(value, self.point)
+        return self._quantize(value, self.width, self.point)
 
     def info(self, session):
         p = self.point
@@ -397,40 +397,51 @@ class FixedPointQuantizer(BaseOverrider):
         return self._info_tuple(width=self.width, point=p)
 
 
-class DynamicFixedPointQuantizer(FixedPointQuantizer):
+class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
     """
-    Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
-    dynamic range.
+    a base class to quantize inputs into 2's compliment `width`-bit fixed-point
+    values with `point`-bit dynamic range.
 
     Args:
         - width:
             The number of bits to use in number representation.
         - overflow_rate:
             The percentage of tolerable overflow in a certain overridden
-            variable.  The method `._update_policy()` uses this information
-            to compute a corresponding binary point using an update policy
-            described in [1].
-
-    References:
-        [1] https://arxiv.org/pdf/1412.7024
+            variable.  The method `._update_policy()` should be overridden to
+            use this information to compute a corresponding binary point using
+            an update policy.
     """
-    _attempts = 100
+    _init_point = 1
 
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(None, width, should_update=should_update)
         self.overflow_rate = overflow_rate
-        self._init_point = width - 1
+
+    def point_var(self, getter, name):
+        if self.point is not None:
+            return self.point
+        name = '{}/point'.format(name)
+        self.point = getter(
+            name, dtype=tf.int32, shape=[],
+            initializer=tf.constant_initializer(self._init_point),
+            trainable=False)
+        return self.point
 
     def _apply(self, getter, value):
-        if self.point is None:
-            name = '{}/point'.format(value.op.name)
-            self.point = getter(
-                name, dtype=tf.int32, shape=[],
-                initializer=tf.constant_initializer(self._init_point),
-                trainable=False)
-        return self._quantize(value, self.point)
+        point = self.point_var(getter, value.op.name)
+        return self._quantize(value, self.width, point)
 
     def _update_policy(self, tensor):
+        raise NotImplementedError
+
+    def _update(self, session):
+        p = self._update_policy(session.run(self.before))
+        session.run(tf.assign(self.point, p))
+
+
+class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):
+    def _update_policy(self, tensor):
+        """ algorithm described in: https://arxiv.org/pdf/1412.7024  """
         p = self._init_point
         rate = self._quantize(tensor, p, compute_overflow_rate=True)
         if rate > self.overflow_rate:
@@ -439,12 +450,42 @@ class DynamicFixedPointQuantizer(FixedPointQuantizer):
             p += 1
         return p
 
-    def _update(self, session):
-        p = self._update_policy(session.run(self.before))
-        session.run(tf.assign(self.point, p))
+
+class DGQuantizer(DynamicFixedPointQuantizerBase):
+    def _update_policy(self, tensor):
+        """ simple brute-force, optimal result.  """
+        w = self.width
+        for p in range(w + 1):
+            rate = self._quantize(tensor, w, p, compute_overflow_rate=True)
+            if rate <= self.overflow_rate:
+                return p
 
 
-class Mayo_DFP_Quantizer(DynamicFixedPointQuantizer):
+class DGTrainableQuantizer(DGQuantizer):
+    """ Backpropagatable precision.  """
+    _init_width = 16
+
+    def __init__(self, overflow_rate, should_update=True):
+        super().__init__(None, None, should_update=should_update)
+
+    def width_var(self, getter, name):
+        if self.width is not None:
+            return self.width
+        # trainable width, but no gradients can be felt by it at the moment
+        name = '{}/width'.format(name)
+        self.width = _round(getter(
+            name, dtype=tf.float32, shape=[],
+            initializer=tf.constant_initializer(self._init_width),
+            trainable=True))
+        return self.width
+
+    def _apply(self, getter, value):
+        width = self.width_var(getter, value.op.name)
+        point = self.point_var(getter, value.op.name)
+        return self._quantize(value, width, point)
+
+
+class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(width, overflow_rate, should_update)
 

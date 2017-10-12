@@ -1,9 +1,9 @@
 ---
 model.layers:
     _quantizer: &quantizer
-        type: mayo.override.FixedPointQuantizer
-        point: 2
-        width: 3
+        type: mayo.override.DGQuantizer
+        width: 8
+        overflow_rate: 0.1
         should_update: true
     _pruner: &pruner
         type: mayo.override.DNSPruner
