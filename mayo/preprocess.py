@@ -85,7 +85,7 @@ class _ImagePreprocess(object):
         # and no padding.
         if fill:
             aspect_ratio = tf.constant(width / height)
-            ho, wo, _ = tf.unstack(tf.cast(tf.shape(i), tf.float32), channels)
+            ho, wo, _ = tf.unstack(tf.cast(tf.shape(i), tf.float32), 3)
             wo = tf.minimum(tf.round(ho * aspect_ratio), wo)
             ho = tf.minimum(tf.round(wo / aspect_ratio), ho)
             wo = tf.cast(wo, tf.int32)
