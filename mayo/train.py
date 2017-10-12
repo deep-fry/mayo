@@ -94,6 +94,7 @@ class Train(Session):
         self._summary_op = tf.summary.merge(summaries)
 
     def _init(self):
+        self.init_vars()
         self.checkpoint.load(self.config.system.checkpoint.load)
         # final debug outputs
         if not log.is_enabled('debug'):

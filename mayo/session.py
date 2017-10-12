@@ -31,6 +31,7 @@ class Session(object):
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
+        self._initialized_variables = []
         self.init_vars()
 
     def __del__(self):
@@ -140,9 +141,15 @@ class Session(object):
             return var_avgs.apply(avg_vars)
 
     def init_vars(self):
-        log.debug('Initializing...')
+        variables = []
+        for var in self.global_variables():
+            if var not in self._initialized_variables:
+                variables.append(var)
+        self._initialized_variables += variables
+        desc = ', '.join(v.op.name for v in variables)
+        log.debug('Initializing variables: {}'.format(desc))
         with self.as_default():
-            return self.run(tf.variables_initializer(self.global_variables()))
+            return self.run(tf.variables_initializer(variables))
 
     def info(self):
         return self.nets[0].info()
