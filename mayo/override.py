@@ -88,7 +88,7 @@ def _clip(*args, min_max=None):
     if _is_constant(*args):
         return min(*args) if min_max else max(*args)
     if _is_numpy(*args):
-        return np.min(*args) if min_max else np.max(*args)
+        return np.minimum(*args) if min_max else np.maximum(*args)
     return tf.minimum(*args) if min_max else tf.maximum(*args)
 
 
@@ -101,7 +101,7 @@ def _binarize(tensor, threshold):
 
 
 def _clip_by_value(tensor, minimum, maximum, transparent_backprop=False):
-    if _is_tensor(tensor, minimum, maximum):
+    if not _is_tensor(tensor, minimum, maximum):
         return _min(_max(tensor, minimum), maximum)
     omap = {}
     if transparent_backprop:
