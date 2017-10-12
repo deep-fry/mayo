@@ -78,9 +78,7 @@ class _ImagePreprocess(object):
 
     def resize(self, i, height=None, width=None, fill=False):
         if height is None or width is None:
-            height, width, channels = self.shape
-        else:
-            channels = self.shape[-1]
+            height, width, _ = self.shape
         # fill preserves aspect ratio, resizes the image with minimal cropping
         # and no padding.
         if fill:
