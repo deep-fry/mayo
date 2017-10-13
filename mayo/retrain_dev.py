@@ -94,11 +94,19 @@ class Retrain_Base(Train):
         scales = {}
         for o in self.nets[0].overriders:
             name = o.name
+<<<<<<< HEAD
             d[name] = np.count_nonzero(self.run(o._mask))
             thresholds[name] = getattr(o, threshold_name)
             scales[name] = getattr(o, scale_name)
         check_bias = self.config.retrain.bias
         log.debug('check bias is {}'.format(check_bias))
+=======
+            # d[name] = self.run(o.after).size
+            d[name] = self._metric_clac(o)
+            thresholds[name] = getattr(o, threshold_name)
+            scales[name] = getattr(o, scale_name)
+        check_bias = self.config.retrain.bias
+>>>>>>> refs/remotes/origin/develop
         for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
             if check_bias:
@@ -127,7 +135,8 @@ class Retrain_Base(Train):
         self.reset_num_epochs()
         tolerance = self.config.retrain.tolerance
         while epoch < 1.0:
-            loss, acc, epoch = self.once()
+            loss, acc, epoch = self.run(
+                [self.loss, self.accuracy, self.num_epochs])
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
@@ -139,6 +148,17 @@ class Retrain_Base(Train):
             self.loss_base,
             self.acc_base,
         ))
+
+    def _metric_clac(self, o):
+        metric_value = num_elements = self.run(self.after).size
+        if o._mask:
+            valid_elements = np.count_nonzero(self.run(o._mask))
+            density = valid_elements / float(num_elements)
+            metric_value *= density
+        if o.width:
+            bits = o.width
+            metric_value *= bits
+        return metric_value
 
     def _avg_stats(self):
         self.loss_avg = self.loss_total / float(self.step)

@@ -1,3 +1,4 @@
+import copy
 import functools
 import itertools
 import collections
@@ -41,7 +42,7 @@ class _InstantiationParamTransformer(object):
                 return replace[value[1:]]
             return value
         if isinstance(value, list):
-            return cls._recursive_replace(value, replace)
+            return [cls._recursive_replace(v, replace) for v in value]
         if isinstance(value, collections.Mapping):
             for k, v in value.items():
                 value[k] = cls._recursive_replace(v, replace)
@@ -51,8 +52,12 @@ class _InstantiationParamTransformer(object):
     def _repace_module_kwargs(self, params):
         if params['type'] != 'module':
             return
-        replace = {key: params[key] for key in params['kwargs']}
-        params['layers'] = self._recursive_replace(params['layers'], replace)
+        kwargs = params.get('kwargs', {})
+        replace = {
+            key: params.get(key, default_value)
+            for key, default_value in kwargs.items()}
+        layers = copy.deepcopy(params['layers'])
+        params['layers'] = self._recursive_replace(layers, replace)
 
     def _create_hyperobjects(self, params):
         def _create_object_for_key(params, key):
@@ -194,27 +199,34 @@ class BaseNet(object):
         return [tf.pad(t, paddings) for t in tensors]
 
     def _instantiate_edge(self, edge, layers, iodef, module):
+        location = 'module {!r}'.format(module) if module else 'graph'
         try:
             from_tensors = ensure_list(edge['from'])
             to_tensors = ensure_list(edge['to'])
             with_layers = ensure_list(edge['with'])
         except KeyError:
             raise KeyError(
-                'Graph edge definition expects keys "from", "with" and "to".')
+                'Graph edge definition expects keys "from", "with" and "to", '
+                'the edge {} in {} lacks at least one of the above.'
+                .format(edge, module))
         log.debug(
-            'Instantiating edge from {!r} to {!r} with layers {!r}...'
-            .format(from_tensors, to_tensors, with_layers))
-        try:
-            tensors = [iodef[t] for t in from_tensors]
-        except KeyError as e:
-            raise KeyError('Tensor not found: {!r}'.format(e))
+            'Instantiating edge from {!r} to {!r} with layers {!r} in {}...'
+            .format(from_tensors, to_tensors, with_layers, location))
+        tensors = []
+        for t in from_tensors:
+            try:
+                tensors.append(iodef[t])
+            except KeyError:
+                raise KeyError(
+                    'Tensor named {!r} is not defined in {}.'
+                    .format(t, location))
         for layer_name in with_layers:
             try:
                 params = layers[layer_name]
             except KeyError:
                 raise KeyError(
-                    'Layer definition does not contain a definition for {!r}.'
-                    .format(layer_name))
+                    'Layer definitions of {} does not contain a definition '
+                    'for {!r}.'.format(location, layer_name))
             params, norm_scope, overrider_scope = \
                 self._transformer.transform(layer_name, params)
             # get method by its name to instantiate a layer
@@ -239,7 +251,8 @@ class BaseNet(object):
         if len(to_tensors) != len(tensors):
             raise ValueError(
                 'We expect the number of final layer outputs to match the '
-                'expected size in "to" in edge definition.')
+                'expected size in "to" in edge definition in {}.'
+                .format(location))
         for to_name, tensor in zip(to_tensors, tensors):
             iodef[to_name] = tensor
 
