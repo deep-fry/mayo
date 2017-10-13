@@ -89,20 +89,24 @@ class Retrain_Base(Train):
                 name = o.name
                 self.cont[name] = True
                 o.should_update = False
-        # d = {}
+        d = {}
         thresholds = {}
         scales = {}
         for o in self.nets[0].overriders:
             name = o.name
-            # d[name] = np.count_nonzero(self.run(o._mask))
+            # d[name] = self.run(o.after).size
+            d[name] = self._metric_clac(o)
             thresholds[name] = getattr(o, threshold_name)
             scales[name] = getattr(o, scale_name)
         check_bias = self.config.retrain.bias
-        for key in sorted(thresholds, key=thresholds.get):
+        for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            if (self.cont[key] and ('biases' not in key) and check_bias) or \
-                (self.cont[key] and not check_bias):
-                self.priority_list.append(key)
+            if check_bias:
+                if self.cont[key]:
+                    self.priority_list.append(key)
+            else:
+                if self.cont[key] and ('biases' not in key):
+                    self.priority_list.append(key)
         log.debug('display thresholds')
         log.debug('{}'.format(thresholds))
         log.debug('display scales')
@@ -123,7 +127,8 @@ class Retrain_Base(Train):
         self.reset_num_epochs()
         tolerance = self.config.retrain.tolerance
         while epoch < 1.0:
-            loss, acc, epoch = self.once()
+            loss, acc, epoch = self.run(
+                [self.loss, self.accuracy, self.num_epochs])
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
@@ -135,6 +140,17 @@ class Retrain_Base(Train):
             self.loss_base,
             self.acc_base,
         ))
+
+    def _metric_clac(self, o):
+        metric_value = num_elements = self.run(self.after).size
+        if o._mask:
+            valid_elements = np.count_nonzero(self.run(o._mask))
+            density = valid_elements / float(num_elements)
+            metric_value *= density
+        if o.width:
+            bits = o.width
+            metric_value *= bits
+        return metric_value
 
     def _avg_stats(self):
         self.loss_avg = self.loss_total / float(self.step)
