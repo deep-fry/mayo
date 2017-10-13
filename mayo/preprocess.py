@@ -154,8 +154,13 @@ class _ImagePreprocess(object):
                     'We do not know how to convert an image with {} channels '
                     'into one with {} channels.'.format(pc, c))
         if ph == h or pw == w:
+            log.debug(
+                'Size of image {} x {} is equal to the expected preprocessed '
+                'shape.'.format(h, w))
             return i
-        log.debug('Ensuring size of image is as expected by our inputs.')
+        log.debug(
+            'Ensuring size of image is as expected by our inputs {} x {} by '
+            'resizing it...'.format(h, w))
         # rescale image
         return self.resize(i, h, w, fill=True)
 
