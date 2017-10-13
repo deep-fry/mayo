@@ -4,43 +4,50 @@
 ---
 rename:
     InceptionV3: inception_v3
+    global_step: null
+    AuxLogits: null
+    Mixed_5c/Branch_1/Conv2d_0b_1x1: mixed5c/b1
+    Mixed_5c/Branch_1/Conv_1_0c_5x5: mixed5c/b2
+    Mixed_5([b-d])/Branch_0/Conv2d_0a_1x1: mixed5\1/a1
+    Mixed_5([b-d])/Branch_1/Conv2d_0a_1x1: mixed5\1/b1
+    Mixed_5([b-d])/Branch_1/Conv2d_0b_5x5: mixed5\1/b2
+    Mixed_5([b-d])/Branch_2/Conv2d_0a_1x1: mixed5\1/c1
+    Mixed_5([b-d])/Branch_2/Conv2d_0b_3x3: mixed5\1/c2
+    Mixed_5([b-d])/Branch_2/Conv2d_0c_3x3: mixed5\1/c3
+    Mixed_5([b-d])/Branch_3/Conv2d_0b_1x1: mixed5\1/d2
+    Mixed_6a/Branch_0/Conv2d_1a_1x1: mixed6a/a1
+    Mixed_6a/Branch_1/Conv2d_0a_1x1: mixed6a/b1
+    Mixed_6a/Branch_1/Conv2d_0b_3x3: mixed6a/b2
+    Mixed_6a/Branch_1/Conv2d_1a_1x1: mixed6a/b3
+    Mixed_6([b-e])/Branch_0/Conv2d_0a_1x1: mixed6\1/a1
+    Mixed_6([b-e])/Branch_1/Conv2d_0a_1x1: mixed6\1/b1
+    Mixed_6([b-e])/Branch_1/Conv2d_0b_1x7: mixed6\1/b2
+    Mixed_6([b-e])/Branch_1/Conv2d_0c_7x1: mixed6\1/b3
+    Mixed_6([b-e])/Branch_2/Conv2d_0a_1x1: mixed6\1/c1
+    Mixed_6([b-e])/Branch_2/Conv2d_0b_7x1: mixed6\1/c2
+    Mixed_6([b-e])/Branch_2/Conv2d_0c_1x7: mixed6\1/c3
+    Mixed_6([b-e])/Branch_2/Conv2d_0d_7x1: mixed6\1/c4
+    Mixed_6([b-e])/Branch_2/Conv2d_0e_1x7: mixed6\1/c5
+    Mixed_6([b-e])/Branch_3/Conv2d_0b_1x1: mixed6\1/d2
+    Mixed_7a/Branch_0/Conv2d_0a_1x1: mixed7a/a1
+    Mixed_7a/Branch_0/Conv2d_1a_3x3: mixed7a/a2
+    Mixed_7a/Branch_1/Conv2d_0a_1x1: mixed7a/b1
+    Mixed_7a/Branch_1/Conv2d_0b_1x7: mixed7a/b2
+    Mixed_7a/Branch_1/Conv2d_0c_7x1: mixed7a/b3
+    Mixed_7a/Branch_1/Conv2d_1a_3x3: mixed7a/b4
+    Mixed_7(b|c)/Branch_0/Conv2d_0a_1x1: mixed7\1/a1
+    Mixed_7(b|c)/Branch_1/Conv2d_0a_1x1: mixed7\1/b1
+    Mixed_7(b|c)/Branch_1/Conv2d_0b_1x3: mixed7\1/b2a
+    Mixed_7(b|c)/Branch_1/Conv2d_0(b|c)_3x1: mixed7\1/b2b
+    Mixed_7(b|c)/Branch_2/Conv2d_0a_1x1: mixed7\1/c1
+    Mixed_7(b|c)/Branch_2/Conv2d_0b_3x3: mixed7\1/c2
+    Mixed_7(b|c)/Branch_2/Conv2d_0c_1x3: mixed7\1/c3a
+    Mixed_7(b|c)/Branch_2/Conv2d_0d_3x1: mixed7\1/c3b
+    Mixed_7(b|c)/Branch_3/Conv2d_0b_1x1: mixed7\1/d2
+    Mixed_: mixed
     Conv2d_1a_3x3: conv1
     Conv2d_2a_3x3: conv2a
     Conv2d_2b_3x3: conv2b
     Conv2d_3b_1x1: conv3b
     Conv2d_4a_3x3: conv4
-    Conv2d_4a_3x3: conv4
-    Mixed_5b: mixed5b
-    Mixed_5c: mixed5c
-    Mixed_5d: mixed5d
-    Branch_0/Conv2d_0a_1x1: a1
-    Branch_1/Conv2d_0a_1x1: b1
-    Branch_1/Conv2d_0b_5x5: b2
-    Branch_2/Conv2d_0a_1x1: c1
-    Branch_2/Conv2d_0b_3x3: c2
-    Branch_2/Conv2d_0c_3x3: c3
-    Branch_3/Conv2d_0b_1x1: d2
-    Mixed_6a: mixed6a
-    Branch_0/Conv2d_0a_3x3: a1
-    Branch_1/Conv2d_0b_3x3: b2
-    Branch_1/Conv2d_0b_3x3: b3
-    Mixed_6b: mixed6b
-    Branch_1/Conv2d_0b_1x7: b2
-    Branch_1/Conv2d_0b_7x1: b3
-    Branch_1/Conv2d_0b_7x1: c2
-    Branch_1/Conv2d_0b_1x7: c3
-    Branch_1/Conv2d_0b_7x1: c4
-    Branch_1/Conv2d_0b_1x7: c5
-    Mixed_6c: mixed6c
-    Mixed_6d: mixed6d
-    Mixed_6e: mixed6e
-    Mixed_7a: mixed7a
-    Branch_0/Conv2d_1a_3x3: a2
-    Branch_1/Conv2d_1a_3x3: b4
-    Mixed_7b: mixed7b
-    Branch_1/Conv2d_0b_1x3: b2a
-    Branch_1/Conv2d_0b_3x1: b2b
-    Branch_2/Conv2d_0c_1x3: c3a
-    Branch_2/Conv2d_0d_3x1: c3b
-    Mixed_7c: mixed7c
     Logits/Conv2d_1c_1x1: fc
