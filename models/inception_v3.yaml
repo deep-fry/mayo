@@ -113,7 +113,7 @@ model:
                 - {from: input, with: a1, to: a}
                 - {from: input, with: [b1, b2, b3], to: b}
                 - {from: input, with: [c1, c2, c3, c4, c5], to: c}
-                - {from: input, with: [d1, d2], to: b3_out}
+                - {from: input, with: [d1, d2], to: d}
                 - {from: [a, b, c, d], with: concat, to: output}
         # 17 x 17 x 768
         mixed6c: {<<: *mixed6b, depth: 160}
@@ -173,15 +173,15 @@ model:
                 - {from: [a, b, c, d], with: concat, to: output}
         # 8 x 8 x 2048
         mixed7c: *mixed7b
-        pool8: {type: average_pool, kernel_size: 8, padding: valid}
-        dropout8: {type: dropout, keep_prob: 0.8}
-        fc9:
+        pool: {type: average_pool, kernel_size: 8, padding: valid}
+        dropout: {type: dropout, keep_prob: 0.8}
+        fc:
             <<: *conv_same
             kernel_size: 1
             num_outputs: num_classes
             activation_fn: null
             normalizer_fn: null
-        squeeze9: {type: squeeze, axis: [1, 2]}
+        squeeze: {type: squeeze, axis: [1, 2]}
     graph:
         from: images
         with:
@@ -189,5 +189,5 @@ model:
              mixed5b, mixed5c, mixed5d,
              mixed6a, mixed6b, mixed6c, mixed6d, mixed6e,
              mixed7a, mixed7b, mixed7c,
-             pool8, dropout8, fc9, squeeze9]
+             pool, dropout, fc, squeeze]
         to: logits
