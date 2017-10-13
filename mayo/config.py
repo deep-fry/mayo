@@ -2,6 +2,7 @@ import re
 import os
 import ast
 import sys
+import copy
 import glob
 import operator
 import collections
@@ -135,6 +136,10 @@ class _DotDict(collections.MutableMapping):
             # normalize key paths
             for key, value in data.items():
                 self[key] = value
+
+    def __deepcopy__(self, memo):
+        data = copy.deepcopy(self._mapping, memo)
+        return self.__class__(data, root=self._root, normalize=False)
 
     @classmethod
     def _merge(cls, d, md):

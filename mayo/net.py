@@ -1,3 +1,4 @@
+import copy
 import functools
 import itertools
 import collections
@@ -55,7 +56,8 @@ class _InstantiationParamTransformer(object):
         replace = {
             key: params.get(key, default_value)
             for key, default_value in kwargs.items()}
-        params['layers'] = self._recursive_replace(params['layers'], replace)
+        layers = copy.deepcopy(params['layers'])
+        params['layers'] = self._recursive_replace(layers, replace)
 
     def _create_hyperobjects(self, params):
         def _create_object_for_key(params, key):
