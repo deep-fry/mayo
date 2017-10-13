@@ -78,7 +78,7 @@ class Train(Session):
         if ma_op:
             ops['avg'] = ma_op
         # update ops
-        update_ops = self.get_collection(tf.GraphKeys.UPDATE_OPS)
+        update_ops = list(self.get_collection(tf.GraphKeys.UPDATE_OPS))
         ops['update'] = tf.group(*update_ops, name='update')
         log.debug('Using update operations: {}'.format(update_ops))
         log.debug('Using training operations: {}'.format(ops))
