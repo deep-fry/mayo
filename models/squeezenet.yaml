@@ -42,7 +42,7 @@ model:
             <<: *init
         _fire: &fire
             type: module
-            kwargs: [squeeze_depth, expand_depth]
+            kwargs: {squeeze_depth: null, expand_depth: null}
             layers:
                 squeeze:
                     <<: *conv

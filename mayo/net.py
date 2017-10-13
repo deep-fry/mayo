@@ -51,7 +51,9 @@ class _InstantiationParamTransformer(object):
     def _repace_module_kwargs(self, params):
         if params['type'] != 'module':
             return
-        replace = {key: params[key] for key in params['kwargs']}
+        replace = {
+            key: params.get(key, default_value)
+            for key, default_value in params['kwargs'].items()}
         params['layers'] = self._recursive_replace(params['layers'], replace)
 
     def _create_hyperobjects(self, params):
