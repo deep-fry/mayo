@@ -1,6 +1,6 @@
 ---
 dataset:
-    background_class: {use: false}
+    background_class: {use: true}
     preprocess:
         shape:
             height: 299
