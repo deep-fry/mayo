@@ -1,0 +1,46 @@
+# This rules file converts pretrained inception_v1 model from:
+# https://github.com/tensorflow/models/blob/master/research/slim/nets/inception_v3.py
+# into a checkpoint used by our mobilenet.yaml model.
+---
+rename:
+    InceptionV3: inception_v3
+    Conv2d_1a_3x3: conv1
+    Conv2d_2a_3x3: conv2a
+    Conv2d_2b_3x3: conv2b
+    Conv2d_3b_1x1: conv3b
+    Conv2d_4a_3x3: conv4
+    Conv2d_4a_3x3: conv4
+    Mixed_5b: mixed5b
+    Mixed_5c: mixed5c
+    Mixed_5d: mixed5d
+    Branch_0/Conv2d_0a_1x1: a1
+    Branch_1/Conv2d_0a_1x1: b1
+    Branch_1/Conv2d_0b_5x5: b2
+    Branch_2/Conv2d_0a_1x1: c1
+    Branch_2/Conv2d_0b_3x3: c2
+    Branch_2/Conv2d_0c_3x3: c3
+    Branch_3/Conv2d_0b_1x1: d2
+    Mixed_6a: mixed6a
+    Branch_0/Conv2d_0a_3x3: a1
+    Branch_1/Conv2d_0b_3x3: b2
+    Branch_1/Conv2d_0b_3x3: b3
+    Mixed_6b: mixed6b
+    Branch_1/Conv2d_0b_1x7: b2
+    Branch_1/Conv2d_0b_7x1: b3
+    Branch_1/Conv2d_0b_7x1: c2
+    Branch_1/Conv2d_0b_1x7: c3
+    Branch_1/Conv2d_0b_7x1: c4
+    Branch_1/Conv2d_0b_1x7: c5
+    Mixed_6c: mixed6c
+    Mixed_6d: mixed6d
+    Mixed_6e: mixed6e
+    Mixed_7a: mixed7a
+    Branch_0/Conv2d_1a_3x3: a2
+    Branch_1/Conv2d_1a_3x3: b4
+    Mixed_7b: mixed7b
+    Branch_1/Conv2d_0b_1x3: b2a
+    Branch_1/Conv2d_0b_3x1: b2b
+    Branch_2/Conv2d_0c_1x3: c3a
+    Branch_2/Conv2d_0d_3x1: c3b
+    Mixed_7c: mixed7c
+    Logits/Conv2d_1c_1x1: fc
