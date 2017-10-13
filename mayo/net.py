@@ -210,8 +210,10 @@ class BaseNet(object):
                 'the edge {} in {} lacks at least one of the above.'
                 .format(edge, module))
         log.debug(
-            'Instantiating edge from {!r} to {!r} with layers {!r} in {}...'
-            .format(from_tensors, to_tensors, with_layers, location))
+            'Instantiating edge from [{}] to [{}] with layers [{}] in {}...'
+            .format(
+                ', '.join(from_tensors), ', '.join(to_tensors),
+                ', '.join(with_layers), location))
         tensors = []
         for t in from_tensors:
             try:
@@ -230,14 +232,23 @@ class BaseNet(object):
             params, norm_scope, overrider_scope = \
                 self._transformer.transform(layer_name, params)
             # get method by its name to instantiate a layer
+            layer_type = params['type']
             func, params = object_from_params(params, self, 'instantiate_')
-            # instantiation
-            log.debug(
-                'Instantiating {!r} with params {}...'
-                .format(layer_name, params))
             # module scope
             var_scope = tf.variable_scope(module) if module else _null_scope()
+            # instantiation
+            arguments = []
+            for k, v in params.items():
+                if isinstance(v, collections.Callable):
+                    v = '{}()'.format(v.__qualname__)
+                arguments.append('{}={}'.format(k, v))
+            arguments = '\n    '.join(arguments)
             with norm_scope, overrider_scope, var_scope:
+                scope_name = tf.get_variable_scope().name
+                log.debug(
+                    'Instantiating {!r} of type {!r} in scope {!r} with '
+                    'arguments:\n    {}'
+                    .format(layer_name, layer_type, scope_name, arguments))
                 tensors = self._instantiate_numeric_padding(tensors, params)
                 tensors = func(tensors, params)
             # module prefix
