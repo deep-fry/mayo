@@ -245,19 +245,17 @@ class BaseNet(object):
             arguments = '\n    '.join(arguments)
             with norm_scope, overrider_scope, var_scope:
                 scope_name = tf.get_variable_scope().name
+                layer_key = '{}/{}'.format(scope_name, layer_name)
                 log.debug(
                     'Instantiating {!r} of type {!r} in scope {!r} with '
                     'arguments:\n    {}'
                     .format(layer_name, layer_type, scope_name, arguments))
                 tensors = self._instantiate_numeric_padding(tensors, params)
                 tensors = func(tensors, params)
-            # module prefix
-            if module:
-                layer_name = '{}/{}'.format(module, layer_name)
             # add to layers
-            if layer_name in self.layers:
-                raise KeyError('Layer {!r} already exists.'.format(layer_name))
-            self.layers[layer_name] = tensors
+            if layer_key in self.layers:
+                raise KeyError('Layer {!r} already exists.'.format(layer_key))
+            self.layers[layer_key] = tensors
         # add to iodef
         if len(to_tensors) != len(tensors):
             raise ValueError(
