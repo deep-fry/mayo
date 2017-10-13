@@ -244,12 +244,11 @@ class BaseNet(object):
                 arguments.append('{}={}'.format(k, v))
             arguments = '\n    '.join(arguments)
             with norm_scope, overrider_scope, var_scope:
-                scope_name = tf.get_variable_scope().name
-                layer_key = '{}/{}'.format(scope_name, layer_name)
+                layer_key = '{}/{}'.format(
+                    tf.get_variable_scope().name, layer_name)
                 log.debug(
-                    'Instantiating {!r} of type {!r} in scope {!r} with '
-                    'arguments:\n    {}'
-                    .format(layer_name, layer_type, scope_name, arguments))
+                    'Instantiating {!r} of type {!r} with arguments:\n    {}'
+                    .format(layer_key, layer_type, arguments))
                 tensors = self._instantiate_numeric_padding(tensors, params)
                 tensors = func(tensors, params)
             # add to layers
