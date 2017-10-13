@@ -89,20 +89,24 @@ class Retrain_Base(Train):
                 name = o.name
                 self.cont[name] = True
                 o.should_update = False
-        # d = {}
+        d = {}
         thresholds = {}
         scales = {}
         for o in self.nets[0].overriders:
             name = o.name
-            # d[name] = np.count_nonzero(self.run(o._mask))
+            d[name] = np.count_nonzero(self.run(o._mask))
             thresholds[name] = getattr(o, threshold_name)
             scales[name] = getattr(o, scale_name)
         check_bias = self.config.retrain.bias
-        for key in sorted(thresholds, key=thresholds.get):
+        log.debug('check bias is {}'.format(check_bias))
+        for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            if (self.cont[key] and ('biases' not in key) and check_bias) or \
-                (self.cont[key] and not check_bias):
-                self.priority_list.append(key)
+            if check_bias:
+                if self.cont[key]:
+                    self.priority_list.append(key)
+            else:
+                if self.cont[key] and ('biases' not in key):
+                    self.priority_list.append(key)
         log.debug('display thresholds')
         log.debug('{}'.format(thresholds))
         log.debug('display scales')
