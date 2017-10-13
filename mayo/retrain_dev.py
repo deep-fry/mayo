@@ -94,19 +94,11 @@ class Retrain_Base(Train):
         scales = {}
         for o in self.nets[0].overriders:
             name = o.name
-<<<<<<< HEAD
-            d[name] = np.count_nonzero(self.run(o._mask))
-            thresholds[name] = getattr(o, threshold_name)
-            scales[name] = getattr(o, scale_name)
-        check_bias = self.config.retrain.bias
-        log.debug('check bias is {}'.format(check_bias))
-=======
             # d[name] = self.run(o.after).size
             d[name] = self._metric_clac(o)
             thresholds[name] = getattr(o, threshold_name)
             scales[name] = getattr(o, scale_name)
         check_bias = self.config.retrain.bias
->>>>>>> refs/remotes/origin/develop
         for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
             if check_bias:
