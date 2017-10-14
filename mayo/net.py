@@ -240,7 +240,10 @@ class BaseNet(object):
             arguments = []
             for k, v in params.items():
                 if isinstance(v, collections.Callable):
-                    v = '{}()'.format(v.__qualname__)
+                    try:
+                        v = '{}()'.format(v.__qualname__)
+                    except AttributeError:
+                        pass
                 arguments.append('{}={}'.format(k, v))
             arguments = '\n    '.join(arguments)
             with norm_scope, overrider_scope, var_scope:
