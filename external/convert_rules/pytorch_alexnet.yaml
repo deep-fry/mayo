@@ -1,11 +1,12 @@
 # Rules to import pytorch alexnet pretrained model into checkpoints.
 #
-# Model references:
+# Model:
 #     https://github.com/pytorch/vision/blob/master/torchvision/models/alexnet.py
+# Weights:
 #     https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth
 #
-# Some tensors requires us to permute them, as the ordering is different from
-# tensorflow.
+# Tensors require us to permute them, as their spatial ordering is different
+# from tensorflow.
 #
 # Convolution:
 #     torch:      [out_maps, in_maps, kernel_h, kernel_w]
