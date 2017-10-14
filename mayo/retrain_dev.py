@@ -142,12 +142,12 @@ class Retrain_Base(Train):
         ))
 
     def _metric_clac(self, o):
-        metric_value = num_elements = self.run(self.after).size
-        if o._mask:
+        metric_value = num_elements = self.run(o.after).size
+        if hasattr(o, '_mask'):
             valid_elements = np.count_nonzero(self.run(o._mask))
             density = valid_elements / float(num_elements)
             metric_value *= density
-        if o.width:
+        if hasattr(o, 'width'):
             bits = o.width
             metric_value *= bits
         return metric_value
