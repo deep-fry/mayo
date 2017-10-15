@@ -1,5 +1,4 @@
 ---
-_import: squeezenet_v10.yaml
 dataset:
     background_class: {use: false}
     preprocess:
@@ -7,7 +6,8 @@ dataset:
             height: 224
             width: 224
             channels: 3
-        validate: []
+        validate:
+            - {type: central_crop, fraction: 0.875}
         final:
             - {type: normalize_channels}
 model:
