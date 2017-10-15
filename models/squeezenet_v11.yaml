@@ -1,27 +1,17 @@
 ---
+_import: squeezenet_v10.yaml
 dataset:
     background_class: {use: false}
     preprocess:
         shape:
-            height: 227
-            width: 227
+            height: 224
+            width: 224
             channels: 3
-        validate:
-            - {type: central_crop, fraction: 0.875}
+        validate: []
         final:
             - {type: normalize_channels}
 model:
-    name: squeezenet
-    description: |
-        AlexNet-level accuracy with 50x fewer parameters and <0.5MB model size.
-        This implementation is based on::
-          https://arxiv.org/abs/1602.07360
-        We use the following reference model::
-          https://github.com/pytorch/vision/blob/master/torchvision/models/squeezenet.py
-        Alternative implementations::
-          https://github.com/vonclites/squeezenet
-          https://github.com/rcmalli/keras-squeezenet
-          https://github.com/DeepScale/SqueezeNet/blob/master/SqueezeNet_v1.1/train_val.prototxt
+    name: squeezenet_v11
     layers:
         _init: &init
             biases_initializer:
@@ -62,18 +52,18 @@ model:
                 - {from: squeezed, with: expand1, to: expanded1}
                 - {from: squeezed, with: expand3, to: expanded3}
                 - {from: [expanded1, expanded3], with: concat, to: output}
-        conv1: {<<: *conv, kernel_size: 7, stride: 2, num_outputs: 96}
+        conv1: {<<: *conv, kernel_size: 3, stride: 2, num_outputs: 64}
         pool1: &pool
             {type: max_pool, kernel_size: 3, stride: 2}
         fire2: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
         fire3: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
+        pool3: {type: max_pool, kernel_size: 3, stride: 2}
         fire4: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
-        pool4: {type: max_pool, kernel_size: 3, stride: 2}
         fire5: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
+        pool5: {type: max_pool, kernel_size: 3, stride: 2}
         fire6: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
         fire7: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
         fire8: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
-        pool8: {type: max_pool, kernel_size: 3, stride: 2}
         fire9: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
         dropout9: &dropout {type: dropout, keep_prob: 0.5}
         conv10: {<<: *conv, num_outputs: num_classes}
@@ -83,7 +73,8 @@ model:
         from: images
         with:
             [conv1, pool1,
-             fire2, fire3, fire4, pool4,
-             fire5, fire6, fire7, fire8, pool8,
-             fire9, dropout9, conv10, pool10, logits]
+             fire2, fire3, pool3,
+             fire4, fire5, pool5,
+             fire6, fire7, fire8, fire9, dropout9,
+             conv10, pool10, logits]
         to: logits

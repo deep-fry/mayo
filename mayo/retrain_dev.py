@@ -2,6 +2,7 @@ import math
 import sys
 import pdb
 import numpy as np
+import tensorflow as tf
 
 from mayo.log import log
 from mayo.train import Train
@@ -120,6 +121,15 @@ class Retrain_Base(Train):
         else:
             self.target_layer = self.priority_list.pop()
 
+    def empty_eval_run(self):
+        tasks = []
+        tasks.append(tf.assign_add(
+            self.imgs_seen, self.config.system.batch_size))
+        tasks.append(self.loss)
+        tasks.append(self.accuracy)
+        tasks.append(self.num_epochs)
+        return tasks
+
     def profile_for_one_epoch(self):
         log.info('Start profiling for one epoch')
         epoch = 0
@@ -127,8 +137,8 @@ class Retrain_Base(Train):
         self.reset_num_epochs()
         tolerance = self.config.retrain.tolerance
         while epoch < 1.0:
-            loss, acc, epoch = self.run(
-                [self.loss, self.accuracy, self.num_epochs])
+            _, loss, acc, epoch = self.run(
+                self.empty_eval_run())
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
@@ -142,12 +152,12 @@ class Retrain_Base(Train):
         ))
 
     def _metric_clac(self, o):
-        metric_value = num_elements = self.run(self.after).size
-        if o._mask:
+        metric_value = num_elements = self.run(o.after).size
+        if hasattr(o, '_mask'):
             valid_elements = np.count_nonzero(self.run(o._mask))
             density = valid_elements / float(num_elements)
             metric_value *= density
-        if o.width:
+        if hasattr(o, 'width'):
             bits = o.width
             metric_value *= bits
         return metric_value
