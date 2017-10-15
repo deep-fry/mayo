@@ -188,16 +188,19 @@ Arguments:
 Options:
     --dry-run           Performs a dry run, not actually changing anything
                         but shows things to be changed.
-    --rules=<yaml>      Replaces keys with new keys given in the specified YAML
-                        file using `re.sub`.  The YAML file should be written
-                        as follows:
-                            rename: <ordered mapping>
-                        Here, <ordered mapping> is filled with
-                            `<pattern>: <replacement>`
-                        which we will apply the substitution in the order of
-                        mapping.  The file could contain additional information
-                        required by specific importer and exporter processing,
-                        such as `unflat` in `PyTorchImporter`.
+    --rules=<yaml>      See "Conversion Rules Definition YAML File" below.
+
+Conversion Rules Definition YAML File:
+    The YAML file could contain the following mappings:
+    * `rename` replaces keys with new keys given in the specified YAML file
+      using `re.sub`, written as:
+        rename: <ordered mapping>
+      Here, <ordered mapping> is filled with:
+        `<pattern>: <replacement>`
+      which we will apply the substitution in the order of pattern and
+      replacement pairs.
+    * The file could additionally contain a `permute` dictionary required by
+      tensor permutation.
 """
 
 
