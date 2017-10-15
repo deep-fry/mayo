@@ -6,7 +6,8 @@ dataset:
             height: 227
             width: 227
             channels: 3
-        validate: []
+        validate:
+            - {type: central_crop, fraction: 0.875}
         final:
             - {type: normalize_channels}
 model:
