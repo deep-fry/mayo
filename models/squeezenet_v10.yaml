@@ -3,8 +3,8 @@ dataset:
     background_class: {use: false}
     preprocess:
         shape:
-            height: 227
-            width: 227
+            height: 224
+            width: 224
             channels: 3
         validate: []
         final:
