@@ -244,6 +244,23 @@ class Retrain_global(Retrain_Base):
             log.debug('all layers done')
             return False
 
+    def _decrease_scale(self):
+        # decrease scale factor, for quantizer, this factor might be 1
+        check_bias = self.config.retrain.bias
+        factor = self.config.retrain.scale_update_factor
+        if check_bias:
+            for o in self.nets[0].overriders:
+                o._scale_roll_back()
+                o._scale_update(factor)
+                record = o.scale
+        else:
+            for o in self.nets[0].overriders:
+                if 'biases' not in o.name:
+                    o._scale_roll_back()
+                    o._scale_update(factor)
+                    record = o.scale
+        log.debug('decrease scaling factor to {}'.format(record))
+
 
 class Retrain_layerwise(Retrain_Base):
     def overriders_refresh(self):
