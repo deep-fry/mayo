@@ -192,9 +192,16 @@ class Retrain_Base(Train):
 
 class Retrain_global(Retrain_Base):
     def overriders_refresh(self):
-        for o in self.nets[0].overriders:
-            o._threshold_update()
-            o.should_update = True
+        check_bias = self.config.retrain.bias
+        if check_bias:
+            for o in self.nets[0].overriders:
+                o._threshold_update()
+                o.should_update = True
+        else:
+            for o in self.nets[0].overriders:
+                if 'biases' not in o.name:
+                    o._threshold_update()
+                    o.should_update = True
         self.overriders_update()
 
     def forward_policy(self, floor_epoch):
