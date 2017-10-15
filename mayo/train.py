@@ -100,7 +100,7 @@ class Train(Session):
         if not log.is_enabled('debug'):
             return
         lr = self.run(self.learning_rate)
-        log.debug('Learning rate is {}.'.format(lr))
+        log.debug('Current learning rate is {}.'.format(lr))
 
     def _update_progress(self, epoch, loss, accuracy, cp_epoch):
         metric_count = self.config.system.log.metrics_history_count

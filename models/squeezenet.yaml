@@ -16,7 +16,9 @@ model:
         AlexNet-level accuracy with 50x fewer parameters and <0.5MB model size.
         This implementation is based on::
           https://arxiv.org/abs/1602.07360
-        We use the following reference models::
+        We use the following reference model::
+          https://github.com/pytorch/vision/blob/master/torchvision/models/squeezenet.py
+        Alternative implementations::
           https://github.com/vonclites/squeezenet
           https://github.com/rcmalli/keras-squeezenet
           https://github.com/DeepScale/SqueezeNet/blob/master/SqueezeNet_v1.1/train_val.prototxt
