@@ -1,0 +1,32 @@
+# Rules to import pytorch squeezenet 1.0 pretrained model into checkpoints.
+#
+# Model:
+#     https://github.com/pytorch/vision/blob/master/torchvision/models/squeezenet.py
+# Weights:
+#     https://download.pytorch.org/models/squeezenet1_1-f364aa15.pth
+#
+# Tensors require us to permute them, as their spatial ordering is different
+# from tensorflow.
+#
+# Convolution:
+#     torch:      [out_maps, in_maps, kernel_h, kernel_w]
+#     tensorflow: [kernel_h, kernel_w, in_maps, out_maps]
+---
+permute:
+    4: [{type: transpose, axes: [2, 3, 1, 0]}]
+rename:
+    \.: /
+    bias: biases
+    weight: weights
+    expand1x1: expand1
+    expand3x3: expand3
+    features/0: squeezenet_v11/conv1
+    features/3: squeezenet_v11/fire2
+    features/4: squeezenet_v11/fire3
+    features/6: squeezenet_v11/fire4
+    features/7: squeezenet_v11/fire5
+    features/9: squeezenet_v11/fire6
+    features/10: squeezenet_v11/fire7
+    features/11: squeezenet_v11/fire8
+    features/12: squeezenet_v11/fire9
+    classifier/1: squeezenet_v11/conv10
