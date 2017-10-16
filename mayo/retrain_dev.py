@@ -134,6 +134,10 @@ class Retrain_Base(Train):
         epoch = 0
         self._reset_stats()
         self.reset_num_epochs()
+        if self.config.retrain.train_acc_base:
+            # if acc is hand coded in yaml
+            self.acc_base = self.config.retrain.train_acc_base
+            return
         tolerance = self.config.retrain.tolerance
         while epoch < 1.0:
             _, loss, acc, epoch = self.run(
