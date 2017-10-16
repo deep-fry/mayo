@@ -210,8 +210,10 @@ class BaseNet(object):
                 'the edge {} in {} lacks at least one of the above.'
                 .format(edge, module))
         log.debug(
-            'Instantiating edge from {!r} to {!r} with layers {!r} in {}...'
-            .format(from_tensors, to_tensors, with_layers, location))
+            'Instantiating edge from [{}] to [{}] with layers [{}] in {}...'
+            .format(
+                ', '.join(from_tensors), ', '.join(to_tensors),
+                ', '.join(with_layers), location))
         tensors = []
         for t in from_tensors:
             try:
@@ -230,23 +232,31 @@ class BaseNet(object):
             params, norm_scope, overrider_scope = \
                 self._transformer.transform(layer_name, params)
             # get method by its name to instantiate a layer
+            layer_type = params['type']
             func, params = object_from_params(params, self, 'instantiate_')
-            # instantiation
-            log.debug(
-                'Instantiating {!r} with params {}...'
-                .format(layer_name, params))
             # module scope
             var_scope = tf.variable_scope(module) if module else _null_scope()
+            # instantiation
+            arguments = []
+            for k, v in params.items():
+                try:
+                    v = '{}()'.format(v.__qualname__)
+                except (KeyError, AttributeError):
+                    pass
+                arguments.append('{}={}'.format(k, v))
+            arguments = '\n    '.join(arguments)
             with norm_scope, overrider_scope, var_scope:
+                layer_key = '{}/{}'.format(
+                    tf.get_variable_scope().name, layer_name)
+                log.debug(
+                    'Instantiating {!r} of type {!r} with arguments:\n    {}'
+                    .format(layer_key, layer_type, arguments))
                 tensors = self._instantiate_numeric_padding(tensors, params)
                 tensors = func(tensors, params)
-            # module prefix
-            if module:
-                layer_name = '{}/{}'.format(module, layer_name)
             # add to layers
-            if layer_name in self.layers:
-                raise KeyError('Layer {!r} already exists.'.format(layer_name))
-            self.layers[layer_name] = tensors
+            if layer_key in self.layers:
+                raise KeyError('Layer {!r} already exists.'.format(layer_key))
+            self.layers[layer_key] = tensors
         # add to iodef
         if len(to_tensors) != len(tensors):
             raise ValueError(

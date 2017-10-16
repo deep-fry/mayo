@@ -168,7 +168,8 @@ class _ImagePreprocess(object):
                 log.debug(
                     'Preprocessing using {!r} with params {}'
                     .format(func.__name__, params))
-                image = func(image, **params)
+                with tf.name_scope(values=[image], name=func.__name__):
+                    image = func(image, **params)
         return self._ensure_shape(image)
 
 
