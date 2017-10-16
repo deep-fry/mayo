@@ -88,7 +88,6 @@ class Retrain_Base(Train):
             for o in self.nets[0].overriders:
                 name = o.name
                 self.cont[name] = True
-                o.should_update = False
         d = {}
         thresholds = {}
         scales = {}
