@@ -7,4 +7,4 @@ retrain:
     scale_update_factor: 0.5
     iter_max_epoch: 30
     tolerance: 0.01
-    train_acc_base: 92
+    train_acc_base: 0.88

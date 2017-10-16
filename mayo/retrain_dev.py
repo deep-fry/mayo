@@ -115,6 +115,8 @@ class Retrain_Base(Train):
         # log.debug('{}'.format(d))
         log.debug('display priority list info')
         log.debug('{}'.format(self.priority_list))
+        log.debug('stored checkpoint')
+        log.debug('{}'.format(self.best_ckpt))
         if self.priority_list == []:
             log.debug('list is empty!!')
         else:
@@ -137,6 +139,9 @@ class Retrain_Base(Train):
         if self.config.retrain.train_acc_base:
             # if acc is hand coded in yaml
             self.acc_base = self.config.retrain.train_acc_base
+            log.debug('profiled baselines, acc is {}'.format(
+                self.acc_base
+            ))
             return
         tolerance = self.config.retrain.tolerance
         while epoch < 1.0:
