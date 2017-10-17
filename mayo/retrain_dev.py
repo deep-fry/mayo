@@ -136,28 +136,30 @@ class Retrain_Base(Train):
         epoch = 0
         self._reset_stats()
         self.reset_num_epochs()
-        if self.config.retrain.train_acc_base:
+        try:
+            self.config.retrain.train_acc_base
+        except NameError:
+            tolerance = self.config.retrain.tolerance
+            while epoch < 1.0:
+                _, loss, acc, epoch = self.run(
+                    self.empty_eval_run())
+                self.loss_total += loss
+                self.acc_total += acc
+                self.step += 1
+            self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
+            self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
+            self._reset_stats()
+            self.reset_num_epochs()
+            log.debug('profiled baselines, loss is {}, acc is {}'.format(
+                self.loss_base,
+                self.acc_base,
+            ))
+        else:
             # if acc is hand coded in yaml
             self.acc_base = self.config.retrain.train_acc_base
             log.debug('profiled baselines, acc is {}'.format(
                 self.acc_base
             ))
-            return
-        tolerance = self.config.retrain.tolerance
-        while epoch < 1.0:
-            _, loss, acc, epoch = self.run(
-                self.empty_eval_run())
-            self.loss_total += loss
-            self.acc_total += acc
-            self.step += 1
-        self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
-        self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
-        self._reset_stats()
-        self.reset_num_epochs()
-        log.debug('profiled baselines, loss is {}, acc is {}'.format(
-            self.loss_base,
-            self.acc_base,
-        ))
 
     def _metric_clac(self, o):
         metric_value = num_elements = self.run(o.after).size
