@@ -26,7 +26,9 @@ class _ImagePreprocess(object):
         # we resize to the final preprocessed shape in distort bbox
         # because we can use different methods randomly, which _ensure_shape()
         # cannot do
+        i = tf.expand_dims(i, 0)
         i = tf.image.resize_bilinear(i, [height, width], align_corners=False)
+        i = tf.squeeze(i, [0])
         i.set_shape(self.shape)
         return i
 
