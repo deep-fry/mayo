@@ -1,18 +1,18 @@
 import collections
 
 import tensorflow as tf
+from tensorflow.contrib import slim
 
 from mayo.log import log
 from mayo.util import multi_objects_from_params, memoize_property
 
 
 class _ImagePreprocess(object):
-    def __init__(self, shape, moment, bbox, tid):
+    def __init__(self, shape, moment, bbox):
         super().__init__()
         self.shape = shape
         self.moment = moment or {}
         self.bbox = bbox
-        self.tid = tid
 
     def distort_bbox(self, i, area=(0.05, 1.0), aspect_ratio=(0.75, 1.33)):
         # distort bbox
@@ -26,7 +26,7 @@ class _ImagePreprocess(object):
         # we resize to the final preprocessed shape in distort bbox
         # because we can use different methods randomly, which _ensure_shape()
         # cannot do
-        i = tf.image.resize_images(i, [height, width], method=(self.tid % 4))
+        i = tf.image.resize_bilinear(i, [height, width], align_corners=False)
         i.set_shape(self.shape)
         return i
 
@@ -50,9 +50,10 @@ class _ImagePreprocess(object):
             raise ValueError(
                 'Expects the number of channels of an image to be '
                 'either 1 or 3.')
+        ordering = True
         if not has_color:
             order = [brightness, contrast]
-        elif self.tid % 2 == 0:
+        elif ordering:
             order = [brightness, saturation, hue, contrast]
         else:
             order = [brightness, contrast, saturation, hue]
@@ -262,9 +263,7 @@ class Preprocess(object):
         return tf.train.string_input_producer(
             files, shuffle=shuffle, capacity=capacity)
 
-    def _preprocess(self, tid):
-        log.debug('Preprocessing thread #{}'.format(tid))
-
+    def _preprocess(self):
         # read serialized data
         reader = tf.TFRecordReader()
         _, serialized = reader.read(self._filename_queue)
@@ -279,7 +278,7 @@ class Preprocess(object):
         # preprocess image using ImagePreprocess
         shape = self.config.image_shape()
         moment = self.config.dataset.get('moment')
-        image_preprocess = _ImagePreprocess(shape, moment, bbox, tid)
+        image_preprocess = _ImagePreprocess(shape, moment, bbox)
         actions_map = self.config.dataset.preprocess
         mode_actions = actions_map[self.mode] or []
         if not isinstance(mode_actions, collections.Sequence):
@@ -304,15 +303,16 @@ class Preprocess(object):
         capacity = min_after_dequeue + 3 * batch_size
         # preprocessing pipeline
         with tf.name_scope('batch_processing'):
-            # preprocessing
-            preprocessed = [
-                self._preprocess(tid) for tid in range(num_threads)]
+            preprocessed = self._preprocess()
             if is_training:
-                images, labels = tf.train.shuffle_batch_join(
-                    preprocessed, batch_size, capacity=capacity,
-                    min_after_dequeue=min_after_dequeue)
+                images, labels = tf.train.shuffle_batch(
+                    preprocessed, batch_size, num_threads=num_threads,
+                    capacity=capacity, min_after_dequeue=min_after_dequeue)
             else:
-                images, labels = tf.train.batch_join(preprocessed, batch_size)
+                images, labels = tf.train.batch(
+                    preprocessed, batch_size, num_threads=num_threads)
             labels = tf.squeeze(labels)
+            batch_queue = slim.prefetch_queue.prefetch_queue(
+                [images, labels], capacity=2 * num_gpus)
             self.start()
-            return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))
+            return [batch_queue.dequeue()] * num_gpus
