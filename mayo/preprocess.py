@@ -3,7 +3,7 @@ import collections
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import multi_objects_from_params
+from mayo.util import multi_objects_from_params, memoize_property
 
 
 class _ImagePreprocess(object):
@@ -174,24 +174,23 @@ class _ImagePreprocess(object):
 
 
 class Preprocess(object):
-    images_per_shard = 1024
-    queue_memory_factor = 16
-    num_readers = 4
-
-    def __init__(self, session, mode, concurrent, config):
+    def __init__(self, session, mode, config):
         super().__init__()
         self.session = session
         if mode not in ['train', 'validate']:
             raise ValueError(
                 'Unrecognized preprocessing mode {!r}'.format(mode))
         self.mode = mode
-        self.concurrent = concurrent
         self.config = config
         self._coord = tf.train.Coordinator()
         self.is_started = False
 
     def __del__(self):
         self.stop()
+
+    @property
+    def num_threads(self):
+        return self.config.system.preprocess.num_threads
 
     def start(self):
         if self.is_started:
@@ -213,74 +212,6 @@ class Preprocess(object):
         with tf.name_scope(values=[buffer], name='decode_jpeg'):
             i = tf.image.decode_jpeg(buffer, channels=channels)
             return tf.image.convert_image_dtype(i, dtype=tf.float32)
-
-    def _preprocess(self, buffer, bbox, tid):
-        channels = self.config.image_shape()[-1]
-        image = self._decode_jpeg(buffer, channels)
-        shape = self.config.image_shape()
-        moment = self.config.dataset.get('moment')
-        image_preprocess = _ImagePreprocess(shape, moment, bbox, tid)
-        actions_map = self.config.dataset.preprocess
-        mode_actions = actions_map[self.mode] or []
-        if not isinstance(mode_actions, collections.Sequence):
-            mode_actions = [mode_actions]
-        final_actions = actions_map['final'] or []
-        if not isinstance(final_actions, collections.Sequence):
-            final_actions = [final_actions]
-        return image_preprocess.preprocess(image, mode_actions + final_actions)
-
-    def _filename_queue(self):
-        """
-        Queue for file names to read from
-        """
-        files = self.config.data_files(self.mode)
-        if self.mode == 'train':
-            shuffle = True
-            capacity = 16
-        else:
-            shuffle = False
-            capacity = 1
-        return tf.train.string_input_producer(
-            files, shuffle=shuffle, capacity=capacity)
-
-    def _queue(self):
-        """
-        Queue for serialized image data
-        """
-        min_images_in_queue = self.images_per_shard * self.queue_memory_factor
-        batch_size = self.config.system.batch_size
-        if self.mode == 'train':
-            # shuffling
-            return tf.RandomShuffleQueue(
-                min_images_in_queue + 3 * batch_size,
-                min_after_dequeue=min_images_in_queue, dtypes=[tf.string])
-        return tf.FIFOQueue(
-            self.images_per_shard + 3 * batch_size, dtypes=[tf.string])
-
-    def _reader(self):
-        """
-        File reader
-        """
-        return tf.TFRecordReader()
-
-    def _serialized_inputs(self):
-        """
-        Reads data to populate the queue, and pops serialized data from queue
-        """
-        filename_queue = self._filename_queue()
-        is_training = self.mode == 'train'
-        if is_training and self.config.system.preprocess.num_readers > 1:
-            queue = self._queue()
-            enqueue_ops = []
-            for _ in range(self.num_readers):
-                _, value = self._reader().read(filename_queue)
-                enqueue_ops.append(queue.enqueue([value]))
-            qr = tf.train.queue_runner
-            qr.add_queue_runner(qr.QueueRunner(queue, enqueue_ops))
-            serialized = queue.dequeue()
-        else:
-            _, serialized = self._reader().read(filename_queue)
-        return serialized
 
     @staticmethod
     def _parse_proto(proto):
@@ -318,35 +249,70 @@ class Preprocess(object):
         text = features['image/class/text']
         return encoded, label, bbox, text
 
-    def _unserialize(self, serialized):
-        num_threads = self.config.system.preprocess.num_threads
-        if self.concurrent:
-            if num_threads % 4:
-                raise ValueError(
-                    'Expect number of threads to be a multiple of 4.')
+    @memoize_property
+    def _filename_queue(self):
+        # queue for file names to read from
+        files = self.config.data_files(self.mode)
+        if self.mode == 'train':
+            shuffle = True
+            capacity = 16
         else:
-            num_threads = 1
-        images_labels = []
-        for tid in range(num_threads):
-            log.debug('Preprocessing thread #{}'.format(tid))
-            buffer, label, bbox, _ = self._parse_proto(serialized)
-            image = self._preprocess(buffer, bbox, tid)
-            offset = self.config.label_offset()
-            log.debug('Incrementing label by offset {}'.format(offset))
-            label += offset
-            images_labels.append((image, label))
-        batch_size = self.config.system.batch_size
-        capacity = 2 * num_threads * batch_size
-        images, labels = tf.train.batch_join(
-            images_labels, batch_size=batch_size, capacity=capacity)
-        images = tf.cast(images, tf.float32)
-        shape = (batch_size, ) + self.config.image_shape()
-        images = tf.reshape(images, shape=shape)
-        return images, tf.reshape(labels, [batch_size])
+            shuffle = False
+            capacity = 1
+        return tf.train.string_input_producer(
+            files, shuffle=shuffle, capacity=capacity)
+
+    def _preprocess(self, tid):
+        log.debug('Preprocessing thread #{}'.format(tid))
+
+        # read serialized data
+        reader = tf.TFRecordReader()
+        _, serialized = reader.read(self._filename_queue)
+
+        # unserialize and prepocess image
+        buffer, label, bbox, _ = self._parse_proto(serialized)
+
+        # decode jpeg image
+        channels = self.config.image_shape()[-1]
+        image = self._decode_jpeg(buffer, channels)
+
+        # preprocess image using ImagePreprocess
+        shape = self.config.image_shape()
+        moment = self.config.dataset.get('moment')
+        image_preprocess = _ImagePreprocess(shape, moment, bbox, tid)
+        actions_map = self.config.dataset.preprocess
+        mode_actions = actions_map[self.mode] or []
+        if not isinstance(mode_actions, collections.Sequence):
+            mode_actions = [mode_actions]
+        final_actions = actions_map['final'] or []
+        if not isinstance(final_actions, collections.Sequence):
+            final_actions = [final_actions]
+        image = image_preprocess.preprocess(
+            image, mode_actions + final_actions)
+
+        # add label offset
+        offset = self.config.label_offset()
+        log.debug('Incrementing label by offset {}'.format(offset))
+        return image, label + offset
 
     def preprocess(self, num_gpus):
+        is_training = self.mode == 'train'
+        num_threads = self.num_threads if is_training else 1
+        # queue parameters
+        min_after_dequeue = 10000
+        batch_size = self.config.system.batch_size
+        capacity = min_after_dequeue + 3 * batch_size
+        # preprocessing pipeline
         with tf.name_scope('batch_processing'):
-            serialized = self._serialized_inputs()
-            images, labels = self._unserialize(serialized)
+            # preprocessing
+            preprocessed = [
+                self._preprocess(tid) for tid in range(num_threads)]
+            if is_training:
+                images, labels = tf.train.shuffle_batch_join(
+                    preprocessed, batch_size, capacity=capacity,
+                    min_after_dequeue=min_after_dequeue)
+            else:
+                images, labels = tf.train.batch_join(preprocessed, batch_size)
+            labels = tf.squeeze(labels)
             self.start()
             return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))

@@ -3,7 +3,6 @@ system:
     num_gpus: 1
     visible_gpus: auto
     preprocess:
-        num_readers: 4
         num_threads: 8
     batch_size: 128
     max_epochs: null
