@@ -266,6 +266,7 @@ class Preprocess(object):
             files, shuffle=shuffle, capacity=capacity)
 
     def _preprocess(self):
+        #  return tf.ones((224, 224, 3), tf.float32), tf.ones(1, tf.int32)
         # read serialized data
         reader = tf.TFRecordReader()
         _, serialized = reader.read(self._filename_queue)
@@ -313,7 +314,5 @@ class Preprocess(object):
             else:
                 images, labels = tf.train.batch_join(preprocessed, batch_size)
             labels = tf.squeeze(labels)
-            batch_queue = slim.prefetch_queue.prefetch_queue(
-                [images, labels], capacity=2 * num_gpus)
             self.start()
-            return [batch_queue.dequeue()] * num_gpus
+            return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))
