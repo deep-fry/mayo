@@ -8,9 +8,8 @@ from mayo.util import Percent, Table
 from mayo.session import Session
 
 
-class Evaluate(Session):
+class EvaluateBase(Session):
     mode = 'validate'
-    concurrent = False
 
     def __init__(self, config):
         super().__init__(config)
@@ -97,5 +96,9 @@ class Evaluate(Session):
         return results.format()
 
 
-class FastEvaluate(Evaluate):
-    concurrent = True
+class Evaluate(EvaluateBase):
+    num_gpus = 1
+
+
+class FastEvaluate(EvaluateBase):
+    pass

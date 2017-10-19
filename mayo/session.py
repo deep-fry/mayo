@@ -15,7 +15,6 @@ from mayo.preprocess import Preprocess
 
 class Session(object):
     mode = None
-    concurrent = False
 
     def __init__(self, config):
         super().__init__()
@@ -39,12 +38,12 @@ class Session(object):
         self.tf_session.close()
 
     @property
-    def num_gpus(self):
-        return self.config.system.num_gpus if self.concurrent else 1
-
-    @property
     def batch_size(self):
         return self.config.system.batch_size_per_gpu * self.num_gpus
+
+    @property
+    def num_gpus(self):
+        return self.config.system.num_gpus
 
     def _auto_select_gpus(self):
         mem_bound = 500
