@@ -301,11 +301,12 @@ class Preprocess(object):
         num_threads = self.num_threads if is_training else 1
         # queue parameters
         min_after_dequeue = 10000
-        batch_size = self.config.system.batch_size
+        batch_size = self.config.system.batch_size_per_gpu * num_gpus
         capacity = min_after_dequeue + 3 * batch_size
         # preprocessing pipeline
         with tf.name_scope('batch_processing'):
-            preprocessed = self._preprocess()
+            for tid in range(self.num_threads):
+                preprocessed = self._preprocess()
             if is_training:
                 images, labels = tf.train.shuffle_batch(
                     preprocessed, batch_size, num_threads=num_threads,
