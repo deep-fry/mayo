@@ -170,8 +170,8 @@ class Session(object):
             table.add_row(info)
         return overrider_info
 
-    def run(self, ops):
-        return self.tf_session.run(ops)
+    def run(self, ops, **kwargs):
+        return self.tf_session.run(ops, **kwargs)
 
     def _preprocess(self):
         with self.as_default():
