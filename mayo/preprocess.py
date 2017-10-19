@@ -305,15 +305,13 @@ class Preprocess(object):
         capacity = min_after_dequeue + 3 * batch_size
         # preprocessing pipeline
         with tf.name_scope('batch_processing'):
-            for tid in range(self.num_threads):
-                preprocessed = self._preprocess()
+            preprocessed = [self._preprocess() for tid in range(num_threads)]
             if is_training:
-                images, labels = tf.train.shuffle_batch(
-                    preprocessed, batch_size, num_threads=num_threads,
+                images, labels = tf.train.shuffle_batch_join(
+                    preprocessed, batch_size,
                     capacity=capacity, min_after_dequeue=min_after_dequeue)
             else:
-                images, labels = tf.train.batch(
-                    preprocessed, batch_size, num_threads=num_threads)
+                images, labels = tf.train.batch_join(preprocessed, batch_size)
             labels = tf.squeeze(labels)
             batch_queue = slim.prefetch_queue.prefetch_queue(
                 [images, labels], capacity=2 * num_gpus)
