@@ -29,9 +29,9 @@ class Evaluate(Session):
         interval = self.change.delta('step.duration', time.time())
         if interval == 0:
             return
-        batch_size = self.config.system.batch_size
         metric_count = self.config.system.log.metrics_history_count
-        imgs_per_sec = batch_size * self.change.delta('step', step) / interval
+        imgs_per_sec = self.batch_size * self.change.delta('step', step)
+        imgs_per_sec /= interval
         imgs_per_sec = self.change.moving_metrics(
             'imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
         info = 'eval: {} | top1: {} | top5: {:.2f} | {:.1f}/s'.format(
@@ -44,9 +44,8 @@ class Evaluate(Session):
             key = self.config.system.checkpoint.load
         self.checkpoint.load(key)
         num_examples = self.config.dataset.num_examples_per_epoch.validate
-        batch_size = self.config.system.batch_size
-        num_iterations = math.ceil(num_examples / batch_size)
-        num_final_examples = num_examples % batch_size
+        num_iterations = math.ceil(num_examples / self.batch_size)
+        num_final_examples = num_examples % self.batch_size
         # evaluation
         log.info('Starting evaluation...')
         top1s, top5s, step, total = 0.0, 0.0, 0, 0
@@ -59,7 +58,7 @@ class Evaluate(Session):
                     top5 = top5[:num_final_examples]
                     total += num_final_examples
                 else:
-                    total += batch_size
+                    total += self.batch_size
                 top1s += sum(top1)
                 top5s += sum(top5)
                 top1_acc = Percent(top1s / total)

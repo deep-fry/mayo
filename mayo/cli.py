@@ -202,9 +202,9 @@ Arguments:
         keys = self._model_keys
         self._validate_config(keys, 'info')
         config = self.config
-        batch_size = config.get('system.batch_size', None)
-        images_shape = (batch_size, ) + config.image_shape()
-        labels_shape = (batch_size, config.num_classes())
+        batch_size_per_gpu = config.get('system.batch_size_per_gpu', None)
+        images_shape = (batch_size_per_gpu, ) + config.image_shape()
+        labels_shape = (batch_size_per_gpu, config.num_classes())
         with tf.Graph().as_default():
             images = tf.placeholder(tf.float32, images_shape, 'images')
             labels = tf.placeholder(tf.int32, labels_shape, 'labels')

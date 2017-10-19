@@ -71,8 +71,7 @@ class Train(Session):
 
     def _setup_train_operation(self):
         ops = {}
-        ops['imgs_seen'] = tf.assign_add(
-            self.imgs_seen, self.config.system.batch_size)
+        ops['imgs_seen'] = tf.assign_add(self.imgs_seen, self.batch_size)
         ops['app_grad'] = self.optimizer.apply_gradients(self._gradients)
         ma_op = self.moving_average_op()
         if ma_op:

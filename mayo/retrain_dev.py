@@ -123,8 +123,7 @@ class Retrain_Base(Train):
 
     def empty_eval_run(self):
         tasks = []
-        tasks.append(tf.assign_add(
-            self.imgs_seen, self.config.system.batch_size))
+        tasks.append(tf.assign_add(self.imgs_seen, self.batch_size))
         tasks.append(self.loss)
         tasks.append(self.accuracy)
         tasks.append(self.num_epochs)

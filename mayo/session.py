@@ -42,6 +42,10 @@ class Session(object):
     def num_gpus(self):
         return self.config.system.num_gpus if self.concurrent else 1
 
+    @property
+    def batch_size(self):
+        return self.config.system.batch_size_per_gpu * self.num_gpus
+
     def _auto_select_gpus(self):
         mem_bound = 500
         try:
@@ -92,7 +96,7 @@ class Session(object):
 
     @memoize_property
     def num_steps(self):
-        return self.imgs_seen / self.config.system.batch_size
+        return self.imgs_seen / self.batch_size
 
     @memoize_property
     def num_epochs(self):
@@ -184,9 +188,6 @@ class Session(object):
     def _instantiate_nets(self):
         log.debug('Instantiating...')
         # ensure batch size is divisible by number of gpus
-        if self.config.system.batch_size % self.num_gpus != 0:
-            raise ValueError(
-                'Batch size must be divisible by number of devices')
         is_training = self.mode == 'train'
         nets = []
         for i, (images, labels) in enumerate(self._preprocess()):
