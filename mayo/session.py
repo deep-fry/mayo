@@ -21,6 +21,8 @@ class Session(object):
         self.config = config
         self.change = Change()
         self._init_gpus()
+        default_graph = tf.get_default_graph()
+        default_graph.finalize()  # we disable default graph
         self.graph = tf.Graph()
         self.tf_session = tf.Session(
             graph=self.graph,
@@ -34,7 +36,6 @@ class Session(object):
 
     def __del__(self):
         log.debug('Finishing...')
-        del self.preprocessor
         self.tf_session.close()
 
     @property
@@ -175,7 +176,7 @@ class Session(object):
 
     def _preprocess(self):
         with self.as_default():
-            return self.preprocessor.preprocess(self.num_gpus)
+            return self.preprocessor.preprocess()
 
     @contextmanager
     def _gpu_context(self, gid):
@@ -186,20 +187,22 @@ class Session(object):
 
     def _instantiate_nets(self):
         log.debug('Instantiating...')
-        # ensure batch size is divisible by number of gpus
-        is_training = self.mode == 'train'
         nets = []
-        for i, (images, labels) in enumerate(self._preprocess()):
-            log.debug('Instantiating graph for GPU #{}...'.format(i))
-            with self._gpu_context(i):
-                net = Net(self.config, images, labels, is_training, bool(nets))
-            nets.append(net)
+        with self.as_default():
+            for i, (images, labels) in enumerate(self._preprocess()):
+                log.debug('Instantiating graph for GPU #{}...'.format(i))
+                with self._gpu_context(i):
+                    net = Net(
+                        self.config, images, labels,
+                        self.mode == 'train', bool(nets))
+                nets.append(net)
         return nets
 
     def net_map(self, func):
-        for i, net in enumerate(self.nets):
-            with self._gpu_context(i):
-                yield func(net)
+        with self.as_default():
+            for i, net in enumerate(self.nets):
+                with self._gpu_context(i):
+                    yield func(net)
 
     def interact(self):
         from IPython import embed

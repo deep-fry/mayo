@@ -1,7 +1,7 @@
+import random
 import collections
 
 import tensorflow as tf
-from tensorflow.contrib import slim
 
 from mayo.log import log
 from mayo.util import multi_objects_from_params, memoize_property
@@ -185,11 +185,10 @@ class Preprocess(object):
                 'Unrecognized preprocessing mode {!r}'.format(mode))
         self.mode = mode
         self.config = config
-        self.is_started = False
-
-    @property
-    def num_threads(self):
-        return self.config.system.preprocess.num_threads
+        self.num_threads = self.config.system.preprocess.num_threads
+        self.num_gpus = self.config.system.num_gpus
+        self.image_shape = self.config.image_shape()
+        self.batch_size_per_gpu = self.config.system.batch_size_per_gpu
 
     @staticmethod
     def _decode_jpeg(buffer, channels):
@@ -238,12 +237,11 @@ class Preprocess(object):
         # unserialize and prepocess image
         buffer, label, bbox, _ = self._parse_proto(serialized)
         # decode jpeg image
-        channels = self.config.image_shape()[-1]
+        channels = self.image_shape[-1]
         image = self._decode_jpeg(buffer, channels)
         # preprocess image using ImagePreprocess
-        shape = self.config.image_shape()
         moment = self.config.dataset.get('moment')
-        image_preprocess = _ImagePreprocess(shape, moment, bbox)
+        image_preprocess = _ImagePreprocess(self.image_shape, moment, bbox)
         actions_map = self.config.dataset.preprocess
         mode_actions = actions_map[self.mode] or []
         if not isinstance(mode_actions, collections.Sequence):
@@ -258,18 +256,22 @@ class Preprocess(object):
         log.debug('Incrementing label by offset {}'.format(offset))
         return image, label + offset
 
-    @property
-    def _dataset_iterator(self):
-        files = self.config.data_files(self.mode)
-        dataset = tf.contrib.data.TFRecordDataset(files)
-        dataset = dataset.map(self._preprocess)
-        batch_size = self.config.system.batch_size_per_gpu * num_gpus
-        if self.mode == 'train':
-            dataset = dataset.shuffle(buffer_size=10 * batch_size)
-        dataset = dataset.batch(batch_size)
-        iterator = dataset.make_one_shot_iterator()
-        images, labels = iterator.get_next()
-        return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))
-
     def preprocess(self):
-        pass
+        files = self.config.data_files(self.mode)
+        if self.mode == 'train':
+            # shuffle .tfrecord files
+            random.shuffle(files)
+        dataset = tf.contrib.data.TFRecordDataset(files)
+        dataset = dataset.map(self._preprocess).repeat()
+        buffer_size = 10 * self.batch_size_per_gpu * self.num_gpus
+        if self.mode == 'train':
+            dataset = dataset.shuffle(buffer_size=buffer_size)
+        dataset = dataset.batch(self.batch_size_per_gpu)
+        iterator = dataset.make_one_shot_iterator()
+        for _ in range(self.num_gpus):
+            images, labels = iterator.get_next()
+            # ensuring the shape of images and labels to be constants
+            shape = (self.batch_size_per_gpu, ) + self.image_shape
+            images = tf.reshape(images, shape)
+            labels = tf.reshape(labels, [self.batch_size_per_gpu])
+            yield images, labels
