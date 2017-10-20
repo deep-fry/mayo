@@ -54,7 +54,7 @@ class TestTransformer(TestCase):
             'padding': 'valid',
             'activation_overrider': Rounder(),
         }
-        self.transformer._config_layer(params)
+        self.transformer._config_layer(params['name'], params)
         self.assertEqual(params['num_outputs'], self.num_classes)
         self.assertEqual(params['scope'], 'test')
         self.assertEqual(params['padding'], 'VALID')
@@ -98,5 +98,5 @@ class TestTransformer(TestCase):
         self.assertIsInstance(v, tf.Variable)
         self.assertEqual(v.op.name, 'test')
         self.assertEqual(len(self.transformer.overriders), 2)
-        self.assertEqual(b, self.transformer.overriders[0]._after)
-        self.assertEqual(w, self.transformer.overriders[1]._after)
+        self.assertEqual(b, self.transformer.overriders[0].after)
+        self.assertEqual(w, self.transformer.overriders[1].after)
