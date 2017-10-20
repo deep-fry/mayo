@@ -2,16 +2,17 @@ import math
 import sys
 import pdb
 import numpy as np
+import tensorflow as tf
 
 from mayo.log import log
 from mayo.train import Train
 
 
-class Retrain(Train):
+class Retrain_Base(Train):
     def retrain(self):
         log.debug('Retraining start.')
         try:
-            self._init_prune()
+            self._init_retrain()
             while self._retrain_iteration():
                 pass
         except KeyboardInterrupt:
@@ -22,35 +23,24 @@ class Retrain(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.checkpoint.save('latest')
 
-    def _init_prune(self):
-        self.log = {}
-        # train iterations
-        self.loss_total = 0
-        self.acc_total = 0
-        self.step = 0
-        self.target_layer = None
-        self.loss_avg = None
-        self.prune_cnt = 0
-        self.best_ckpt = None
+    def _init_retrain(self):
+        self._reset_stats()
+        self._reset_vars()
         for o in self.nets[0].overriders:
-            o._set_up_scale(self)
-        # profile
-        self._profile_pruner(start=True)
-        self._profile_loss()
-        self._increment_c_rate()
-        self.overriders_update()
-        self._control_updates()
+            o._setup(self)
+        self.threshold_name = str(self.config.retrain.name)
+        self.profile_overrider(self.threshold_name, 'scale', start=True)
+        self.profile_for_one_epoch()
+        self._reset_stats()
+        self.overriders_refresh()
 
     def _retrain_iteration(self):
         system = self.config.system
         loss, acc, epoch = self.once()
-
-        self.loss_total += loss
-        self.acc_total += acc
-        self.step += 1
+        self._update_stats(loss, acc)
 
         if math.isnan(loss):
-            raise ValueError('Model diverged with a nan-valued loss.')
+            raise ValueError("Model diverged with a nan-valued loss")
         self._update_progress(epoch, loss, acc, self._cp_epoch)
         summary_delta = self.change.delta('summary.epoch', epoch)
 
@@ -60,157 +50,303 @@ class Retrain(Train):
         cp_interval = system.checkpoint.get('save.interval', 0)
 
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
-            self.loss_avg = self.loss_total / float(self.step)
-            self.acc_avg = self.acc_total / float(self.step)
-            self.loss_total = 0
-            self.acc_total = 0
-            self.step = 0
-
-            # if self.loss_avg <= self.loss_baseline:
+            self._avg_stats()
             if self.acc_avg >= self.acc_base:
-                log.debug('Increase c rate on {}'.format(self.target_layer))
-                log.debug('log: {}'.format(self.log))
-                # self._update_progress(epoch, loss, acc, 'saving')
-                with log.demote():
-                    self.checkpoint.save(
-                        'prune-' + str(self.prune_cnt) + '-' + str(floor_epoch))
-                self.best_ckpt = 'prune-' + str(self.prune_cnt) + '-' \
-                    + str(floor_epoch)
-                self._cp_epoch = floor_epoch
-                self.prune_cnt += 1
-                self._log_thresholds(self.loss_avg, self.acc_avg)
-                self._profile_pruner()
-                self._control_updates()
-                self._increment_c_rate()
-                self.overriders_update()
-                self.reset_num_epochs()
-                return True
+                return self.forward_policy(floor_epoch)
 
-            iter_max_epoch = self.config.model.layers.iter_max_epoch
+            iter_max_epoch = self.config.retrain.iter_max_epoch
+
             if epoch >= iter_max_epoch and epoch > 0:
-                self.prune_cnt += 1
+                self.retrain_cnt += 1
                 self.reset_num_epochs()
-                self._log_thresholds(self.loss_avg, self.acc_avg)
+                self.log_thresholds(self.loss_avg, self.acc_avg)
                 # all layers done
-                finished = self.cont[self.target_layer] is False
-                if self.priority_list == [] and finished:
-                    log.info('pruning done, model stored at {}'.format(
-                        self.best_ckpt))
-                    for o in self.nets[0].overriders:
-                        log.info('layer name: {}, crate:{}, scale:{}'.format(
-                            o._mask.name, o.alpha , o.scale))
-                    return False
-                else:
-                    # current layer is done
-                    self._control_c_rates()
-                    # trace back the ckpt
-                    self.checkpoint.load(self.best_ckpt)
-                    # fetch a new layer to retrain
-                    self._profile_pruner()
-                    self._control_updates()
-                    self._increment_c_rate()
-                    self.overriders_update()
-                    self.reset_num_epochs()
+                return self.update_policy()
         return True
 
-    def _control_c_rates(self):
-        if self._fetch_scale() >= self.config.model.layers.min_scale:
-            self._decrease_scale()
-        else:
-            for o in self.nets[0].overriders:
-                if o._mask.name == self.target_layer:
-                    o._scale_roll_back()
-            self.cont[self.target_layer] = False
+    def update_policy(self):
+        raise NotImplementedError(
+            'Method of update policy is not implemented.')
+
+    def forward_policy(self, floor_epoch):
+        raise NotImplementedError(
+            'Method of forward policy is not implemented.')
+
+    def log_thresholds(self, loss, acc):
+        raise NotImplementedError(
+            'Method of logging threholds is not implemented.')
 
     def _fetch_scale(self):
         for o in self.nets[0].overriders:
-            if o._mask.name == self.target_layer:
+            if o.name == self.target_layer:
                 return o.scale
 
-    def _log_thresholds(self, loss, acc):
+    def profile_overrider(self, threshold_name, scale_name, start=False):
+        self.priority_list = []
+        if start:
+            self.best_ckpt = 'pretrained'
+            self.cont = {}
+            for o in self.nets[0].overriders:
+                name = o.name
+                self.cont[name] = True
+        d = {}
+        thresholds = {}
+        scales = {}
+        for o in self.nets[0].overriders:
+            name = o.name
+            # d[name] = self.run(o.after).size
+            d[name] = self._metric_clac(o)
+            thresholds[name] = getattr(o, threshold_name)
+            scales[name] = getattr(o, scale_name)
+        check_bias = self.config.retrain.bias
+        for key in sorted(d, key=d.get):
+            log.debug('key is {} cont is {}'.format(key, self.cont[key]))
+            if check_bias:
+                if self.cont[key]:
+                    self.priority_list.append(key)
+            else:
+                if self.cont[key] and ('biases' not in key):
+                    self.priority_list.append(key)
+        log.debug('display thresholds')
+        log.debug('{}'.format(thresholds))
+        log.debug('display scales')
+        log.debug('{}'.format(scales))
+        # log.debug('display profiling info')
+        # log.debug('{}'.format(d))
+        log.debug('display priority list info')
+        log.debug('{}'.format(self.priority_list))
+        log.debug('stored checkpoint')
+        log.debug('{}'.format(self.best_ckpt))
+        if self.priority_list == []:
+            log.debug('list is empty!!')
+        else:
+            self.target_layer = self.priority_list.pop()
+
+    def empty_eval_run(self):
+        tasks = []
+        tasks.append(tf.assign_add(self.imgs_seen, self.batch_size))
+        tasks.append(self.loss)
+        tasks.append(self.accuracy)
+        tasks.append(self.num_epochs)
+        return tasks
+
+    def profile_for_one_epoch(self):
+        log.info('Start profiling for one epoch')
+        epoch = 0
+        self._reset_stats()
+        self.reset_num_epochs()
+        if self.config.retrain.get('train_acc_base'):
+            # if acc is hand coded in yaml
+            self.acc_base = self.config.retrain.train_acc_base
+            log.debug('profiled baselines, acc is {}'.format(
+                self.acc_base
+            ))
+            return
+        tolerance = self.config.retrain.tolerance
+        while epoch < 1.0:
+            _, loss, acc, epoch = self.run(
+                self.empty_eval_run())
+            self.loss_total += loss
+            self.acc_total += acc
+            self.step += 1
+        self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
+        self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
+        self._reset_stats()
+        self.reset_num_epochs()
+        log.debug('profiled baselines, loss is {}, acc is {}'.format(
+            self.loss_base,
+            self.acc_base,
+        ))
+
+    def _metric_clac(self, o):
+        metric_value = num_elements = self.run(o.after).size
+        if hasattr(o, '_mask'):
+            valid_elements = np.count_nonzero(self.run(o._mask))
+            density = valid_elements / float(num_elements)
+            metric_value *= density
+        if hasattr(o, 'width'):
+            bits = o.width
+            metric_value *= bits
+        return metric_value
+
+    def _avg_stats(self):
+        self.loss_avg = self.loss_total / float(self.step)
+        self.acc_avg = self.acc_total / float(self.step)
+        self._reset_stats()
+
+    def _update_stats(self, loss, acc):
+        self.step += 1
+        self.loss_total += loss
+        self.acc_total += acc
+
+    def _reset_stats(self):
+        self.step = 0
+        self.loss_total = 0
+        self.acc_total = 0
+
+    def _reset_vars(self):
+        self.log = {}
+        self.retrain_cnt = 0
+
+        self.target_layer = None
+        self.loss_avg = None
+        self.best_ckpt = None
+
+    def overriders_refresh(self):
+        raise NotImplementedError(
+            'Method to refresh overriders is not implemented.')
+
+
+class Retrain_global(Retrain_Base):
+    def overriders_refresh(self):
+        check_bias = self.config.retrain.bias
+        if check_bias:
+            for o in self.nets[0].overriders:
+                o._threshold_update()
+                o.should_update = True
+        else:
+            for o in self.nets[0].overriders:
+                if 'biases' not in o.name:
+                    o._threshold_update()
+                    o.should_update = True
+        self.overriders_update()
+
+    def forward_policy(self, floor_epoch):
+        log.debug('Targeting on {}'.format(self.target_layer))
+        log.debug('log: {}'.format(self.log))
+        with log.demote():
+            self.checkpoint.save(
+                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
+            + str(floor_epoch)
+        self._cp_epoch = floor_epoch
+        self.retrain_cnt += 1
+        self.log_thresholds(self.loss_avg, self.acc_avg)
+        self.profile_overrider(self.threshold_name, 'scale')
+        self.overriders_refresh()
+        self.reset_num_epochs()
+        return True
+
+    def log_thresholds(self, loss, acc):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
         for o in self.nets[0].overriders:
-            if o._mask.name == self.target_layer:
-                value = o.alpha
+            value = getattr(o, self.threshold_name)
+            if prev_loss is None:
+                self.log[o.name] = (value, loss, acc)
+            else:
+                if acc > self.acc_base:
+                    self.log[self.target_layer] = (value, loss, acc)
+
+    def update_policy(self):
+        if self._fetch_scale() >= self.config.retrain.min_scale:
+            self._decrease_scale()
+            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
+            log.debug('decrease threholds to {}'.format(
+                self._fetch_scale()
+            ))
+            return True
+        else:
+            for o in self.nets[0].overriders:
+                self.cont[self.target_layer] = False
+            log.debug('all layers done')
+            return False
+
+    def _decrease_scale(self):
+        # decrease scale factor, for quantizer, this factor might be 1
+        check_bias = self.config.retrain.bias
+        factor = self.config.retrain.scale_update_factor
+        if check_bias:
+            for o in self.nets[0].overriders:
+                o._scale_roll_back()
+                o._scale_update(factor)
+                record = o.scale
+        else:
+            for o in self.nets[0].overriders:
+                if 'biases' not in o.name:
+                    o._scale_roll_back()
+                    o._scale_update(factor)
+                    record = o.scale
+        log.debug('decrease scaling factor to {}'.format(record))
+
+
+class Retrain_layerwise(Retrain_Base):
+    def overriders_refresh(self):
+        for o in self.nets[0].overriders:
+            if o.name == self.target_layer:
+                o._threshold_update()
+                o.should_update = True
+        self.overriders_update()
+
+    def forward_policy(self, floor_epoch):
+        log.debug('Targeting on {}'.format(self.target_layer))
+        log.debug('log: {}'.format(self.log))
+        with log.demote():
+            self.checkpoint.save(
+                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
+            + str(floor_epoch)
+        self._cp_epoch = floor_epoch
+        self.retrain_cnt += 1
+        self.log_thresholds(self.loss_avg, self.acc_avg)
+        self.profile_overrider(self.threshold_name, 'scale')
+        self.overriders_refresh()
+        self.reset_num_epochs()
+        return True
+
+    def update_policy(self):
+        finished = self.cont[self.target_layer] is False
+        if self.priority_list == [] and finished:
+            log.info('overrider is done, model stored at {}'.format(
+                self.best_ckpt))
+            for o in self.nets[0].overriders:
+                log.info('layer name: {}, crate:{}, scale:{}'.format(
+                    o.name,
+                    getattr(o, self.threshold_name),
+                    o.scale))
+            return False
+        else:
+            # current layer is done
+            self._control_threholds()
+            # trace back the ckpt
+            self.checkpoint.load(self.best_ckpt)
+            # fetch a new layer to retrain
+            self.profile_overrider(self.threshold_name, 'scale')
+            self.overriders_refresh()
+            self.reset_num_epochs()
+            return True
+
+    def _control_threholds(self):
+        if self._fetch_scale() >= self.config.retrain.min_scale:
+            self._decrease_scale()
+            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
+            log.debug('decrease threholds at {}, decreased result is {}'.format(
+                self.target_layer,
+                self._fetch_scale()
+            ))
+        else:
+            for o in self.nets[0].overriders:
+                if o.name == self.target_layer:
+                    o._scale_roll_back()
+            self.cont[self.target_layer] = False
+
+    def _decrease_scale(self):
+        # decrease scale factor, for quantizer, this factor might be 1
+        factor = self.config.retrain.scale_update_factor
+        for o in self.nets[0].overriders:
+            if o.name == self.target_layer:
+                o._scale_roll_back()
+                o._scale_update(factor)
+                record = o.scale
+        log.debug('decrease scaling factor to {}'.format(record))
+
+    def log_thresholds(self, loss, acc):
+        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
+        for o in self.nets[0].overriders:
+            if o.name == self.target_layer:
+                value = getattr(o, self.threshold_name)
                 break
         if prev_loss is None:
             self.log[self.target_layer] = (value, loss, acc)
         else:
             if acc > self.acc_base:
                 self.log[self.target_layer] = (value, loss, acc)
-
-    def _decrease_scale(self):
-        factor = self.config.model.layers.scale_update_factor
-        for o in self.nets[0].overriders:
-            if o._mask.name == self.target_layer:
-                o._scale_roll_back()
-                o._scale_update(factor)
-                record = o.scale
-        log.debug('decrease scaling factor to {}'.format(record))
-
-    def _increment_c_rate(self):
-        for o in self.nets[0].overriders:
-            if o._mask.name == self.target_layer:
-                o._threshold_update()
-
-    def _control_updates(self):
-        for o in self.nets[0].overriders:
-            if o._mask.name == self.target_layer:
-                o.should_update = True
-
-    def _profile_loss(self):
-        log.info('Start profiling for one epoch')
-        step = 0
-        loss_total = 0
-        acc_total = 0
-        epoch = 0
-        self.reset_num_epochs()
-        tolerance = self.config.model.layers.tolerance
-        while epoch < 1.0:
-            loss, acc, epoch = self.once()
-            loss_total += loss
-            acc_total += acc
-            step += 1
-        self.loss_baseline = loss_total / float(step) * (1 + tolerance)
-        self.acc_base = acc_total / float(step) * (1 - tolerance)
-        self.reset_num_epochs()
-        log.debug('profiled baselines, loss is {}, acc is {}'.format(
-            self.loss_baseline,
-            self.acc_base,
-        ))
-
-    def _profile_pruner(self, start=False):
-        self.priority_list = []
-        if start:
-            self.best_ckp = 'prtrained'
-            self.cont = {}
-            for o in self.nets[0].overriders:
-                name = o._mask.name
-                self.cont[name] = True
-                o.should_update = False
-        d = {}
-        cRates = {}
-        cRates_scale = {}
-        for o in self.nets[0].overriders:
-            name = o._mask.name
-            d[name] = np.count_nonzero(self.run(o._mask))
-            cRates[name] = o.alpha
-            cRates_scale[name] = o.scale
-        for key in sorted(d, key=d.get):
-            log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            if self.cont[key] and ('biases' not in key):
-                self.priority_list.append(key)
-        log.debug('display cRates')
-        log.debug('{}'.format(cRates))
-        log.debug('display cRates scale')
-        log.debug('{}'.format(cRates_scale))
-        log.debug('display profiling info')
-        log.debug('{}'.format(d))
-        log.debug('display priority list info')
-        log.debug('{}'.format(self.priority_list))
-        # log.debug('display cont info')
-        # log.debug('{}'.format(self.cont))
-        if self.priority_list == []:
-            log.debug('list is empty!!')
-        else:
-            self.target_layer = self.priority_list.pop()
