@@ -18,11 +18,13 @@ class Session(object):
 
     def __init__(self, config):
         super().__init__()
+        # the default graph is made read-only to ensure
+        # we always write to our graph
+        default_graph = tf.get_default_graph()
+        default_graph.finalize()
         self.config = config
         self.change = Change()
         self._init_gpus()
-        default_graph = tf.get_default_graph()
-        default_graph.finalize()  # we disable default graph
         self.graph = tf.Graph()
         self.tf_session = tf.Session(
             graph=self.graph,
@@ -31,8 +33,7 @@ class Session(object):
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
-        self._initialized_variables = []
-        self.init_vars()
+        self.initialized_variables = []
 
     def __del__(self):
         log.debug('Finishing...')
@@ -144,15 +145,24 @@ class Session(object):
             return var_avgs.apply(avg_vars)
 
     def init_vars(self):
-        variables = []
+        uninit = []
         for var in self.global_variables():
-            if var not in self._initialized_variables:
-                variables.append(var)
-        self._initialized_variables += variables
-        desc = ', '.join(v.op.name for v in variables)
+            if var not in self.initialized_variables:
+                uninit.append(var)
+        if not uninit:
+            return
+        desc = ', '.join(v.op.name for v in uninit)
         log.debug('Initializing variables: {}'.format(desc))
         with self.as_default():
-            return self.run(tf.variables_initializer(variables))
+            self.run(tf.variables_initializer(uninit))
+        self.initialized_variables += uninit
+
+    def load_checkpoint(self, name):
+        restore_vars = self.checkpoint.load(name)
+        self.initialized_variables += restore_vars
+
+    def save_checkpoint(self, name):
+        self.checkpoint.save(name)
 
     def info(self):
         return self.nets[0].info()
@@ -172,6 +182,8 @@ class Session(object):
         return overrider_info
 
     def run(self, ops, **kwargs):
+        # ensure variables are initialized
+        self.init_vars()
         return self.tf_session.run(ops, **kwargs)
 
     def _preprocess(self):

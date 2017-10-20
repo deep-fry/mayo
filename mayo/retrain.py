@@ -21,7 +21,7 @@ class Retrain_Base(Train):
             if save:
                 countdown = save.get('countdown', 0)
                 if log.countdown('Saving checkpoint', countdown):
-                    self.checkpoint.save('latest')
+                    self.save_checkpoint('latest')
 
     def _init_retrain(self):
         self._reset_stats()
@@ -215,7 +215,7 @@ class Retrain_global(Retrain_Base):
         log.debug('Targeting on {}'.format(self.target_layer))
         log.debug('log: {}'.format(self.log))
         with log.demote():
-            self.checkpoint.save(
+            self.save_checkpoint(
                 'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
         self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
@@ -281,7 +281,7 @@ class Retrain_layerwise(Retrain_Base):
         log.debug('Targeting on {}'.format(self.target_layer))
         log.debug('log: {}'.format(self.log))
         with log.demote():
-            self.checkpoint.save(
+            self.save_checkpoint(
                 'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
         self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
@@ -308,7 +308,7 @@ class Retrain_layerwise(Retrain_Base):
             # current layer is done
             self._control_threholds()
             # trace back the ckpt
-            self.checkpoint.load(self.best_ckpt)
+            self.save_checkpoint(self.best_ckpt)
             # fetch a new layer to retrain
             self.profile_overrider(self.threshold_name, 'scale')
             self.overriders_refresh()

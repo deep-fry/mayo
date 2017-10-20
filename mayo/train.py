@@ -92,8 +92,7 @@ class Train(Session):
         self._summary_op = tf.summary.merge(summaries)
 
     def _init(self):
-        self.init_vars()
-        self.checkpoint.load(self.config.system.checkpoint.load)
+        self.load_checkpoint(self.config.system.checkpoint.load)
         # final debug outputs
         if not log.is_enabled('debug'):
             return
@@ -177,13 +176,13 @@ class Train(Session):
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self._update_progress(epoch, loss, acc, 'saving')
             with log.demote():
-                self.checkpoint.save(floor_epoch)
+                self.save_checkpoint(floor_epoch)
             self._cp_epoch = floor_epoch
         if system.max_epochs and floor_epoch >= system.max_epochs:
             log.info('Maximum epoch count reached.')
             if self._cp_epoch and floor_epoch > self._cp_epoch:
                 log.info('Saving final checkpoint...')
-                self.checkpoint.save(floor_epoch)
+                self.save_checkpoint(floor_epoch)
             return False
         return True
 
@@ -199,4 +198,4 @@ class Train(Session):
             if save:
                 countdown = save.get('countdown', 0)
                 if log.countdown('Saving checkpoint', countdown):
-                    self.checkpoint.save('latest')
+                    self.save_checkpoint('latest')

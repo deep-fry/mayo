@@ -93,12 +93,12 @@ class CheckpointHandler(object):
     def load(self, key=_checkpoint_latest):
         if not key:
             log.debug('Checkpoint loading disabled.')
-            return
+            return []
         try:
             path = self._path(key, False)
         except CheckpointManifestNotFoundError as e:
             log.warn('{} Abort load.'.format(e))
-            return
+            return []
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
         restore_vars = []
@@ -125,6 +125,7 @@ class CheckpointHandler(object):
         restorer = tf.train.Saver(restore_vars)
         restorer.restore(self._session, path)
         log.debug('Checkpoint restored.')
+        return restore_vars
 
     def save(self, key):
         cp_path = self._path(key, True)

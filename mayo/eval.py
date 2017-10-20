@@ -41,7 +41,7 @@ class EvaluateBase(Session):
         # load checkpoint
         if key is None:
             key = self.config.system.checkpoint.load
-        self.checkpoint.load(key)
+        self.load_checkpoint(key)
         num_examples = self.config.dataset.num_examples_per_epoch.validate
         num_iterations = math.ceil(num_examples / self.batch_size)
         num_final_examples = num_examples % self.batch_size
