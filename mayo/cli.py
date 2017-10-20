@@ -170,9 +170,10 @@ Arguments:
         from tensorflow.python.client import timeline
         options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         run_metadata = tf.RunMetadata()
-        trainer = self._get_session('train')
-        trainer.run(
-            trainer._train_op, options=options, run_metadata=run_metadata)
+        session = self._get_session('train')
+        session.run(session._train_op)
+        session.run(
+            session._train_op, options=options, run_metadata=run_metadata)
         fetched_timeline = timeline.Timeline(run_metadata.step_stats)
         chrome_trace = fetched_timeline.generate_chrome_trace_format()
         with open('timeline.json', 'w') as f:
