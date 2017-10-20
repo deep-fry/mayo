@@ -7,7 +7,9 @@ dataset:
             width: 224
             channels: 3
         validate: {type: central_crop, fraction: 0.875}
-        final: {type: linear_map, scale: 2.0, shift: -1.0}
+        final:
+            - {type: resize, fill: false}
+            - {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: mobilenet_v1
     description:

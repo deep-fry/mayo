@@ -80,17 +80,16 @@ class EvaluateBase(Session):
         epochs_to_eval = ', '.join(str(e) for e in epochs)
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
         results = Table(('Epoch', 'Top 1', 'Top 5'))
+        # ensures imgs_seen initialized
+        epochs_op = self.num_epochs
         try:
             for e in epochs:
                 with log.demote():
                     top1, top5 = self.eval(e, keyboard_interrupt=False)
-                epoch = self.run(self.num_epochs)
-                epoch_str = '{:.3f}'.format(epoch)
-                top1 = Percent(top1)
-                top5 = Percent(top5)
-                log.info('epoch: {}, top1: {}, top5: {}'.format(
-                    epoch_str, top1, top5))
-                results.add_row((epoch_str, top1, top5))
+                top1, top5 = Percent(top1), Percent(top5)
+                row = ('{:.3f}'.format(self.run(epochs_op)), top1, top5)
+                results.add_row(row)
+                log.info('epoch: {}, top1: {}, top5: {}'.format(*row))
         except KeyboardInterrupt:
             pass
         return results.format()

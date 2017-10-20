@@ -89,7 +89,6 @@ class Retrain_Base(Train):
             for o in self.nets[0].overriders:
                 name = o.name
                 self.cont[name] = True
-                o.should_update = False
         d = {}
         thresholds = {}
         scales = {}
@@ -116,6 +115,8 @@ class Retrain_Base(Train):
         # log.debug('{}'.format(d))
         log.debug('display priority list info')
         log.debug('{}'.format(self.priority_list))
+        log.debug('stored checkpoint')
+        log.debug('{}'.format(self.best_ckpt))
         if self.priority_list == []:
             log.debug('list is empty!!')
         else:
@@ -134,6 +135,13 @@ class Retrain_Base(Train):
         epoch = 0
         self._reset_stats()
         self.reset_num_epochs()
+        if self.config.retrain.get('train_acc_base'):
+            # if acc is hand coded in yaml
+            self.acc_base = self.config.retrain.train_acc_base
+            log.debug('profiled baselines, acc is {}'.format(
+                self.acc_base
+            ))
+            return
         tolerance = self.config.retrain.tolerance
         while epoch < 1.0:
             _, loss, acc, epoch = self.run(
@@ -191,9 +199,16 @@ class Retrain_Base(Train):
 
 class Retrain_global(Retrain_Base):
     def overriders_refresh(self):
-        for o in self.nets[0].overriders:
-            o._threshold_update()
-            o.should_update = True
+        check_bias = self.config.retrain.bias
+        if check_bias:
+            for o in self.nets[0].overriders:
+                o._threshold_update()
+                o.should_update = True
+        else:
+            for o in self.nets[0].overriders:
+                if 'biases' not in o.name:
+                    o._threshold_update()
+                    o.should_update = True
         self.overriders_update()
 
     def forward_policy(self, floor_epoch):
@@ -235,6 +250,23 @@ class Retrain_global(Retrain_Base):
                 self.cont[self.target_layer] = False
             log.debug('all layers done')
             return False
+
+    def _decrease_scale(self):
+        # decrease scale factor, for quantizer, this factor might be 1
+        check_bias = self.config.retrain.bias
+        factor = self.config.retrain.scale_update_factor
+        if check_bias:
+            for o in self.nets[0].overriders:
+                o._scale_roll_back()
+                o._scale_update(factor)
+                record = o.scale
+        else:
+            for o in self.nets[0].overriders:
+                if 'biases' not in o.name:
+                    o._scale_roll_back()
+                    o._scale_update(factor)
+                    record = o.scale
+        log.debug('decrease scaling factor to {}'.format(record))
 
 
 class Retrain_layerwise(Retrain_Base):
