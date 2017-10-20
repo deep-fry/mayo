@@ -262,8 +262,11 @@ class Preprocess(object):
             # shuffle .tfrecord files
             random.shuffle(files)
         dataset = tf.contrib.data.TFRecordDataset(files)
-        dataset = dataset.map(self._preprocess).repeat()
         buffer_size = 10 * self.batch_size_per_gpu * self.num_gpus
+        dataset = dataset.map(
+            self._preprocess, num_threads=self.num_threads,
+            output_buffer_size=2 * buffer_size)
+        dataset = dataset.repeat()
         if self.mode == 'train':
             dataset = dataset.shuffle(buffer_size=buffer_size)
         dataset = dataset.batch(self.batch_size_per_gpu)
