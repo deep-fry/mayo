@@ -80,7 +80,7 @@ class EvaluateBase(Session):
         epochs_to_eval = ', '.join(str(e) for e in epochs)
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
         results = Table(('Epoch', 'Top 1', 'Top 5'))
-        # ensures imgs_seen initialized
+        # ensures imgs_seen initialized and loaded
         epochs_op = self.num_epochs
         try:
             for e in epochs:

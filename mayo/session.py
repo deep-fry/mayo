@@ -144,22 +144,11 @@ class Session(object):
             avg_vars = tf.trainable_variables() + tf.moving_average_variables()
             return var_avgs.apply(avg_vars)
 
-    def init_vars(self):
-        uninit = []
-        for var in self.global_variables():
-            if var not in self.initialized_variables:
-                uninit.append(var)
-        if not uninit:
-            return
-        desc = ', '.join(v.op.name for v in uninit)
-        log.debug('Initializing variables: {}'.format(desc))
-        with self.as_default():
-            self.run(tf.variables_initializer(uninit))
-        self.initialized_variables += uninit
-
     def load_checkpoint(self, name):
         restore_vars = self.checkpoint.load(name)
-        self.initialized_variables += restore_vars
+        for v in restore_vars:
+            if v not in self.initialized_variables:
+                self.initialized_variables.append(v)
 
     def save_checkpoint(self, name):
         self.checkpoint.save(name)
@@ -183,7 +172,17 @@ class Session(object):
 
     def run(self, ops, **kwargs):
         # ensure variables are initialized
-        self.init_vars()
+        uninit_vars = []
+        for var in self.global_variables():
+            if var not in self.initialized_variables:
+                uninit_vars.append(var)
+        if uninit_vars:
+            desc = ', '.join(v.op.name for v in uninit_vars)
+            log.warn('Variables are not initialized: {}'.format(desc))
+            with self.as_default():
+                self.tf_session.run(tf.variables_initializer(uninit_vars))
+            self.initialized_variables += uninit_vars
+        # session run
         return self.tf_session.run(ops, **kwargs)
 
     def _preprocess(self):
