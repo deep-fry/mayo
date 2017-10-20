@@ -262,25 +262,7 @@ class Preprocess(object):
         File reader
         """
         return tf.TFRecordReader()
-
-    def dataset_parse_proto(self, file_name, label):
-        buffer, label, bbox, _ = self._parse_proto(file_name)
-        image = self._preprocess(buffer, bbox, 4)
-        offset = self.config.label_offset()
-        label += offset
-        return image, label
-
-    def dataset_read(self, num_gpus):
-        filenames = ['train.tfrecord']
-        dataset = tf.contrib.data.TFRecordDataset(filenames)
-        dataset = dataset.map(self.dataset_parse_proto)
-        batch_size = self.config.system.batch_size
-        dataset = dataset.shuffle(buffer_size=10 * batch_size)
-        dataset = dataset.batch(batch_size)
-        iterator = dataset.make_one_shot_iterator()
-        images, labels = iterator.get_next()
-        return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))
-
+    
     def _serialized_inputs(self):
         """
         Reads data to populate the queue, and pops serialized data from queue
