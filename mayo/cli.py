@@ -180,11 +180,15 @@ Arguments:
         start = time.time()
         from tensorflow.python.client import timeline
         run_metadata = tf.RunMetadata()
+        options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         while (epoch_cnt < 0.2):
             tasks = [imgs, add_op, session.num_epochs]
             img_o, total_imgs, epoch_cnt = session.run(tasks)
             # fetch timeline after warmed up
             if (epoch_cnt > 0.1) and PROFILE:
+                session.run(tasks,
+                            options=options,
+                            run_metadata=run_metadata)
                 fetched_timeline = timeline.Timeline(run_metadata.step_stats)
                 chrome_trace = fetched_timeline.generate_chrome_trace_format()
                 with open('timeline.json', 'w') as f:
@@ -200,7 +204,9 @@ Arguments:
         options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         run_metadata = tf.RunMetadata()
         session = self._get_session('train')
-        session.run(session._train_op)
+        # run 100 iterations to warm up
+        for _ in range(100):
+            session.run(session._train_op)
         session.run(
             session._train_op, options=options, run_metadata=run_metadata)
         fetched_timeline = timeline.Timeline(run_metadata.step_stats)
