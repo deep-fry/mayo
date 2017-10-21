@@ -256,7 +256,8 @@ class Preprocess(object):
         log.debug('Incrementing label by offset {}'.format(offset))
         return image, label + offset
 
-    def preprocess(self):
+    # previous multiple dataset
+    def preprocess_old(self):
         files = self.config.data_files(self.mode)
         buffer_size = 10 * self.batch_size_per_gpu * self.num_gpus
         for i in range(self.num_gpus):
@@ -278,3 +279,26 @@ class Preprocess(object):
             images = tf.reshape(images, shape)
             labels = tf.reshape(labels, [self.batch_size_per_gpu])
             yield images, labels
+
+    def preprocess(self):
+        files = self.config.data_files(self.mode)
+        buffer_size = 10 * self.batch_size_per_gpu * self.num_gpus
+        num_gpus = self.num_gpus
+        if self.mode == 'train':
+            # shuffle .tfrecord files
+            random.shuffle(files)
+        dataset = tf.contrib.data.TFRecordDataset(list(files))
+        dataset = dataset.map(
+            self._preprocess, num_threads=self.num_threads,
+            output_buffer_size=2 * buffer_size)
+        dataset = dataset.repeat()
+        if self.mode == 'train':
+            dataset = dataset.shuffle(buffer_size=buffer_size)
+        dataset = dataset.batch(self.batch_size_per_gpu * num_gpus)
+        iterator = dataset.make_one_shot_iterator()
+        images, labels = iterator.get_next()
+        # ensuring the shape of images and labels to be constants
+        shape = (self.batch_size_per_gpu * num_gpus, ) + self.image_shape
+        images = tf.reshape(images, shape)
+        labels = tf.reshape(labels, [self.batch_size_per_gpu * num_gpus])
+        return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))
