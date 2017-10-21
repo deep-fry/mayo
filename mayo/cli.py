@@ -194,9 +194,9 @@ Arguments:
                 with open('timeline.json', 'w') as f:
                     f.write(chrome_trace)
                 break
-        interval = total_imgs / float(time.time() - start)
-        info = 'avg: {:.2f}p/s'.format(interval)
-        log.info(info, update=True)
+            interval = total_imgs / float(time.time() - start)
+            info = 'avg: {:.2f}p/s'.format(interval)
+            log.info(info, update=True)
 
     def cli_profile(self):
         """Performs training profiling to produce timeline.json.  """
