@@ -168,6 +168,7 @@ Arguments:
 
     def cli_test(self):
         """check speed with cpu"""
+        PROFILE = True
         # define a dummy graph
         session = self._get_session('train')
         imgs = []
@@ -177,9 +178,18 @@ Arguments:
             add_op = tf.assign_add(session.imgs_seen, session.batch_size)
         epoch_cnt = 0
         start = time.time()
+        from tensorflow.python.client import timeline
+        run_metadata = tf.RunMetadata()
         while (epoch_cnt < 0.2):
             tasks = [imgs, add_op, session.num_epochs]
             img_o, total_imgs, epoch_cnt = session.run(tasks)
+            # fetch timeline after warmed up
+            if (epoch_cnt > 0.1) and PROFILE:
+                fetched_timeline = timeline.Timeline(run_metadata.step_stats)
+                chrome_trace = fetched_timeline.generate_chrome_trace_format()
+                with open('timeline.json', 'w') as f:
+                    f.write(chrome_trace)
+                break
         interval = total_imgs / float(time.time() - start)
         info = 'avg: {:.2f}p/s'.format(interval)
         log.info(info, update=True)
