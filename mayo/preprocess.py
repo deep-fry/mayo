@@ -280,7 +280,7 @@ class Preprocess(object):
             labels = tf.reshape(labels, [self.batch_size_per_gpu])
             yield images, labels
 
-    def preprocess(self):
+    def preprocess_old_two(self):
         files = self.config.data_files(self.mode)
         buffer_size = 10 * self.batch_size_per_gpu * self.num_gpus
         num_gpus = self.num_gpus
@@ -293,6 +293,31 @@ class Preprocess(object):
             output_buffer_size=2 * buffer_size)
         dataset = dataset.repeat()
         if self.mode == 'train':
+            dataset = dataset.shuffle(buffer_size=buffer_size)
+        dataset = dataset.batch(self.batch_size_per_gpu * num_gpus)
+        iterator = dataset.make_one_shot_iterator()
+        images, labels = iterator.get_next()
+        # ensuring the shape of images and labels to be constants
+        shape = (self.batch_size_per_gpu * num_gpus, ) + self.image_shape
+        images = tf.reshape(images, shape)
+        labels = tf.reshape(labels, [self.batch_size_per_gpu * num_gpus])
+        return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))
+
+    def preprocess(self):
+        files = self.config.data_files(self.mode)
+        num_gpus = self.num_gpus
+        dataset = tf.contrib.data.Dataset.from_tensor_slices(files)
+        if self.mode == 'train':
+            # shuffle .tfrecord files
+            dataset = dataset.shuffle(buffer_size=1024)
+        dataset = dataset.flat_map(tf.contrib.data.TFRecordDataset)
+        if self.mode == 'train':
+            dataset = dataset.repeat()
+        dataset = dataset.map(
+            self._preprocess, num_threads=self.num_threads,
+            output_buffer_size=self.num_threads * self.batch_size_per_gpu)
+        if self.mode == 'train':
+            buffer_size = 1024 + 2 * self.batch_size_per_gpu * self.num_gpus
             dataset = dataset.shuffle(buffer_size=buffer_size)
         dataset = dataset.batch(self.batch_size_per_gpu * num_gpus)
         iterator = dataset.make_one_shot_iterator()
