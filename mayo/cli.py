@@ -1,6 +1,7 @@
 import os
 import sys
 import base64
+import time
 
 import yaml
 import tensorflow as tf
@@ -164,6 +165,25 @@ Arguments:
             log.info('Starting a {} session...'.format(action))
             self.session = cls(self.config)
         return self.session
+
+    def cli_test(self):
+        """check speed with cpu"""
+        # define a dummy graph
+        session = self._get_session('train')
+        imgs = []
+        with session.as_default():
+            for i, (images, labels) in enumerate(session._preprocess()):
+                imgs.append(images)
+            add_op = tf.assign_add(session.imgs_seen, session.batch_size)
+        epoch_cnt = 0
+        start = time.time()
+        while (epoch_cnt < 0.2):
+            tasks = [imgs, add_op, session.num_epochs]
+            img_o, total_imgs, epoch_cnt = session.run(tasks)
+            # print(img_o)
+        interval = time.time() - start / float(total_imgs)
+        info = 'avg: {:.2f}tp/s'.format(interval)
+        log.info(info, update=True)
 
     def cli_profile(self):
         """Performs training profiling to produce timeline.json.  """
