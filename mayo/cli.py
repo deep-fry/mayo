@@ -180,9 +180,8 @@ Arguments:
         while (epoch_cnt < 0.2):
             tasks = [imgs, add_op, session.num_epochs]
             img_o, total_imgs, epoch_cnt = session.run(tasks)
-            # print(img_o)
-        interval = time.time() - start / float(total_imgs)
-        info = 'avg: {:.2f}tp/s'.format(interval)
+        interval = total_imgs / float(time.time() - start)
+        info = 'avg: {:.2f}p/s'.format(interval)
         log.info(info, update=True)
 
     def cli_profile(self):
