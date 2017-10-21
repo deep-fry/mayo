@@ -256,21 +256,14 @@ class Preprocess(object):
         log.debug('Incrementing label by offset {}'.format(offset))
         return image, label + offset
 
-    def split_list(self, lst, n):
-        return [lst[i::n] for i in range(n)]
-
     def preprocess(self):
-        n = self.num_gpus
-        datasets = []
-        iterators = []
         files = self.config.data_files(self.mode)
-        if self.mode == 'train':
-            # shuffle .tfrecord files
-            random.shuffle(files)
-        file_lists = self.split_list(files, n)
         buffer_size = 10 * self.batch_size_per_gpu * self.num_gpus
-        for i in range(n):
-            dataset = tf.contrib.data.TFRecordDataset(file_lists[i])
+        for i in range(self.num_gpus):
+            if self.mode == 'train':
+                # shuffle .tfrecord files
+                random.shuffle(files)
+            dataset = tf.contrib.data.TFRecordDataset(list(files))
             dataset = dataset.map(
                 self._preprocess, num_threads=self.num_threads,
                 output_buffer_size=2 * buffer_size)
@@ -278,11 +271,7 @@ class Preprocess(object):
             if self.mode == 'train':
                 dataset = dataset.shuffle(buffer_size=buffer_size)
             dataset = dataset.batch(self.batch_size_per_gpu)
-            datasets.append(dataset)
             iterator = dataset.make_one_shot_iterator()
-            iterators.append(iterator)
-        for i in range(self.num_gpus):
-            iterator = iterators[i]
             images, labels = iterator.get_next()
             # ensuring the shape of images and labels to be constants
             shape = (self.batch_size_per_gpu, ) + self.image_shape
