@@ -17,5 +17,4 @@ dataset:
     preprocess:
         train:
             - {type: distort_bbox}
-            - {type: distort_color}
             - {type: random_flip}
