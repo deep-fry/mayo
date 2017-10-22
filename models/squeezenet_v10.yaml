@@ -9,7 +9,8 @@ dataset:
         validate:
             - {type: central_crop, fraction: 0.875}
         final:
-            - {type: normalize_channels}
+            - {type: subtract_channel_means}
+            - {type: linear_map, scale: 255.0}
 model:
     name: squeezenet_v10
     description: |
