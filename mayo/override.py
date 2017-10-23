@@ -347,6 +347,36 @@ class Rounder(BaseOverrider):
     def _apply(getter, value):
         return _round(value)
 
+class CustomizedFloatingPointQuantizer(BaseOverrider):
+    def __init(self, exp_width, width, bias):
+        self.exp_width = exp_width
+        self.wdith = width
+        self.bias = bias
+
+    def _quantize(self, value):
+        # might need floor
+        max_exp = _cast(2 ** (2 ** exp_width -1 - bias), float)
+        min_exp = _cast(2 ** (-bias), float)
+        frac_width = width - exp_width
+        max_frac = _cast((2 ** (frac_width + 1) - 1)/float(2**(frac_width)))
+        max_value = max_exp * max_frac
+
+        exp_values =
+        # find a base
+        delta = value - 2**exp_values
+
+        shift = _cast(2 ** (frac_width), float)
+        delta = _round(delta * shift)
+        delta = delta / shift
+
+        value = 2**exp_values * delta
+
+        return
+    def _compute_base(self, values, bias, exp_width):
+        base_values = tf.zeros(tf.shape(values))
+        for i in range(-bias, exp_width - bias + 1):
+            base_values += tf.logical_and(values > 2**(i-1), values < 2**(i)) * i
+        return base_values
 
 class FixedPointQuantizer(BaseOverrider):
     """
