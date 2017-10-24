@@ -1,3 +1,4 @@
+import math
 from functools import partial
 from collections import Sequence, namedtuple
 
@@ -54,6 +55,16 @@ def _count(value):
     return value.shape.num_elements()
 
 
+def _floor(value):
+    if _is_constant(value):
+        return math.floor(value)
+    if _is_numpy(value):
+        return np.floor(value)
+    omap = {'Floor': 'Identity'}
+    with tf.get_default_graph().gradient_override_map(omap):
+        return tf.floor(value)
+
+
 def _round(value):
     if _is_constant(value):
         return round(value)
@@ -70,6 +81,14 @@ def _abs(value):
     if _is_numpy(value):
         return np.abs(value)
     return tf.abs(value)
+
+
+def _log(value, base=None):
+    if _is_constant(value, base):
+        return math.log(value, base)
+    if _is_numpy(value, base):
+        return np.log(value) / np.log(base)
+    return tf.log(value) / tf.log(_cast(base, float))
 
 
 def _binary_bool_operation(a, b, op):
@@ -349,10 +368,16 @@ class Rounder(BaseOverrider):
 
 
 class CustomizedFloatingPointQuantizer(BaseOverrider):
-    def __init(self, exp_width, width, bias):
-        self.exp_width = exp_width
-        self.width = width
-        self.bias = bias
+    def __init(self, exponent_width, exponent_bias, mantissa_width):
+        super().__init__()
+        self.exponent_width = exponent_width
+        self.exponent_bias = exponent_bias
+        self.mantissa_width = mantissa_width
+
+    def _decompose(self, value):
+        # single-precision floating-point
+        #  exponent = _floor(_log())
+        pass
 
     def _quantize(self, value):
         bias = self.bias
@@ -371,7 +396,7 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
 
         exp_values = self._compute_base(value, bias, exp_width)
         # find a base
-        delta = value - 2 ** exp_values
+        delta = value / 2 ** exp_values
 
         # quantize delta
         shift = _cast(2 ** (frac_width), float)
@@ -385,7 +410,7 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
     def _compute_base(self, values, bias, exp_width):
         base_values = tf.zeros(values.shape)
         for i in range(-bias, exp_width - bias + 1):
-            tmp = tf.logical_and(values > 2 ** (i - 1), values < 2 ** i)
+            tmp = _cast(_logical_and(values > 2 ** (i - 1), values < 2 ** i))
             tmp *= _cast(i, float)
             base_values += tmp
         return base_values
@@ -395,7 +420,8 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
 
 
 class ShiftQuantizer(BaseOverrider):
-    def __init__(self, overflow_rate, width=None, bias=None, should_update=True):
+    def __init__(
+            self, overflow_rate, width=None, bias=None, should_update=True):
         super().__init__(should_update)
         self.width = width
         self.bias = bias
@@ -407,11 +433,9 @@ class ShiftQuantizer(BaseOverrider):
             self, value, width, bias, compute_overflow_rate=False):
         min_range = - 2 ** width
         max_range = 2 ** width - 1
-        bases = self._compute_base(value, min_range, max_range, bias)
-        value = value / bases
-        # quantize
+        value = _log(value, 2)
+        # quantize to log-domain
         value = _round(value)
-        value = value * bases
         # ensure number is representable without overflow
         max_value = _cast(2 ** (max_range - bias), float)
         if compute_overflow_rate:
@@ -420,15 +444,6 @@ class ShiftQuantizer(BaseOverrider):
 
         value = _clip_by_value(value, -max_value, max_value)
         return value
-
-    def _compute_base(self, values, min_range, max_range, bias):
-        base_values = tf.zeros(values.shape)
-        for i in range(min_range - bias, max_range + 1 - bias):
-            tmp = tf.logical_and(values > 2 ** (i - 1), values < 2 ** i)
-            tmp = _cast(tmp, float)
-            tmp *= _cast(i, float)
-            base_values += tmp
-        return base_values
 
     def _apply(self, getter, value):
         return self._quantize(value, self.width, self.bias)
