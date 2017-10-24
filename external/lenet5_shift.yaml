@@ -1,0 +1,13 @@
+---
+model.layers:
+    conv0: &overrider
+        weights_overrider: &quantizer
+            type: mayo.override.ShiftQuantizer
+            width: 8
+            bias: 0
+            overflow_rate: 0.1
+            should_update: true
+        biases_overrider: *quantizer
+    conv1: {<<: *overrider}
+    fc1: {<<: *overrider}
+    logits: {<<: *overrider}

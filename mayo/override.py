@@ -172,7 +172,7 @@ class BaseOverrider(object):
 
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """
-        session.run(tf.assign(self._before, self._after))
+        session.run(tf.assign(self.before, self.after))
 
     def reset(self, session):
         """Reset internal variables to their respective initial values.  """
@@ -395,7 +395,7 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
 
 
 class ShiftQuantizer(BaseOverrider):
-    def __init__(self, width=None, bias=None, should_update=True):
+    def __init__(self, overflow_rate, width=None, bias=None, should_update=True):
         super().__init__(should_update)
         self.width = width
         self.bias = bias
@@ -425,12 +425,17 @@ class ShiftQuantizer(BaseOverrider):
         base_values = tf.zeros(values.shape)
         for i in range(min_range - bias, max_range + 1 - bias):
             tmp = tf.logical_and(values > 2 ** (i - 1), values < 2 ** i)
+            tmp = _cast(tmp, float)
             tmp *= _cast(i, float)
             base_values += tmp
         return base_values
 
     def _apply(self, getter, value):
         return self._quantize(value, self.width, self.bias)
+
+    def _update(self, session):
+        p = self._quantize(session.run(self.before), self.width, self.bias)
+        session.run(tf.assign(self.point, p))
 
 
 class FixedPointQuantizer(BaseOverrider):
