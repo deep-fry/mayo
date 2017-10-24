@@ -122,14 +122,10 @@ Arguments:
         'dataset.background_class.has',
     ]
     _validate_keys = [
-        'dataset.preprocess.validate',
-        'dataset.preprocess.final',
         'dataset.path.validate',
         'dataset.num_examples_per_epoch.validate',
     ]
     _train_keys = [
-        'dataset.preprocess.train',
-        'dataset.preprocess.final',
         'dataset.path.train',
         'dataset.num_examples_per_epoch.train',
         'train.learning_rate',

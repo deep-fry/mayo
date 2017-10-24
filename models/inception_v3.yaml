@@ -7,7 +7,7 @@ dataset:
             width: 299
             channels: 3
         validate: {type: central_crop, fraction: 0.875}
-        final:
+        final_cpu:
             - {type: linear_map, scale: 2.0, shift: -1.0}
             - {type: resize, fill: false}
 model:

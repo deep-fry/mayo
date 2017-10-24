@@ -9,7 +9,7 @@ dataset:
         validate:
             - {type: crop_or_pad}
             # - {type: central_crop, fraction: 0.875}
-        final:
+        final_cpu:
             - {type: standardize_image}
 model:
     name: cifarnet

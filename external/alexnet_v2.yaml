@@ -7,7 +7,7 @@ dataset:
             width: 224
             channels: 3
         validate: []
-        final:
+        final_cpu:
             - {type: subtract_image_mean}
             - {type: linear_map, scale: 255.0}
 model:

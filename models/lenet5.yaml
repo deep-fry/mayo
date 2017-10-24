@@ -7,7 +7,7 @@ dataset:
             width: 28
             channels: 1
         validate: null
-        final: {type: linear_map, scale: 2.0, shift: -1.0}
+        final_cpu: {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: lenet5
     layers:

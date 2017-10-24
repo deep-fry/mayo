@@ -7,7 +7,7 @@ dataset:
             width: 224
             channels: 3
         validate: null
-        final:
+        final_cpu:
             - {type: subtract_channel_means}
             - {type: linear_map, scale: 255.0}
 model:

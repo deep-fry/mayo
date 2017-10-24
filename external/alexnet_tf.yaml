@@ -6,9 +6,6 @@ dataset:
             height: 224
             width: 224
             channels: 3
-        validate: []
-        final:
-            - {type: normalize_channels}
 model:
     name: alexnet
     description: |

@@ -249,7 +249,7 @@ class Preprocess(object):
         image_preprocess = _ImagePreprocess(
             self.image_shape, self.moment, bbox)
         image = image_preprocess.preprocess(
-            image, self._actions(self.mode) + self._actions('final'))
+            image, self._actions(self.mode) + self._actions('final_cpu'))
         # add label offset
         offset = self.config.label_offset()
         log.debug('Incrementing label by offset {}...'.format(offset))
