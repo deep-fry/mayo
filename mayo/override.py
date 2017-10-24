@@ -89,8 +89,7 @@ def _log(value, base=None):
         return math.log(value, base)
     if _is_numpy(value, base):
         return np.log(value) / np.log(base)
-    return tf.log(value)
-    #return tf.log(value) / tf.log(_cast(base, float))
+    return tf.log(value) / tf.log(_cast(base, float))
 
 
 def _binary_bool_operation(a, b, op):
@@ -409,7 +408,7 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
         delta = delta / shift
 
         value = 2**exp_value * delta
-        #keep zeros back
+        # keep zeros back
         value = value_sign * value
         return value
 
@@ -417,7 +416,48 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
         return self._quantize(value, self.width, self.exponent_width,
             self.exponent_bias)
 
+
 CFPQuantizer = CustomizedFloatingPointQuantizer
+
+
+class LogQuantizer(BaseOverrider):
+    def __init__(
+            self, point, width=None, should_update=True):
+        super().__init__(should_update)
+        self.width = width
+        self.point = point
+        if width is not None and width < 1:
+            raise ValueError(
+                'Width of quantized value must be greater than 0.')
+
+    def _quantize(self, value, point, width, compute_overflow_rate=False):
+        # fetch signs and zeros
+        value_sign = _cast(value > 0, float) - _cast(value < 0, float)
+        # log only handels positive values
+        max_range = 2**(width - point)
+        value = _clip_by_value(1e-10, 2**(max_range))
+        value = _log(_abs(value), 2.0)
+        # quantize to log-domain
+        shift = _cast(2 ** (width - point), float)
+        value = shift * value
+        value = _round(value)
+        min_value = - 2 ** width
+        max_value = 2 ** width - 1
+        # ensure number is representable without overflow
+        if compute_overflow_rate:
+            overflows = _logical_or(value < min_value, value > max_value)
+            return _sum(_cast(overflows, int)) / _count(overflows)
+        value = _clip_by_value(value, min_value, max_value)
+        value = value / shift
+        value = 2**(value) * value_sign
+        return value
+
+    def _update(self, session):
+        self._quantize(session.run(self.before), self.width, self.point)
+        return
+
+    def _apply(self, getter, value):
+        return self._quantize(value, self.width, self.point)
 
 
 class ShiftQuantizer(BaseOverrider):
@@ -432,26 +472,29 @@ class ShiftQuantizer(BaseOverrider):
 
     def _quantize(
             self, value, width, bias, compute_overflow_rate=False):
-        min_range = - 2 ** width
-        max_range = 2 ** width - 1
-        value = _log(value, 2)
-        # quantize to log-domain
+        max_value = 2 ** width - 1 - bias
+        min_value = - 2 ** width - bias
+        value_sign = _cast(value > 0, float) - _cast(value < 0, float)
+        value_zeros = _cast(value != 0, float)
+        value = _clip_by_value(value, 1e-10, 2**(max_value + 1))
+        value = _cast(value, float)
+        value = _log(value, 2.0)
         value = _round(value)
         # ensure number is representable without overflow
-        max_value = _cast(2 ** (max_range - bias), float)
         if compute_overflow_rate:
-            overflows = _logical_or(value < -max_value, value > max_value)
+            overflows = _logical_or(value < min_value, value > max_value)
             return _sum(_cast(overflows, int)) / _count(overflows)
-
-        value = _clip_by_value(value, -max_value, max_value)
+        value = _clip_by_value(value, min_value, max_value)
+        value = 2 ** (value) * value_sign * value_zeros
         return value
+
+    def _update(self, session):
+        pass
+        # self._quantize((self.before), self.width, self.bias)
+        return
 
     def _apply(self, getter, value):
         return self._quantize(value, self.width, self.bias)
-
-    def _update(self, session):
-        p = self._quantize(session.run(self.before), self.width, self.bias)
-        session.run(tf.assign(self.point, p))
 
 
 class FixedPointQuantizer(BaseOverrider):
