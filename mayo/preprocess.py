@@ -201,15 +201,15 @@ class Preprocess(object):
 
     @staticmethod
     def _parse_proto(proto):
-        # dense features
         string = tf.FixedLenFeature([], dtype=tf.string, default_value='')
         integer = tf.FixedLenFeature([1], dtype=tf.int64, default_value=-1)
+        float32 = tf.VarLenFeature(dtype=tf.float32)
+        # dense features
         feature_map = {
             'image/encoded': string,
             'image/class/label': integer,
             'image/class/text': string,
         }
-        float32 = tf.VarLenFeature(dtype=tf.float32)
         # bounding boxes
         bbox_keys = [
             'image/object/bbox/xmin', 'image/object/bbox/ymin',
@@ -262,23 +262,24 @@ class Preprocess(object):
     def preprocess(self):
         files = self.config.data_files(self.mode)
         num_gpus = self.num_gpus
+        batch_size = self.batch_size_per_gpu * num_gpus
         dataset = tf.contrib.data.Dataset.from_tensor_slices(files)
         if self.mode == 'train':
             # shuffle .tfrecord files
-            dataset = dataset.shuffle(buffer_size=1024)
+            dataset = dataset.shuffle(buffer_size=len(files))
         dataset = dataset.flat_map(tf.contrib.data.TFRecordDataset)
         dataset = dataset.repeat()
         dataset = dataset.map(
             self._preprocess, num_threads=self.num_threads,
-            output_buffer_size=self.num_threads * self.batch_size_per_gpu)
+            output_buffer_size=self.num_threads * batch_size)
         if self.mode == 'train':
-            buffer_size = 1024 + 2 * self.batch_size_per_gpu * self.num_gpus
+            buffer_size = min(1024, 10 * batch_size)
             dataset = dataset.shuffle(buffer_size=buffer_size)
-        dataset = dataset.batch(self.batch_size_per_gpu * num_gpus)
+        dataset = dataset.batch(batch_size)
         iterator = dataset.make_one_shot_iterator()
         images, labels = iterator.get_next()
         # ensuring the shape of images and labels to be constants
-        shape = (self.batch_size_per_gpu * num_gpus, ) + self.image_shape
-        images = tf.reshape(images, shape)
-        labels = tf.reshape(labels, [self.batch_size_per_gpu * num_gpus])
+        batch_shape = (batch_size, )
+        images = tf.reshape(images, batch_shape + self.image_shape)
+        labels = tf.reshape(labels, batch_shape)
         return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))

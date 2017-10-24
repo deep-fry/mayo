@@ -348,6 +348,52 @@ class Rounder(BaseOverrider):
         return _round(value)
 
 
+class CustomizedFloatingPointQuantizer(BaseOverrider):
+    def __init(self, exp_width, width, bias):
+        self.exp_width = exp_width
+        self.width = width
+        self.bias = bias
+
+    def _quantize(self, value):
+        bias = self.bias
+        width = self.width
+        exp_width = self.exp_width
+        # might need floor
+        # 2 ^ (exp_max - bias)
+        max_exp = _cast(2 ** (2 ** exp_width - 1 - bias), float)
+        # 2 ^ (0 - bias)
+        min_exp = _cast(2 ** (-bias), float)
+        frac_width = width - exp_width
+        # take account that it is 1.010101 in the mantissa
+        # max value is 2^(N+1) / 2^(N)
+        max_frac = _cast((2 ** (frac_width + 1) - 1) / float(2**(frac_width)))
+        max_value = max_exp * max_frac
+
+        exp_values = self._compute_base(value, bias, exp_width)
+        # find a base
+        delta = value - 2 ** exp_values
+
+        # quantize delta
+        shift = _cast(2 ** (frac_width), float)
+        delta = _round(delta * shift)
+        delta = delta / shift
+
+        value = 2**exp_values * delta
+
+        return
+
+    def _compute_base(self, values, bias, exp_width):
+        base_values = tf.zeros(values.shape)
+        for i in range(-bias, exp_width - bias + 1):
+            tmp = tf.logical_and(values > 2 ** (i - 1), values < 2 ** i)
+            tmp *= _cast(i, float)
+            base_values += tmp
+        return base_values
+
+    def _apply(self, getter, value):
+        return self._quantize(value)
+
+
 class FixedPointQuantizer(BaseOverrider):
     """
     Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
