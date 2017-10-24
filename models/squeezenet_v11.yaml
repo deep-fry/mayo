@@ -8,7 +8,8 @@ dataset:
             channels: 3
         validate:
             - {type: central_crop, fraction: 0.875}
-        final:
+        final: null
+        final_gpu:
             - {type: normalize_channels}
 model:
     name: squeezenet_v11

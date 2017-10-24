@@ -1,10 +1,9 @@
-import random
 import collections
 
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import multi_objects_from_params, memoize_property
+from mayo.util import multi_objects_from_params, ensure_list
 
 
 class _ImagePreprocess(object):
@@ -165,7 +164,7 @@ class _ImagePreprocess(object):
         # rescale image
         return self.resize(i, h, w, fill=True)
 
-    def preprocess(self, image, actions):
+    def preprocess(self, image, actions, ensure_shape=True):
         with tf.name_scope(values=[image], name='preprocess_image'):
             for func, params in multi_objects_from_params(actions, self):
                 log.debug(
@@ -173,6 +172,8 @@ class _ImagePreprocess(object):
                     .format(func.__name__, params))
                 with tf.name_scope(values=[image], name=func.__name__):
                     image = func(image, **params)
+        if not ensure_shape:
+            return image
         return self._ensure_shape(image)
 
 
@@ -185,6 +186,7 @@ class Preprocess(object):
                 'Unrecognized preprocessing mode {!r}'.format(mode))
         self.mode = mode
         self.config = config
+        self.moment = self.config.dataset.get('moment')
         self.num_threads = self.config.system.preprocess.num_threads
         self.num_gpus = self.config.system.num_gpus
         self.image_shape = self.config.image_shape()
@@ -232,6 +234,10 @@ class Preprocess(object):
         text = features['image/class/text']
         return encoded, label, bbox, text
 
+    def _actions(self, key):
+        actions_map = self.config.dataset.preprocess
+        return ensure_list(actions_map.get(key) or [])
+
     def _preprocess(self, serialized):
         #  return tf.ones((224, 224, 3), tf.float32), tf.ones(1, tf.int32)
         # unserialize and prepocess image
@@ -240,20 +246,13 @@ class Preprocess(object):
         channels = self.image_shape[-1]
         image = self._decode_jpeg(buffer, channels)
         # preprocess image using ImagePreprocess
-        moment = self.config.dataset.get('moment')
-        image_preprocess = _ImagePreprocess(self.image_shape, moment, bbox)
-        actions_map = self.config.dataset.preprocess
-        mode_actions = actions_map[self.mode] or []
-        if not isinstance(mode_actions, collections.Sequence):
-            mode_actions = [mode_actions]
-        final_actions = actions_map['final'] or []
-        if not isinstance(final_actions, collections.Sequence):
-            final_actions = [final_actions]
+        image_preprocess = _ImagePreprocess(
+            self.image_shape, self.moment, bbox)
         image = image_preprocess.preprocess(
-            image, mode_actions + final_actions)
+            image, self._actions(self.mode) + self._actions('final'))
         # add label offset
         offset = self.config.label_offset()
-        log.debug('Incrementing label by offset {}'.format(offset))
+        log.debug('Incrementing label by offset {}...'.format(offset))
         return image, label + offset
 
     def preprocess(self):
@@ -279,4 +278,15 @@ class Preprocess(object):
         batch_shape = (batch_size, )
         images = tf.reshape(images, batch_shape + self.image_shape)
         labels = tf.reshape(labels, batch_shape)
-        return zip(tf.split(images, num_gpus), tf.split(labels, num_gpus))
+        batch_images_labels = list(zip(
+            tf.split(images, num_gpus), tf.split(labels, num_gpus)))
+        image_preprocess = _ImagePreprocess(
+            self.image_shape, self.moment, None)
+        gpu_actions = self._actions('final_gpu')
+        if gpu_actions:
+            for gid, (images, labels) in enumerate(batch_images_labels):
+                with tf.device('/gpu:{}'.format(gid)):
+                    images = image_preprocess.preprocess(
+                        images, gpu_actions, ensure_shape=False)
+                    batch_images_labels[gid] = (images, labels)
+        return batch_images_labels

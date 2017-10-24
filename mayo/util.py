@@ -319,9 +319,9 @@ def flatten(items, skip_none=False):
             yield i
 
 
-def ensure_list(str_or_list):
-    if isinstance(str_or_list, (str, collections.Mapping)):
-        return [str_or_list]
-    if isinstance(str_or_list, list):
-        return str_or_list
+def ensure_list(item_or_list):
+    if isinstance(item_or_list, (str, collections.Mapping)):
+        return [item_or_list]
+    if isinstance(item_or_list, list):
+        return item_or_list
     raise TypeError('Unrecognized type.')
