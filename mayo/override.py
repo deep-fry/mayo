@@ -393,14 +393,16 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
     def _apply(self, getter, value):
         return self._quantize(value)
 
+
 class ShiftQuantizer(BaseOverrider):
-    def __init__(self, point, width=None, should_update=True):
+    def __init__(self, width=None, bias=None, should_update=True):
         super().__init__(should_update)
-        self.point = point
         self.width = width
+        self.bias = bias
         if width is not None and width < 1:
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
+
     def _quantize(
             self, value, width, bias, compute_overflow_rate=False):
         min_range = - 2 ** width
@@ -427,9 +429,9 @@ class ShiftQuantizer(BaseOverrider):
             base_values += tmp
         return base_values
 
-
     def _apply(self, getter, value):
-        return self._quantize(value, self.width, self.point)
+        return self._quantize(value, self.width, self.bias)
+
 
 class FixedPointQuantizer(BaseOverrider):
     """
