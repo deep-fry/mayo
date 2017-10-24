@@ -115,16 +115,19 @@ class _ImagePreprocess(object):
         return i - means
 
     def normalize_channels(self, i):
-        i = self.subtract_channel_means(i)
-        stds = self.moment.get('std')
-        if not stds:
-            log.warn(
-                'Channel std value not supplied, defaulting '
-                'to 1.0 for each channel.')
-            return i
-        shape = [1, 1, len(stds)]
-        stds = tf.constant(stds, shape=shape, name='image_stds')
-        return i / stds
+        # FIXME we pin this preprocessing action to GPU because of
+        # poor performance on CPU caused by this.
+        with tf.device('/gpu:0'):
+            i = self.subtract_channel_means(i)
+            stds = self.moment.get('std')
+            if not stds:
+                log.warn(
+                    'Channel std value not supplied, defaulting '
+                    'to 1.0 for each channel.')
+                return i
+            shape = [1, 1, len(stds)]
+            stds = tf.constant(stds, shape=shape, name='image_stds')
+            return i / stds
 
     def subtract_image_mean(self, i):
         return i - tf.reduce_mean(i)

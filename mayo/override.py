@@ -394,6 +394,45 @@ class CustomizedFloatingPointQuantizer(BaseOverrider):
         return self._quantize(value)
 
 
+class ShiftQuantizer(BaseOverrider):
+    def __init__(self, width=None, bias=None, should_update=True):
+        super().__init__(should_update)
+        self.width = width
+        self.bias = bias
+        if width is not None and width < 1:
+            raise ValueError(
+                'Width of quantized value must be greater than 0.')
+
+    def _quantize(
+            self, value, width, bias, compute_overflow_rate=False):
+        min_range = - 2 ** width
+        max_range = 2 ** width - 1
+        bases = self._compute_base(value, min_range, max_range, bias)
+        value = value / bases
+        # quantize
+        value = _round(value)
+        value = value * bases
+        # ensure number is representable without overflow
+        max_value = _cast(2 ** (max_range - bias), float)
+        if compute_overflow_rate:
+            overflows = _logical_or(value < -max_value, value > max_value)
+            return _sum(_cast(overflows, int)) / _count(overflows)
+
+        value = _clip_by_value(value, -max_value, max_value)
+        return value
+
+    def _compute_base(self, values, min_range, max_range, bias):
+        base_values = tf.zeros(values.shape)
+        for i in range(min_range - bias, max_range + 1 - bias):
+            tmp = tf.logical_and(values > 2 ** (i - 1), values < 2 ** i)
+            tmp *= _cast(i, float)
+            base_values += tmp
+        return base_values
+
+    def _apply(self, getter, value):
+        return self._quantize(value, self.width, self.bias)
+
+
 class FixedPointQuantizer(BaseOverrider):
     """
     Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
