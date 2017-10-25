@@ -1,0 +1,21 @@
+---
+model.layers:
+    conv1: &overrider
+        weights_overrider:
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+        biases_overrider:
+            type: mayo.override.MayoDNSPruner
+            c_rate: 0
+            should_update: false
+    fire2: {<<: *overrider}
+    fire3: {<<: *overrider}
+    fire4: {<<: *overrider}
+    fire5: {<<: *overrider}
+    fire6: {<<: *overrider}
+    fire7: {<<: *overrider}
+    fire8: {<<: *overrider}
+    fire9: {<<: *overrider}
+    conv10: {<<: *overrider}
+    logits: {<<: *overrider}
