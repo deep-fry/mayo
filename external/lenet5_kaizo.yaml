@@ -1,10 +1,10 @@
 ---
 model.layers:
     _quantizer: &quantizer
-        type: mayo.override.ShiftQuantizer
-        width: 8
-        bias: 0
-        overflow_rate: 0.1
+        type: mayo.override.FloatingPointQuantizer
+        exponent_width: 8
+        exponent_bias: -127
+        mantissa_width: 3
         should_update: true
     _pruner: &pruner
         type: mayo.override.DNSPruner

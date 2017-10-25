@@ -35,6 +35,14 @@ def cast(value, dtype):
     return tf.cast(value, dtypes[dtype])
 
 
+def where(bool_expr, true_value, false_value):
+    if _is_constant(bool_expr, true_value, false_value):
+        return true_value if bool_expr else false_value
+    if _is_numpy(bool_expr, true_value, false_value):
+        return np.where(bool_expr, true_value, false_value)
+    return tf.where(bool_expr, true_value, false_value)
+
+
 def sum(value):
     if _is_constant(value):
         raise TypeError

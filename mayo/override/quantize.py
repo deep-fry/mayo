@@ -183,96 +183,91 @@ class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
         self.scale = round(session.config.retrain.scale)
 
 
-class FloatingPointQuantizer(OverriderBase):
-    """ minifloat quantization. """
+class FloatingPointQuantizer(QuantizerBase):
+    """
+    Minifloat quantization.
+
+    When exponent_width is 0, the floating-point value is a degenerate case
+    where exponent is always a constant bias, equivalent to fixed-point with a
+    sign-magnitude representation.
+
+    When mantissa_width is 0, the floating-point value is a degenerate
+    case where mantissa is always 1, equivalent to shifts with only 2^n
+    representations.
+
+    When both exponent_width and mantissa_width are 0, the quantized value can
+    only represent $2^-bias$, which is not very useful.
+    """
     def __init__(
-            self, exponent_width=None, exponent_bias=None, width=None,
+            self, exponent_width, exponent_bias, mantissa_width,
             should_update=True):
         super().__init__(should_update)
         self.exponent_width = exponent_width
         self.exponent_bias = exponent_bias
-        self.width = width
-        if width is not None and width < 1:
+        self.mantissa_width = mantissa_width
+        is_valid = exponent_width >= 0 and mantissa_width >= 0
+        is_valid = not (exponent_width == 0 and mantissa_width == 0)
+        if not is_valid:
             raise ValueError(
-                'Width of quantized value must be greater than 0.')
+                'We expect exponent_width >= 0 and mantissa_width >= 0 '
+                'where equalities must be exclusive.')
 
     def _decompose(self, value):
-        # single-precision floating-point
-        #  exponent = _floor(_log())
-        pass
+        # decompose a single-precision floating-point into
+        # sign, exponent and mantissa components
+        sign = util.cast(value > 0, int) - util.cast(value < 0, int)
+        value = util.abs(value)
+        exponent = util.floor(util.log(value, 2))
+        mantissa = value / (2 ** exponent)
+        return sign, exponent, mantissa
 
-    def _quantize(self, value, width, exp_width, bias):
-        # 2 ^ (exp_max - bias)
-        max_exp = util.cast(2 ** exp_width - 1 - bias, float)
-        # 2 ^ (0 - bias)
-        min_exp = util.cast(- bias, float)
-        frac_width = width - exp_width
-        max_value = 2 ** max_exp * 2
+    def _transform(self, sign, exponent, mantissa):
+        # clip exponent and quantize mantissa
+        exponent_min = self.exponent_bias
+        exponent_max = exponent_min + 2 ** self.exponent_width - 1
+        exponent = util.clip_by_value(exponent, exponent_min, exponent_max)
+        shift = util.cast(2 ** self.mantissa_width, float)
+        mantissa = util.round(mantissa * shift) / shift
+        # if the mantissa value gets rounded to >= 2 then we need to divide it
+        # by 2 and increment exponent by 1
+        mantissa = util.where(mantissa >= 2, mantissa / 2, mantissa)
+        exponent = util.where(mantissa >= 2, exponent + 1, exponent)
+        return sign, exponent, mantissa
 
-        # find a base, clip it
-        value_sign = util.cast(
-            value < 0, float) * (-1) + util.cast(value > 0, float)
-        value = tf.clip_by_value(value, 1e-10, max_value)
-        value = tf.abs(value)
-        exp_value = util.floor(util.log(value, 2))
-        exp_value = util.clip_by_value(exp_value, min_exp, max_exp)
+    def _represent(self, sign, exponent, mantissa):
+        # represent the value in floating-point using
+        # sign, exponent and mantissa
+        zeros = tf.zeros(sign.shape, dtype=tf.float32)
+        value = util.cast(sign, float) * (2.0 ** exponent) * mantissa
+        return util.where(sign == 0, zeros, value)
 
-        # find delta, quantize it
-        self.delta = value / 2 ** exp_value
-        delta = self.delta
-        shift = util.cast(2 ** (frac_width), float)
-        delta = util.round(delta * shift)
-        delta = delta / shift
-
-        value = 2**exp_value * delta
-        # keep zeros back
-        value = value_sign * value
-        return value
+    def _quantize(self, value):
+        sign, exponent, mantissa = self._decompose(value)
+        sign, exponent, mantissa = self._transform(sign, exponent, mantissa)
+        return self._represent(sign, exponent, mantissa)
 
     def _apply(self, getter, value):
-        return self._quantize(
-            value, self.exponent_width, self.exponent_width,
-            self.exponent_bias)
+        return value + tf.stop_gradient(self._quantize(value) - value)
 
 
-class ShiftQuantizer(OverriderBase):
+class ShiftQuantizer(FloatingPointQuantizer):
     def __init__(
             self, overflow_rate, width=None, bias=None, should_update=True):
-        super().__init__(should_update)
-        self.width = width
-        self.bias = bias
-        if width is not None and width < 1:
-            raise ValueError(
-                'Width of quantized value must be greater than 0.')
+        super().__init__(
+            exponent_width=width, exponent_bias=bias,
+            mantissa_width=0, should_update=should_update)
 
-    def _quantize(
-            self, value, width, bias, compute_overflow_rate=False):
-        max_value = 2 ** width - 1 - bias
-        min_value = - 2 ** width - bias
-        value_sign = util.cast(value > 0, float) - util.cast(value < 0, float)
-        value_zeros = util.cast(value != 0, float)
-        value = util.clip_by_value(value, 1e-10, 2**(max_value + 1))
-        value = util.cast(value, float)
-        value = util.log(value, 2.0)
-        value = util.round(value)
-        # ensure number is representable without overflow
-        if compute_overflow_rate:
-            overflows = util.logical_or(value < min_value, value > max_value)
-            return _overflow_rate(overflows)
-        value = util.clip_by_value(value, min_value, max_value)
-        value = 2 ** (value) * value_sign * value_zeros
-        return value
+    def _quantize(self, value):
+        sign, exponent, mantissa = self._decompose(value)
+        sign, exponent, mantissa = self._transform(sign, exponent, mantissa)
+        # mantissa == 1
+        return self._represent(sign, exponent, 1)
 
     def _update(self, session):
-        pass
-        # self._quantize((self.before), self.width, self.bias)
         return
 
-    def _apply(self, getter, value):
-        return self._quantize(value, self.width, self.bias)
 
-
-class LogQuantizer(OverriderBase):
+class LogQuantizer(QuantizerBase):
     def __init__(self, point, width=None, should_update=True):
         super().__init__(should_update)
         self.width = width
@@ -281,9 +276,17 @@ class LogQuantizer(OverriderBase):
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
 
+    def _decompose(self, value):
+        ...
+
+    def _transform(self):
+        ...
+
+    def _represent(self):
+        ...
+
     def _quantize(self, value, point, width, compute_overflow_rate=False):
-        # fetch signs and zeros
-        value_sign = util.cast(value > 0, float) - util.cast(value < 0, float)
+        sign = util.cast(value > 0, float) - util.cast(value < 0, float)
         # log only handels positive values
         max_range = 2**(width - point)
         value = util.clip_by_value(1e-10, 2**(max_range))
@@ -300,12 +303,9 @@ class LogQuantizer(OverriderBase):
             return util.sum(util.cast(overflows, int)) / util.count(overflows)
         value = util.clip_by_value(value, min_value, max_value)
         value = value / shift
-        value = 2 ** value * value_sign
+        value = 2 ** value * sign
         return value
 
     def _update(self, session):
         self._quantize(session.run(self.before), self.width, self.point)
         return
-
-    def _apply(self, getter, value):
-        return self._quantize(value, self.width, self.point)
