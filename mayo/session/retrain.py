@@ -1,14 +1,12 @@
 import math
-import sys
-import pdb
 import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.train import Train
+from mayo.session.train import Train
 
 
-class Retrain_Base(Train):
+class RetrainBase(Train):
     def retrain(self):
         log.debug('Retraining start.')
         try:
@@ -197,7 +195,7 @@ class Retrain_Base(Train):
             'Method to refresh overriders is not implemented.')
 
 
-class Retrain_global(Retrain_Base):
+class GlobalRetrain(RetrainBase):
     def overriders_refresh(self):
         check_bias = self.config.retrain.bias
         if check_bias:
@@ -269,7 +267,7 @@ class Retrain_global(Retrain_Base):
         log.debug('decrease scaling factor to {}'.format(record))
 
 
-class Retrain_layerwise(Retrain_Base):
+class LayerwiseRetrain(RetrainBase):
     def overriders_refresh(self):
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:

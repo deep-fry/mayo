@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import Percent, Table
-from mayo.session import Session
+from mayo.session.base import Session
 
 
 class EvaluateBase(Session):

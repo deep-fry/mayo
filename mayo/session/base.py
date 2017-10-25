@@ -9,8 +9,8 @@ from mayo.log import log
 from mayo.net import Net
 from mayo.util import memoize_method, memoize_property, Change, flatten, Table
 from mayo.override import ChainOverrider
-from mayo.checkpoint import CheckpointHandler
 from mayo.preprocess import Preprocess
+from mayo.session.checkpoint import CheckpointHandler
 
 
 class Session(object):

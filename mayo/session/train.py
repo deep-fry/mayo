@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import Percent, memoize_property, object_from_params
-from mayo.session import Session
+from mayo.session.base import Session
 
 
 class Train(Session):

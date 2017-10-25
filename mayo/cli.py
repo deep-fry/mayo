@@ -9,10 +9,9 @@ from docopt import docopt
 
 from mayo.log import log
 from mayo.config import Config
-from mayo.eval import Evaluate, FastEvaluate
 from mayo.net import Net
-from mayo.train import Train
-from mayo.retrain import Retrain_layerwise, Retrain_global
+from mayo.session import (
+    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain)
 
 _root = os.path.dirname(__file__)
 
@@ -94,11 +93,12 @@ Arguments:
         usage_meta = meta()
         commands = self.commands()
         name_len = max(len(name) for name in commands)
-        commands = '\n'.join(
-            '{}{:{l}} {}'.format(
-                ' ' * 9, name, func.__doc__.strip(), l=name_len)
-            for name, func in commands.items())
-        usage_meta['commands'] = commands
+        descriptions = []
+        for name, func in commands.items():
+            doc = func.__doc__ or ''
+            doc = '{}{:{l}} {}'.format(' ' * 9, name, doc.strip(), l=name_len)
+            descriptions.append(doc)
+        usage_meta['commands'] = '\n'.join(descriptions)
         return self.doc() + self._USAGE.format(**usage_meta)
 
     def _validate_config(self, keys, action):
@@ -142,16 +142,16 @@ Arguments:
         if action == 'train':
             cls = Train
             keys += self._train_keys
-        elif action == 'retrain_layer':
-            cls = Retrain_layerwise
+        elif action == 'retrain-layer':
+            cls = LayerwiseRetrain
             keys += self._train_keys
-        elif action == 'retrain_global':
-            cls = Retrain_global
+        elif action == 'retrain-global':
+            cls = GlobalRetrain
             keys += self._train_keys
         elif action == 'validate':
             cls = Evaluate
             keys += self._validate_keys
-        elif action == 'fast_validate':
+        elif action == 'fast-validate':
             cls = FastEvaluate
             keys += self._validate_keys
         else:
@@ -163,7 +163,7 @@ Arguments:
         return self.session
 
     def cli_test(self):
-        """check speed with cpu"""
+        # TEMPORARY check speed with cpu
         PROFILE = True
         # define a dummy graph
         session = self._get_session('train')
@@ -201,8 +201,13 @@ Arguments:
         run_metadata = tf.RunMetadata()
         session = self._get_session('train')
         # run 100 iterations to warm up
-        for _ in range(100):
+        max_iterations = 100
+        for i in range(max_iterations):
+            log.info(
+                'Running {}/{} iterations to warm up...'
+                .format(i, max_iterations), update=True)
             session.run(session._train_op)
+        log.info('Running the final iteration to generate timeline...')
         session.run(
             session._train_op, options=options, run_metadata=run_metadata)
         fetched_timeline = timeline.Timeline(run_metadata.step_stats)
@@ -216,18 +221,18 @@ Arguments:
 
     def cli_retrain_layer(self):
         """Performs retraining.  """
-        return self._get_session('retrain_layer').retrain()
+        return self._get_session('retrain-layer').retrain()
 
     def cli_retrain_global(self):
         """Performs retraining.  """
-        return self._get_session('retrain_global').retrain()
+        return self._get_session('retrain-global').retrain()
 
     def cli_fast_eval(self):
         """
         Evaluates the approximate accuracy of a saved model with
         multiple threads.
         """
-        return self._get_session('fast_validate').eval()
+        return self._get_session('fast-validate').eval()
 
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """
