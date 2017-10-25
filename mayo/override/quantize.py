@@ -72,7 +72,7 @@ class FixedPointQuantizer(OverriderBase):
         return value / shift
 
     def _apply(self, getter, value):
-        return self._quantize(value, self.width, self.point)
+        return self._quantize(value, width = self.width, point = self.point)
 
     def info(self, session):
         p = self.point
@@ -184,8 +184,8 @@ class MayoFixedPointQuantizer(FixedPointQuantizer):
         self.scale = round(session.config.retrain.scale)
 
     def _update(self, session):
-        self._quantize(session.run(self.before), point = self.point,
-            width = self.width)
+        # self._quantize(session.run(self.before), point = self.point,
+        #     width = self.width)
         return
 
 
@@ -212,8 +212,8 @@ class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
         return
 
     def _update(self, session):
-        self._quantize(session.run(self.before), point = self.point,
-            width = self.width)
+        # self._quantize(session.run(self.before), point = self.point,
+        #     width = self.width)
         return
 
 class FloatingPointQuantizer(QuantizerBase):
