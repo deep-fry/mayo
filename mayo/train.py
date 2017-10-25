@@ -1,6 +1,5 @@
 import time
 import math
-import pdb
 
 import tensorflow as tf
 
@@ -166,7 +165,6 @@ class Train(Session):
     def _iteration(self):
         system = self.config.system
         loss, acc, epoch = self.once()
-        pdb.set_trace()
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         self._update_progress(epoch, loss, acc, self._cp_epoch)
