@@ -163,7 +163,27 @@ class DGTrainableQuantizer(DGQuantizer):
         return self._quantize(value, width, point)
 
 
-class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
+class MayoFixedPointQuantizer(FixedPointQuantizer):
+    def __init__(self, point, width, should_update=True):
+        super().__init__(point, width, should_update)
+
+    def _threshold_update(self):
+        self.width -= self.scale
+
+    def _scale_roll_back(self):
+        self.width += self.scale
+
+    def _scale_update(self, update_factor):
+        self.scale = round(self.scale * update_factor)
+        if self.point < 1:
+            raise ValueError(
+                'DFP {}, Bitwidth should be bigger than 1'.format(self.point))
+
+    def _setup(self, session):
+        self.scale = round(session.config.retrain.scale)
+
+
+class MayoDFPQuantizer(DGQuantizer):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(width, overflow_rate, should_update)
 
