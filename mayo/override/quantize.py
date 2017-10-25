@@ -53,19 +53,20 @@ class FixedPointQuantizer(OverriderBase):
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
 
-    def _quantize(self, value, point=None, compute_overflow_rate=False):
+    def _quantize(self, value, point=None, width = None, compute_overflow_rate=False):
         point = point or self.point
+        width = width or self.width
         # x << (width - point)
-        shift = util.cast(2 ** (self.width - point), float)
+        shift = util.cast(2 ** (width - point), float)
         value = value * shift
         # quantize
         value = util.round(value)
         # ensure number is representable without overflow
-        max_value = util.cast(2 ** (self.width - 1), float)
-        # if compute_overflow_rate:
-        #     overflows = util.logical_or(
-        #         value < -max_value, value > max_value - 1)
-        #     return _overflow_rate(overflows)
+        max_value = util.cast(2 ** (width - 1), float)
+        if compute_overflow_rate:
+            overflows = util.logical_or(
+                value < -max_value, value > max_value - 1)
+            return _overflow_rate(overflows)
         value = util.clip_by_value(value, -max_value, max_value - 1)
         # revert bit-shift earlier
         return value / shift
@@ -183,7 +184,8 @@ class MayoFixedPointQuantizer(FixedPointQuantizer):
         self.scale = round(session.config.retrain.scale)
 
     def _update(self, session):
-        self._quantize(session.run(self.before), self.point, self.width)
+        self._quantize(session.run(self.before), point = self.point,
+            width = self.width)
         return
 
 
@@ -210,7 +212,8 @@ class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
         return
 
     def _update(self, session):
-        self._quantize(session.run(self.before), self.width, self.point)
+        self._quantize(session.run(self.before), point = self.point,
+            width = self.width)
         return
 
 class FloatingPointQuantizer(QuantizerBase):
