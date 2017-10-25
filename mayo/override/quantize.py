@@ -62,10 +62,10 @@ class FixedPointQuantizer(OverriderBase):
         value = util.round(value)
         # ensure number is representable without overflow
         max_value = util.cast(2 ** (self.width - 1), float)
-        if compute_overflow_rate:
-            overflows = util.logical_or(
-                value < -max_value, value > max_value - 1)
-            return _overflow_rate(overflows)
+        # if compute_overflow_rate:
+        #     overflows = util.logical_or(
+        #         value < -max_value, value > max_value - 1)
+        #     return _overflow_rate(overflows)
         value = util.clip_by_value(value, -max_value, max_value - 1)
         # revert bit-shift earlier
         return value / shift
@@ -182,8 +182,12 @@ class MayoFixedPointQuantizer(FixedPointQuantizer):
     def _setup(self, session):
         self.scale = round(session.config.retrain.scale)
 
+    def _update(self, session):
+        self._quantize(session.run(self.before), self.point, self.width)
+        return
 
-class MayoDFPQuantizer(DGQuantizer):
+
+class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(width, overflow_rate, should_update)
 
@@ -202,6 +206,12 @@ class MayoDFPQuantizer(DGQuantizer):
     def _setup(self, session):
         self.scale = round(session.config.retrain.scale)
 
+    def _update_policy(self, tensor):
+        return
+
+    def _update(self, session):
+        self._quantize(session.run(self.before), self.width, self.point)
+        return
 
 class FloatingPointQuantizer(QuantizerBase):
     """
