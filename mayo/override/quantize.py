@@ -40,7 +40,7 @@ class FixedPointQuantizer(OverriderBase):
             The number of bits to use in number representation.
             If not specified, we do not limit the range of values.
         - point:
-            The position of the binary point, counting from the MSB.
+            The position of the binary point, counting from the LSB.
 
     References:
         [1] https://arxiv.org/pdf/1604.03168
@@ -53,7 +53,8 @@ class FixedPointQuantizer(OverriderBase):
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
 
-    def _quantize(self, value, point=None, width = None, compute_overflow_rate=False):
+    def _quantize(self, value, point=None, width=None,
+                  compute_overflow_rate=False):
         point = point or self.point
         width = width or self.width
         # x << (width - point)
@@ -72,7 +73,7 @@ class FixedPointQuantizer(OverriderBase):
         return value / shift
 
     def _apply(self, getter, value):
-        return self._quantize(value, width = self.width, point = self.point)
+        return self._quantize(value, width=self.width, point=self.point)
 
     def info(self, session):
         p = self.point
@@ -184,12 +185,10 @@ class MayoFixedPointQuantizer(FixedPointQuantizer):
         self.scale = round(session.config.retrain.scale)
 
     def _update(self, session):
-        # self._quantize(session.run(self.before), point = self.point,
-        #     width = self.width)
         return
 
 
-class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
+class MayoDFPQuantizer(DGQuantizer):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(width, overflow_rate, should_update)
 
@@ -208,13 +207,6 @@ class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
     def _setup(self, session):
         self.scale = round(session.config.retrain.scale)
 
-    def _update_policy(self, tensor):
-        return
-
-    def _update(self, session):
-        # self._quantize(session.run(self.before), point = self.point,
-        #     width = self.width)
-        return
 
 class FloatingPointQuantizer(QuantizerBase):
     """
@@ -340,5 +332,4 @@ class LogQuantizer(QuantizerBase):
         return value
 
     def _update(self, session):
-        self._quantize(session.run(self.before), self.width, self.point)
         return
