@@ -54,10 +54,12 @@ class FixedPointQuantizer(OverriderBase):
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
 
-    def _quantize(self, value, point=None, width=None,
-                  compute_overflow_rate=False):
-        point = point or self.point
-        width = width or self.width
+    def _quantize(
+            self, value, point=None, width=None, compute_overflow_rate=False):
+        if point is None:
+            point = self.point
+        if width is None:
+            width = self.width
         # x << (width - point)
         shift = util.cast(2 ** (width - point), float)
         value = value * shift
