@@ -198,6 +198,21 @@ class DGTrainableQuantizer(DGQuantizer):
         return self._quantize(value, self.width, self.point)
 
 
+class Recentralize(object):
+    def _recentralize(self, value):
+        # divide them into two groups
+        mean = np.mean(value)
+        # find two central points
+        positives_pos = np.where(value >= mean)
+        positives_ones = util.cast(value >= mean, float)
+        negatives_pos = np.where(value < mean)
+        negatives_ones = util.cast(value < mean, float)
+        postives_mean = np.mean(value[positives_pos])
+        negatives_mean = np.mean(value[negatives_pos])
+
+        return (positives_ones, negatives_ones, postives_mean, negatives_mean)
+
+
 class MayoFixedPointQuantizer(DynamicWidthMixin, FixedPointQuantizer):
     def __init__(self, point, width, should_update=True):
         super().__init__(point, width, should_update)
@@ -222,6 +237,51 @@ class MayoFixedPointQuantizer(DynamicWidthMixin, FixedPointQuantizer):
 
     def _update(self, session):
         session.run(tf.assign(self.width, self._width))
+
+
+class MayoRecentralizedFixedPointQuantizer(MayoFixedPointQuantizer,
+                                           Recentralize):
+    def __init__(self, point, width, should_update=True):
+        super().__init__(point, width, should_update)
+
+    def _reform(self, value, session):
+        np_value = session.run(value)
+        pos_ones, neg_ones, pos_mean, neg_mean = self._recentralize(np_value)
+        positives = (value - pos_mean) * pos_ones
+        negatives = (value - pos_mean) * neg_ones
+        tf.assign(self.pos_ones, pos_ones)
+        tf.assign(self.neg_ones, neg_ones)
+        tf.assign(self.pos_mean, pos_mean)
+        tf.assign(self.neg_mean, neg_mean)
+
+    def _apply(self, value):
+        shape = self.before.shape
+        ones = np.ones(shape=shape)
+        zeros = np.zeros(shape=shape)
+        pos_ones = self.pos_ones = tf.Variable(ones, trainable=False,
+                                               dtype=tf.float32)
+        neg_ones = self.neg_ones = tf.Variable(zeros, trainable=False,
+                                               dtype=tf.float32)
+        pos_mean = self.pos_mean = tf.Variable(0, trainable=False,
+                                               dtype=tf.float32)
+        neg_mean = self.neg_mean = tf.Variable(0, trainable=False,
+                                               dtype=tf.float32)
+
+        positives = (value - pos_mean) * pos_ones
+        negatives = (value - neg_mean) * neg_ones
+        quantized = self._quantize(positives + negatives)
+
+        value = pos_ones * (quantized + pos_mean) + \
+            neg_ones * (quantized + neg_mean)
+        return value
+
+    def _update(self, session):
+        session.run(tf.assign(self.width, self._width))
+        self._reform(self.before, session)
+        return
+
+
+MayoRFPQuantizer = MayoRecentralizedFixedPointQuantizer
 
 
 class MayoDFPQuantizer(DynamicWidthMixin, DGQuantizer):

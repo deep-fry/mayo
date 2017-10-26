@@ -215,6 +215,18 @@ Arguments:
         with open('timeline.json', 'w') as f:
             f.write(chrome_trace)
 
+    def cli_visualize(self):
+        # collect all info
+        session = self._get_session('train')
+        overriders = session.nets[0].overriders
+        meta = {}
+        for o in overriders:
+            meta[o.name] = session.run(o.after)
+        pass
+        """
+        TODO: work on visualize weights!
+        """
+
     def cli_train(self):
         """Performs training.  """
         return self._get_session('train').train()

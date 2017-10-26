@@ -3,7 +3,7 @@ from mayo.override.quantize import (
     ThresholdBinarizer, FixedPointQuantizer,
     CourbariauxQuantizer, DGQuantizer, DGTrainableQuantizer,
     FloatingPointQuantizer, ShiftQuantizer, LogQuantizer, MayoDFPQuantizer,
-    MayoFixedPointQuantizer)
+    MayoFixedPointQuantizer, MayoRFPQuantizer)
 from mayo.override.prune import (
     ThresholdPruner, MeanStdPruner, DynamicNetworkSurgeryPruner,
     MayoDNSPruner)
@@ -17,5 +17,6 @@ __all__ = [
     CourbariauxQuantizer, DGQuantizer, DGTrainableQuantizer,
     FloatingPointQuantizer, FPQuantizer, ShiftQuantizer, LogQuantizer,
     ThresholdPruner, MeanStdPruner, DynamicNetworkSurgeryPruner,
-    DNSPruner, MayoDNSPruner, MayoDFPQuantizer, MayoFixedPointQuantizer
+    DNSPruner, MayoDNSPruner, MayoDFPQuantizer, MayoFixedPointQuantizer,
+    MayoRFPQuantizer
 ]

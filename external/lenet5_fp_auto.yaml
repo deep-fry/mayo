@@ -2,11 +2,13 @@
 model.layers:
     conv0: &overrider
         weights_overrider: &pruner
-            type: mayo.override.MayoFixedPointQuantizer
+            #type: mayo.override.MayoFixedPointQuantizer
+            type: mayo.override.MayoRFPQuantizer  
             point: 1
             width: 4
         biases_overrider:
-            type: mayo.override.MayoFixedPointQuantizer
+            #type: mayo.override.MayoFixedPointQuantizer
+            type: mayo.override.MayoRFPQuantizer
             point: 1
             width: 4
     conv1: {<<: *overrider}

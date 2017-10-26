@@ -163,7 +163,11 @@ class RetrainBase(Train):
             density = valid_elements / float(num_elements)
             metric_value *= density
         if hasattr(o, 'width'):
-            bits = self.run(o.width)
+            # pin the library name to assert
+            if tf.__name__ in type(o.width).__module__:
+                bits = self.run(o.width)
+            else:
+                bits = o.width
             metric_value *= bits
         return metric_value
 
