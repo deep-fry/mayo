@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 
 from mayo.override import util
@@ -175,9 +176,6 @@ class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
 
     def _scale_update(self, update_factor):
         self.scale = round(self.scale * update_factor)
-        if self.point < 1:
-            raise ValueError(
-                'DFP {}, Bitwidth should be bigger than 1'.format(self.point))
 
     def _setup(self, session):
         self.scale = round(session.config.retrain.scale)
@@ -196,7 +194,7 @@ class FloatingPointQuantizer(QuantizerBase):
     representations.
 
     When both exponent_width and mantissa_width are 0, the quantized value can
-    only represent $2^-bias$, which is not very useful.
+    only represent $2^{-bias}$ or 0, which is not very useful.
     """
     def __init__(
             self, exponent_width, exponent_bias, mantissa_width,
@@ -237,7 +235,12 @@ class FloatingPointQuantizer(QuantizerBase):
     def _represent(self, sign, exponent, mantissa):
         # represent the value in floating-point using
         # sign, exponent and mantissa
-        zeros = tf.zeros(sign.shape, dtype=tf.float32)
+        if util.is_constant(sign, exponent, mantissa):
+            zeros = 0
+        elif util.is_numpy(sign, exponent, mantissa):
+            zeros = np.zeros(sign.shape, dtype=np.float32)
+        else:
+            zeros = tf.zeros(sign.shape, dtype=tf.float32)
         value = util.cast(sign, float) * (2.0 ** exponent) * mantissa
         return util.where(sign == 0, zeros, value)
 
@@ -247,7 +250,11 @@ class FloatingPointQuantizer(QuantizerBase):
         return self._represent(sign, exponent, mantissa)
 
     def _apply(self, getter, value):
-        return value + tf.stop_gradient(self._quantize(value) - value)
+        quantized = self._quantize(value)
+        nan = tf.reduce_sum(tf.is_nan(quantized))
+        assertion = tf.Assert(nan == 0, [tf.where(tf.is_nan(quantized))])
+        with tf.control_dependencies([assertion]):
+            return value + tf.stop_gradient(quantized - value)
 
 
 class ShiftQuantizer(FloatingPointQuantizer):
