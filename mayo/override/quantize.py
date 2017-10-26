@@ -238,7 +238,9 @@ class FloatingPointQuantizer(QuantizerBase):
     def _decompose(self, value):
         # decompose a single-precision floating-point into
         # sign, exponent and mantissa components
-        sign = util.cast(value > 0, int) - util.cast(value < 0, int)
+        descriminator = (2 ** self.exponent_bias) / 2
+        sign = util.cast(value > descriminator, int)
+        sign -= util.cast(value < -descriminator, int)
         value = util.abs(value)
         exponent = util.floor(util.log(value, 2))
         mantissa = value / (2 ** exponent)
@@ -253,8 +255,9 @@ class FloatingPointQuantizer(QuantizerBase):
         mantissa = util.round(mantissa * shift) / shift
         # if the mantissa value gets rounded to >= 2 then we need to divide it
         # by 2 and increment exponent by 1
-        mantissa = util.where(mantissa >= 2, mantissa / 2, mantissa)
-        exponent = util.where(mantissa >= 2, exponent + 1, exponent)
+        is_out_of_range = tf.greater_equal(mantissa, 2)
+        mantissa = util.where(is_out_of_range, mantissa / 2, mantissa)
+        exponent = util.where(is_out_of_range, exponent + 1, exponent)
         return sign, exponent, mantissa
 
     def _represent(self, sign, exponent, mantissa):
@@ -263,11 +266,12 @@ class FloatingPointQuantizer(QuantizerBase):
         if util.is_constant(sign, exponent, mantissa):
             zeros = 0
         elif util.is_numpy(sign, exponent, mantissa):
-            zeros = np.zeros(sign.shape, dtype=np.float32)
+            zeros = np.zeros(sign.shape, dtype=np.int32)
         else:
-            zeros = tf.zeros(sign.shape, dtype=tf.float32)
+            zeros = tf.zeros(sign.shape, dtype=tf.int32)
         value = util.cast(sign, float) * (2.0 ** exponent) * mantissa
-        return util.where(sign == 0, zeros, value)
+        return util.where(
+            tf.equal(sign, zeros), util.cast(zeros, float), value)
 
     def _quantize(self, value):
         sign, exponent, mantissa = self._decompose(value)
@@ -276,8 +280,8 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def _apply(self, getter, value):
         quantized = self._quantize(value)
-        nan = tf.reduce_sum(tf.is_nan(quantized))
-        assertion = tf.Assert(nan == 0, [tf.where(tf.is_nan(quantized))])
+        nan = tf.reduce_sum(tf.cast(tf.is_nan(quantized), tf.int32))
+        assertion = tf.Assert(tf.equal(nan, 0), [nan])
         with tf.control_dependencies([assertion]):
             return value + tf.stop_gradient(quantized - value)
 
@@ -294,9 +298,6 @@ class ShiftQuantizer(FloatingPointQuantizer):
         sign, exponent, mantissa = self._transform(sign, exponent, mantissa)
         # mantissa == 1
         return self._represent(sign, exponent, 1)
-
-    def _update(self, session):
-        return
 
 
 class LogQuantizer(QuantizerBase):
@@ -337,6 +338,3 @@ class LogQuantizer(QuantizerBase):
         value = value / shift
         value = 2 ** value * sign
         return value
-
-    def _update(self, session):
-        return
