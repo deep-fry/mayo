@@ -77,7 +77,7 @@ class FixedPointQuantizer(OverriderBase):
         return value / shift
 
     def _apply(self, getter, value):
-        return self._quantize(value, width=self.width, point=self.point)
+        return self._quantize(value)
 
     def info(self, session):
         p = self.point
