@@ -163,7 +163,7 @@ class RetrainBase(Train):
             density = valid_elements / float(num_elements)
             metric_value *= density
         if hasattr(o, 'width'):
-            bits = o.width
+            bits = self.run(o.width)
             metric_value *= bits
         return metric_value
 
