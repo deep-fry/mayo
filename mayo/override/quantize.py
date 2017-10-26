@@ -41,7 +41,7 @@ class FixedPointQuantizer(OverriderBase):
             The number of bits to use in number representation.
             If not specified, we do not limit the range of values.
         - point:
-            The position of the binary point, counting from the MSB.
+            The position of the binary point, counting from the LSB.
 
     References:
         [1] https://arxiv.org/pdf/1604.03168
@@ -54,15 +54,17 @@ class FixedPointQuantizer(OverriderBase):
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
 
-    def _quantize(self, value, point=None, compute_overflow_rate=False):
+    def _quantize(self, value, point=None, width=None,
+                  compute_overflow_rate=False):
         point = point or self.point
+        width = width or self.width
         # x << (width - point)
-        shift = util.cast(2 ** (self.width - point), float)
+        shift = util.cast(2 ** (width - point), float)
         value = value * shift
         # quantize
         value = util.round(value)
         # ensure number is representable without overflow
-        max_value = util.cast(2 ** (self.width - 1), float)
+        max_value = util.cast(2 ** (width - 1), float)
         if compute_overflow_rate:
             overflows = util.logical_or(
                 value < -max_value, value > max_value - 1)
@@ -72,7 +74,7 @@ class FixedPointQuantizer(OverriderBase):
         return value / shift
 
     def _apply(self, getter, value):
-        return self._quantize(value, self.width, self.point)
+        return self._quantize(value, width=self.width, point=self.point)
 
     def info(self, session):
         p = self.point
@@ -164,7 +166,30 @@ class DGTrainableQuantizer(DGQuantizer):
         return self._quantize(value, width, point)
 
 
-class MayoDFPQuantizer(DynamicFixedPointQuantizerBase):
+class MayoFixedPointQuantizer(FixedPointQuantizer):
+    def __init__(self, point, width, should_update=True):
+        super().__init__(point, width, should_update)
+
+    def _threshold_update(self):
+        self.width -= self.scale
+
+    def _scale_roll_back(self):
+        self.width += self.scale
+
+    def _scale_update(self, update_factor):
+        self.scale = round(self.scale * update_factor)
+        if self.point < 1:
+            raise ValueError(
+                'DFP {}, Bitwidth should be bigger than 1'.format(self.point))
+
+    def _setup(self, session):
+        self.scale = round(session.config.retrain.scale)
+
+    def _update(self, session):
+        return
+
+
+class MayoDFPQuantizer(DGQuantizer):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(width, overflow_rate, should_update)
 
@@ -314,5 +339,4 @@ class LogQuantizer(QuantizerBase):
         return value
 
     def _update(self, session):
-        self._quantize(session.run(self.before), self.width, self.point)
         return
