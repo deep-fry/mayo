@@ -178,6 +178,13 @@ class MayoFixedPointQuantizer(FixedPointQuantizer):
     def __init__(self, point, width, should_update=True):
         super().__init__(point, width, should_update)
 
+    def _apply(self, getter, value):
+        name = '{}/width'.format(value.op.name)
+        self.width_var = getter(
+            name, dtype=tf.int32,
+            initializer=self.width, trainable=False)
+        return self._quantize(value, width=self.width_var, point=self.point)
+
     def _threshold_update(self):
         self.width -= self.scale
 
@@ -194,6 +201,7 @@ class MayoFixedPointQuantizer(FixedPointQuantizer):
         self.scale = round(session.config.retrain.scale)
 
     def _update(self, session):
+        tf.assign(self.width_var, self.width)
         return
 
 
