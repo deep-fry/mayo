@@ -7,10 +7,10 @@ from mayo.override.base import OverriderBase
 
 
 class PrunerBase(OverriderBase):
-    def _apply(self, getter, value):
+    def _apply(self, value):
         shape = value.get_shape()
         name = '{}/mask'.format(value.op.name)
-        self._mask = getter(
+        self._mask = self.getter(
             name, dtype=tf.bool, shape=shape,
             initializer=tf.ones_initializer(), trainable=False)
         mask = util.cast(self._mask, float)

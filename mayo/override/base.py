@@ -9,6 +9,15 @@ class OverrideNotAppliedError(Exception):
     """Invoke apply before update.  """
 
 
+class GetterInvokedOutsideApplyError(Exception):
+    """Function getter() is invoked not in apply()."""
+
+
+def _getter_not_initialized(*args, **kwargs):
+    raise GetterInvokedOutsideApplyError(
+        'The function `getter()` should only be invoked in `.apply()`.')
+
+
 class OverriderBase(object):
     """
     Base class for applying overriding operations on a Net.  Please ensure
@@ -22,10 +31,11 @@ class OverriderBase(object):
     def __init__(self, should_update=True):
         super().__init__()
         self.name = None
+        self.getter = _getter_not_initialized
         self.internals = {}
         self.should_update = should_update
 
-    def _apply(self, getter, value):
+    def _apply(self, value):
         """
         Override this method called in `.apply()` to modify the
         variable in `value`.
@@ -44,8 +54,9 @@ class OverriderBase(object):
             return var
         self._applied = True
         self.name = value.op.name
+        self.getter = tracking_getter
         self.before = value
-        self.after = self._apply(tracking_getter, value)
+        self.after = self._apply(value)
         return self.after
 
     def _update(self, session):
@@ -108,9 +119,9 @@ class ChainOverrider(OverriderBase, Sequence):
     def __len__(self):
         return len(self._overriders)
 
-    def _apply(self, getter, value):
+    def _apply(self, value):
         for o in self._overriders:
-            value = o.apply(getter, value)
+            value = o.apply(self.getter, value)
         return value
 
     def _update(self, session):

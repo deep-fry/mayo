@@ -19,7 +19,7 @@ class QuantizerBase(OverriderBase):
     def _quantize(self, value):
         raise NotImplementedError
 
-    def _apply(self, getter, value):
+    def _apply(self, value):
         return self._quantize(value)
 
 
@@ -49,11 +49,19 @@ class FixedPointQuantizer(OverriderBase):
     """
     def __init__(self, point, width=None, should_update=True):
         super().__init__(should_update)
-        self.point = point
-        self.width = width
+        self._point = point
+        self._width = width
         if width is not None and width < 1:
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
+
+    @property
+    def point(self):
+        return self._point
+
+    @property
+    def width(self):
+        return self._width
 
     def _quantize(
             self, value, point=None, width=None, compute_overflow_rate=False):
@@ -67,16 +75,17 @@ class FixedPointQuantizer(OverriderBase):
         # quantize
         value = util.round(value)
         # ensure number is representable without overflow
-        max_value = util.cast(2 ** (width - 1), float)
-        if compute_overflow_rate:
-            overflows = util.logical_or(
-                value < -max_value, value > max_value - 1)
-            return _overflow_rate(overflows)
-        value = util.clip_by_value(value, -max_value, max_value - 1)
+        if width is not None:
+            max_value = util.cast(2 ** (width - 1), float)
+            if compute_overflow_rate:
+                overflows = util.logical_or(
+                    value < -max_value, value > max_value - 1)
+                return _overflow_rate(overflows)
+            value = util.clip_by_value(value, -max_value, max_value - 1)
         # revert bit-shift earlier
         return value / shift
 
-    def _apply(self, getter, value):
+    def _apply(self, value):
         return self._quantize(value)
 
     def info(self, session):
@@ -86,7 +95,34 @@ class FixedPointQuantizer(OverriderBase):
         return self._info_tuple(width=self.width, point=p)
 
 
-class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
+class DynamicMixin(object):
+    def _parameter(self, para_name, dtype, shape, initial, trainable=False):
+        attr_name = '_parameter_{}'.format(para_name)
+        para = getattr(self, attr_name, None)
+        if para is not None:
+            return para
+        name = '{}/{}'.format(self.name, para_name)
+        init = tf.constant_initializer(initial)
+        para = self.getter(
+            name, dtype=dtype, shape=shape,
+            initializer=init, trainable=trainable)
+        setattr(self, attr_name, para)
+        return para
+
+
+class DynamicWidthMixin(DynamicMixin):
+    @property
+    def width(self):
+        return self._parameter('width', tf.int32, [], self._width)
+
+
+class DynamicPointMixin(DynamicMixin):
+    @property
+    def point(self):
+        return self._parameter('point', tf.int32, [], 1)
+
+
+class DynamicFixedPointQuantizerBase(DynamicPointMixin, FixedPointQuantizer):
     """
     a base class to quantize inputs into 2's compliment `width`-bit fixed-point
     values with `point`-bit dynamic range.
@@ -100,19 +136,11 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
             use this information to compute a corresponding binary point using
             an update policy.
     """
-    _init_point = 1
-
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(None, width, should_update=should_update)
         self.overflow_rate = overflow_rate
 
-    def _apply(self, getter, value):
-        if not self.point:
-            name = '{}/point'.format(value.op.name)
-            self.point = getter(
-                name, dtype=tf.int32, shape=[],
-                initializer=tf.constant_initializer(self._init_point),
-                trainable=False)
+    def _apply(self, value):
         return self._quantize(value)
 
     def _update_policy(self, tensor):
@@ -151,45 +179,37 @@ class DGQuantizer(DynamicFixedPointQuantizerBase):
 
 
 class DGTrainableQuantizer(DGQuantizer):
-    """ Backpropagatable precision.  """
-    _init_width = 16
+    """
+    Backpropagatable precision.
+
+    Trainable width, but no gradients can be felt by it at the moment
+    """
+    init_width = 16
 
     def __init__(self, overflow_rate, should_update=True):
         super().__init__(None, None, should_update=should_update)
 
-    def width_var(self, getter, name):
-        if self.width is not None:
-            return self.width
-        # trainable width, but no gradients can be felt by it at the moment
-        name = '{}/width'.format(name)
-        self.width = util.round(getter(
-            name, dtype=tf.float32, shape=[],
-            initializer=tf.constant_initializer(self._init_width),
-            trainable=True))
-        return self.width
+    @property
+    def width(self):
+        var = self._parameter('width', tf.float32, [], self._init_width, True)
+        return util.round(var)
 
-    def _apply(self, getter, value):
-        width = self.width_var(getter, value.op.name)
-        point = self.point_var(getter, value.op.name)
-        return self._quantize(value, width, point)
+    def _apply(self, value):
+        return self._quantize(value, self.width, self.point)
 
 
-class MayoFixedPointQuantizer(FixedPointQuantizer):
+class MayoFixedPointQuantizer(DynamicWidthMixin, FixedPointQuantizer):
     def __init__(self, point, width, should_update=True):
         super().__init__(point, width, should_update)
 
-    def _apply(self, getter, value):
-        name = '{}/width'.format(value.op.name)
-        self.width_var = getter(
-            name, dtype=tf.int32,
-            initializer=self.width, trainable=False)
-        return self._quantize(value, width=self.width_var, point=self.point)
+    def _apply(self, value):
+        return self._quantize(value)
 
     def _threshold_update(self):
-        self.width -= self.scale
+        self._width -= self.scale
 
     def _scale_roll_back(self):
-        self.width += self.scale
+        self._width += self.scale
 
     def _scale_update(self, update_factor):
         self.scale = round(self.scale * update_factor)
@@ -201,11 +221,10 @@ class MayoFixedPointQuantizer(FixedPointQuantizer):
         self.scale = round(session.config.retrain.scale)
 
     def _update(self, session):
-        tf.assign(self.width_var, self.width)
-        return
+        session.run(tf.assign(self.width, self._width))
 
 
-class MayoDFPQuantizer(DGQuantizer):
+class MayoDFPQuantizer(DynamicWidthMixin, DGQuantizer):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(width, overflow_rate, should_update)
 
@@ -294,7 +313,7 @@ class FloatingPointQuantizer(QuantizerBase):
         sign, exponent, mantissa = self._transform(sign, exponent, mantissa)
         return self._represent(sign, exponent, mantissa)
 
-    def _apply(self, getter, value):
+    def _apply(self, value):
         quantized = self._quantize(value)
         nan = tf.reduce_sum(tf.cast(tf.is_nan(quantized), tf.int32))
         assertion = tf.Assert(tf.equal(nan, 0), [nan])
