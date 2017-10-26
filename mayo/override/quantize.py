@@ -1,6 +1,7 @@
 import numpy as np
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.override import util
 from mayo.override.base import OverriderBase
 
@@ -142,6 +143,11 @@ class DGQuantizer(DynamicFixedPointQuantizerBase):
             rate = self._quantize(tensor, point=p, compute_overflow_rate=True)
             if rate <= self.overflow_rate:
                 return p
+        log.warn(
+            'Cannot find a binary point position that satisfies the '
+            'overflow_rate budget, using integer (point at the right '
+            'of LSB) instead.')
+        return w
 
 
 class DGTrainableQuantizer(DGQuantizer):
