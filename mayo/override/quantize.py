@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
+from mayo.util import memoize_property
 from mayo.override import util
 from mayo.override.base import OverriderBase
 
@@ -22,6 +23,13 @@ class QuantizerBase(OverriderBase):
     def _apply(self, value):
         return self._quantize(value)
 
+    def _parameter(self, para_name, initial, dtype, shape, trainable=False):
+        name = '{}/{}'.format(self.name, para_name)
+        init = tf.constant_initializer(initial)
+        return self.getter(
+            name, dtype=dtype, shape=shape,
+            initializer=init, trainable=trainable)
+
 
 class ThresholdBinarizer(QuantizerBase):
     def __init__(self, threshold):
@@ -32,7 +40,7 @@ class ThresholdBinarizer(QuantizerBase):
         return util.binarize(value, self.threshold)
 
 
-class FixedPointQuantizer(OverriderBase):
+class FixedPointQuantizer(QuantizerBase):
     """
     Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
     dynamic range.
@@ -47,7 +55,9 @@ class FixedPointQuantizer(OverriderBase):
     References:
         [1] https://arxiv.org/pdf/1604.03168
     """
-    def __init__(self, point, width=None, should_update=True):
+    _defaults = {'width': 16, 'point': 1}
+
+    def __init__(self, point=None, width=None, should_update=True):
         super().__init__(should_update)
         self._point = point
         self._width = width
@@ -55,13 +65,20 @@ class FixedPointQuantizer(OverriderBase):
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
 
-    @property
-    def point(self):
-        return self._point
-
-    @property
+    @memoize_property
     def width(self):
-        return self._width
+        init = self._width or self._defaults['width']
+        return self._parameter('width', init, tf.float32, [])
+
+    @memoize_property
+    def point(self):
+        init = self._point or self._defaults['point']
+        return self._parameter('point', init, tf.float32, [], 1)
+
+    def eval(self, session, attribute):
+        if util.is_tensor(attribute):
+            return session.run(attribute)
+        return attribute
 
     def _quantize(
             self, value, point=None, width=None, compute_overflow_rate=False):
@@ -70,7 +87,7 @@ class FixedPointQuantizer(OverriderBase):
         if width is None:
             width = self.width
         # x << (width - point)
-        shift = util.cast(2 ** (width - point), float)
+        shift = 2.0 ** (util.round(width) - util.round(point))
         value = value * shift
         # quantize
         value = util.round(value)
@@ -89,40 +106,12 @@ class FixedPointQuantizer(OverriderBase):
         return self._quantize(value)
 
     def info(self, session):
-        p = self.point
-        if isinstance(p, tf.Variable):
-            p = int(session.run(p))
-        return self._info_tuple(width=self.width, point=p)
+        width = int(self.eval(session, self.width))
+        point = int(self.eval(session, self.point))
+        return self._info_tuple(width=width, point=point)
 
 
-class DynamicMixin(object):
-    def _parameter(self, para_name, dtype, shape, initial, trainable=False):
-        attr_name = '_parameter_{}'.format(para_name)
-        para = getattr(self, attr_name, None)
-        if para is not None:
-            return para
-        name = '{}/{}'.format(self.name, para_name)
-        init = tf.constant_initializer(initial)
-        para = self.getter(
-            name, dtype=dtype, shape=shape,
-            initializer=init, trainable=trainable)
-        setattr(self, attr_name, para)
-        return para
-
-
-class DynamicWidthMixin(DynamicMixin):
-    @property
-    def width(self):
-        return self._parameter('width', tf.int32, [], self._width)
-
-
-class DynamicPointMixin(DynamicMixin):
-    @property
-    def point(self):
-        return self._parameter('point', tf.int32, [], 1)
-
-
-class DynamicFixedPointQuantizerBase(DynamicPointMixin, FixedPointQuantizer):
+class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
     """
     a base class to quantize inputs into 2's compliment `width`-bit fixed-point
     values with `point`-bit dynamic range.
@@ -140,9 +129,6 @@ class DynamicFixedPointQuantizerBase(DynamicPointMixin, FixedPointQuantizer):
         super().__init__(None, width, should_update=should_update)
         self.overflow_rate = overflow_rate
 
-    def _apply(self, value):
-        return self._quantize(value)
-
     def _update_policy(self, tensor):
         raise NotImplementedError
 
@@ -152,10 +138,14 @@ class DynamicFixedPointQuantizerBase(DynamicPointMixin, FixedPointQuantizer):
 
 
 class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):
+    _initial_point = 1
+
     def _update_policy(self, tensor):
         """ algorithm described in: https://arxiv.org/pdf/1412.7024  """
-        p = self._init_point
-        rate = self._quantize(tensor, point=p, compute_overflow_rate=True)
+        w = self.eval(self.width)
+        p = self._initial_point
+        rate = self._quantize(
+            tensor, width=w, point=p, compute_overflow_rate=True)
         if rate > self.overflow_rate:
             p -= 1
         elif 2 * rate <= self.overflow_rate:
@@ -191,35 +181,14 @@ class DGTrainableQuantizer(DGQuantizer):
 
     @property
     def width(self):
-        var = self._parameter('width', tf.float32, [], self._init_width, True)
+        var = self._parameter('width', self._init_width, tf.float32, [], True)
         return util.round(var)
 
     def _apply(self, value):
         return self._quantize(value, self.width, self.point)
 
 
-class Recentralize(object):
-    def _recentralize(self, value):
-        # divide them into two groups
-        mean = np.mean(value)
-        # find two central points
-        positives_pos = np.where(value >= mean)
-        positives_ones = util.cast(value >= mean, float)
-        negatives_pos = np.where(value < mean)
-        negatives_ones = util.cast(value < mean, float)
-        postives_mean = np.mean(value[positives_pos])
-        negatives_mean = np.mean(value[negatives_pos])
-
-        return (positives_ones, negatives_ones, postives_mean, negatives_mean)
-
-
-class MayoFixedPointQuantizer(DynamicWidthMixin, FixedPointQuantizer):
-    def __init__(self, point, width, should_update=True):
-        super().__init__(point, width, should_update)
-
-    def _apply(self, value):
-        return self._quantize(value)
-
+class MayoFixedPointQuantizer(FixedPointQuantizer):
     def _threshold_update(self):
         self._width -= self.scale
 
@@ -239,52 +208,58 @@ class MayoFixedPointQuantizer(DynamicWidthMixin, FixedPointQuantizer):
         session.run(tf.assign(self.width, self._width))
 
 
-class MayoRecentralizedFixedPointQuantizer(MayoFixedPointQuantizer,
-                                           Recentralize):
+class MayoRecentralizedFixedPointQuantizer(MayoFixedPointQuantizer):
     def __init__(self, point, width, should_update=True):
         super().__init__(point, width, should_update)
+
+    def _recentralize(self, value):
+        # divide them into two groups
+        mean = util.mean(value)
+        # find two central points
+        positives = value >= mean
+        negatives = value < mean
+        positives_ones = util.cast(positives, float)
+        negatives_ones = util.cast(negatives, float)
+        postives_mean = util.mean(value[util.where(positives)])
+        negatives_mean = util.mean(value[util.where(negatives)])
+        return (positives_ones, negatives_ones, postives_mean, negatives_mean)
 
     def _reform(self, value, session):
         np_value = session.run(value)
         pos_ones, neg_ones, pos_mean, neg_mean = self._recentralize(np_value)
+        # FIXME variables not used
         positives = (value - pos_mean) * pos_ones
         negatives = (value - pos_mean) * neg_ones
-        tf.assign(self.pos_ones, pos_ones)
-        tf.assign(self.neg_ones, neg_ones)
-        tf.assign(self.pos_mean, pos_mean)
-        tf.assign(self.neg_mean, neg_mean)
+        ops = [
+            tf.assign(self.pos_ones, pos_ones),
+            tf.assign(self.neg_ones, neg_ones),
+            tf.assign(self.pos_mean, pos_mean),
+            tf.assign(self.neg_mean, neg_mean),
+        ]
+        session.run(ops)
 
     def _apply(self, value):
         shape = self.before.shape
         ones = np.ones(shape=shape)
         zeros = np.zeros(shape=shape)
-        pos_ones = self.pos_ones = tf.Variable(ones, trainable=False,
-                                               dtype=tf.float32)
-        neg_ones = self.neg_ones = tf.Variable(zeros, trainable=False,
-                                               dtype=tf.float32)
-        pos_mean = self.pos_mean = tf.Variable(0, trainable=False,
-                                               dtype=tf.float32)
-        neg_mean = self.neg_mean = tf.Variable(0, trainable=False,
-                                               dtype=tf.float32)
-
-        positives = (value - pos_mean) * pos_ones
-        negatives = (value - neg_mean) * neg_ones
+        # FIXME do not use tf.Variable, please use custom getter `self.getter`
+        self.pos_ones = tf.Variable(ones, trainable=False, dtype=tf.float32)
+        self.neg_ones = tf.Variable(zeros, trainable=False, dtype=tf.float32)
+        self.pos_mean = tf.Variable(0, trainable=False, dtype=tf.float32)
+        self.neg_mean = tf.Variable(0, trainable=False, dtype=tf.float32)
+        positives = (value - self.pos_mean) * self.pos_ones
+        negatives = (value - self.neg_mean) * self.neg_ones
         quantized = self._quantize(positives + negatives)
-
-        value = pos_ones * (quantized + pos_mean) + \
-            neg_ones * (quantized + neg_mean)
+        value = self.pos_ones * (quantized + self.pos_mean)
+        value += self.neg_ones * (quantized + self.neg_mean)
         return value
 
     def _update(self, session):
         session.run(tf.assign(self.width, self._width))
         self._reform(self.before, session)
-        return
 
 
-MayoRFPQuantizer = MayoRecentralizedFixedPointQuantizer
-
-
-class MayoDFPQuantizer(DynamicWidthMixin, DGQuantizer):
+class MayoDynamicFixedPointQuantizer(DGQuantizer):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(width, overflow_rate, should_update)
 

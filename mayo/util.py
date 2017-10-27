@@ -13,7 +13,7 @@ def memoize_method(func):
     """
     @functools.wraps(func)
     def wrapped(self, *args, **kwargs):
-        name = '_' + func.__name__
+        name = '_memoize_{}'.format(func.__name__)
         try:
             return getattr(self, name)
         except AttributeError:

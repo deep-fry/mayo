@@ -16,7 +16,7 @@ def is_numpy(*args):
 
 
 def is_tensor(*args):
-    return any(isinstance(a, tf.Tensor) for a in args)
+    return any(isinstance(a, (tf.Tensor, tf.Variable)) for a in args)
 
 
 def cast(value, dtype):
@@ -49,6 +49,14 @@ def sum(value):
     if is_numpy(value):
         return np.sum(value)
     return tf.reduce_sum(value)
+
+
+def mean(value):
+    if is_constant(value):
+        raise TypeError
+    if is_numpy(value):
+        return np.mean(value)
+    return tf.reduce_mean(value)
 
 
 def count(value):
