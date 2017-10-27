@@ -5,6 +5,8 @@ import time
 
 import yaml
 import tensorflow as tf
+import numpy as np
+
 from docopt import docopt
 
 from mayo.log import log
@@ -220,12 +222,26 @@ Arguments:
         session = self._get_session('train')
         overriders = session.nets[0].overriders
         meta = {}
+        picked = []
         for o in overriders:
             meta[o.name] = session.run(o.after)
+            if 'conv1' in o.name or 'fc1' in o.name:
+                picked.append(meta[o.name])
         pass
-        """
-        TODO: work on visualize weights!
-        """
+        import pandas as pd
+        import ggplot
+        for name, data in meta.items():
+            df = pd.DataFrame({
+                name: meta[name].flatten()
+            })
+            df = pd.melt(df)
+            p = ggplot.ggplot(
+                ggplot.aes(x='value', color='variable'), data=df) \
+                + ggplot.geom_histogram()
+            directory = './plots/'
+            name = name.replace('/', '_')
+            p.save(directory + "{}.png".format(name))
+
 
     def cli_train(self):
         """Performs training.  """
