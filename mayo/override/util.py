@@ -35,17 +35,26 @@ def cast(value, dtype):
     return tf.cast(value, dtypes[dtype])
 
 
-def where(bool_expr, true_value, false_value):
-    if is_constant(bool_expr, true_value, false_value):
-        return true_value if bool_expr else false_value
-    if is_numpy(bool_expr, true_value, false_value):
+def _constants_not_accepted(func):
+    raise TypeError('{} does not accept constants as argmuents.'.format(func))
+
+
+def where(bool_expr, true_value=None, false_value=None):
+    args = [
+        bool_expr,
+        true_value if true_value is not None else bool_expr,
+        false_value if false_value is not None else bool_expr,
+    ]
+    if is_constant(args):
+        _constants_not_accepted(where)
+    if is_numpy(args):
         return np.where(bool_expr, true_value, false_value)
     return tf.where(bool_expr, true_value, false_value)
 
 
 def sum(value):
     if is_constant(value):
-        raise TypeError
+        _constants_not_accepted(where)
     if is_numpy(value):
         return np.sum(value)
     return tf.reduce_sum(value)
@@ -53,7 +62,7 @@ def sum(value):
 
 def mean(value):
     if is_constant(value):
-        raise TypeError
+        _constants_not_accepted(where)
     if is_numpy(value):
         return np.mean(value)
     return tf.reduce_mean(value)
@@ -61,7 +70,7 @@ def mean(value):
 
 def count(value):
     if is_constant(value):
-        raise TypeError
+        _constants_not_accepted(where)
     if is_numpy(value):
         return value.size
     return value.shape.num_elements()
@@ -113,7 +122,7 @@ def log(value, base=None):
 
 def _binary_bool_operation(a, b, op):
     if is_constant(a, b):
-        raise TypeError('Element-wise operator not supported on scalars.')
+        _constants_not_accepted('Element-wise operation')
     if is_numpy(a, b):
         return getattr(np, op)(a, b)
     return getattr(tf, op)(a, b)
