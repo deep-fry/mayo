@@ -179,56 +179,60 @@ class DGTrainableQuantizer(DGQuantizer):
         return self._quantize(value, self.width, self.point)
 
 
+class Recentralizer(QuantizerBase):
+    def __init__(self, quantizer=None, should_update=True):
+        super().__init__(should_update)
+        self.quantizer = quantizer
 
-class MayoRecentralizedFixedPointQuantizer(MayoFixedPointQuantizer):
-    def __init__(self, point, width, should_update=True):
-        super().__init__(point, width, should_update)
+    @memoize_property
+    def positives(self):
+        shape = self.before.shape
+        ones = tf.ones(shape=shape)
+        return self._parameter('positives', ones, tf.int32, shape)
 
-    def _recentralize(self, value):
+    @memoize_property
+    def negatives(self):
+        return util.logical_not(self.positives)
+
+    @memoize_property
+    def posmean(self):
+        var = self._parameter('posmean', 1, tf.float32, [])
+        return self.quantizer._quantize(var)
+
+    @memoize_property
+    def negmean(self):
+        var = self._quantize(self._parameter('negmean', -1, tf.float32, []))
+        return self.quantizer._quantize(var)
+
+    def _apply(self, value):
+        positives = util.cast(self.positives, float)
+        negatives = util.cast(self.negatives, float)
+        positives_centralized = positives * (value - self.posmean)
+        negatives_centralized = negatives * (value - self.negmean)
+        quantized = self._quantize(
+            positives_centralized + negatives_centralized)
+        value = positives * (quantized + self.posmean)
+        value += negatives * (quantized + self.negmean)
+        return value
+
+    def _update(self, session):
+        # update internal quantizer
+        self.quantizer.update(session)
+        # update positives mask and mean values
+        value = session.run(self.before)
         # divide them into two groups
         mean = util.mean(value)
         # find two central points
         positives = value >= mean
-        negatives = value < mean
-        positives_ones = util.cast(positives, float)
-        negatives_ones = util.cast(negatives, float)
-        postives_mean = util.mean(value[util.where(positives)])
-        negatives_mean = util.mean(value[util.where(negatives)])
-        return (positives_ones, negatives_ones, postives_mean, negatives_mean)
-
-    def _reform(self, value, session):
-        np_value = session.run(value)
-        pos_ones, neg_ones, pos_mean, neg_mean = self._recentralize(np_value)
-        # FIXME variables not used
-        positives = (value - pos_mean) * pos_ones
-        negatives = (value - pos_mean) * neg_ones
+        negatives = util.logical_not(positives)
+        posmean = util.mean(value[util.where(positives)])
+        negmean = util.mean(value[util.where(negatives)])
         ops = [
-            tf.assign(self.pos_ones, pos_ones),
-            tf.assign(self.neg_ones, neg_ones),
-            tf.assign(self.pos_mean, pos_mean),
-            tf.assign(self.neg_mean, neg_mean),
+            tf.assign(self.positives, positives),
+            tf.assign(self.posmean, posmean),
+            tf.assign(self.negmean, negmean),
         ]
         session.run(ops)
-
-    def _apply(self, value):
-        shape = self.before.shape
-        ones = np.ones(shape=shape)
-        zeros = np.zeros(shape=shape)
-        # FIXME do not use tf.Variable, please use custom getter `self.getter`
-        self.pos_ones = tf.Variable(ones, trainable=False, dtype=tf.float32)
-        self.neg_ones = tf.Variable(zeros, trainable=False, dtype=tf.float32)
-        self.pos_mean = tf.Variable(0, trainable=False, dtype=tf.float32)
-        self.neg_mean = tf.Variable(0, trainable=False, dtype=tf.float32)
-        positives = (value - self.pos_mean) * self.pos_ones
-        negatives = (value - self.neg_mean) * self.neg_ones
-        quantized = self._quantize(positives + negatives)
-        value = self.pos_ones * (quantized + self.pos_mean)
-        value += self.neg_ones * (quantized + self.neg_mean)
-        return value
-
-    def _update(self, session):
-        session.run(tf.assign(self.width, self._width))
-        self._reform(self.before, session)
 
 
 class FloatingPointQuantizer(QuantizerBase):
