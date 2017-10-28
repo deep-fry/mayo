@@ -1,37 +1,11 @@
 ---
 model.layers:
     conv1: &overrider
-        weights_overrider:
+        weights_overrider: &pruner
             type: mayo.override.DNSPruner
             c_rate: 1
-        biases_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-    conv2:
-        weights_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-        biases_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-    fc3:
-        weights_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-        biases_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-    fc4:
-        weights_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-        biases_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-    logits:
-        weights_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
-        biases_overrider:
-            type: mayo.override.DNSPruner
-            c_rate: 1
+        biases_overrider: {<<: *pruner}
+    conv2: {<<: *overrider}
+    fc3: {<<: *overrider}
+    fc4: {<<: *overrider}
+    logits: {<<: *overrider}

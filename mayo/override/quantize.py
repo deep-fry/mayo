@@ -23,13 +23,6 @@ class QuantizerBase(OverriderBase):
     def _apply(self, value):
         return self._quantize(value)
 
-    def _parameter(self, para_name, initial, dtype, shape, trainable=False):
-        name = '{}/{}'.format(self.name, para_name)
-        init = tf.constant_initializer(initial)
-        return self.getter(
-            name, dtype=dtype, shape=shape,
-            initializer=init, trainable=trainable)
-
 
 class ThresholdBinarizer(QuantizerBase):
     def __init__(self, threshold):
@@ -82,10 +75,8 @@ class FixedPointQuantizer(QuantizerBase):
 
     def _quantize(
             self, value, point=None, width=None, compute_overflow_rate=False):
-        if point is None:
-            point = self.point
-        if width is None:
-            width = self.width
+        point = self.point if point is None else point
+        width = self.width if width is None else width
         # x << (width - point)
         shift = 2.0 ** (util.round(width) - util.round(point))
         value = value * shift
@@ -188,25 +179,6 @@ class DGTrainableQuantizer(DGQuantizer):
         return self._quantize(value, self.width, self.point)
 
 
-class MayoFixedPointQuantizer(FixedPointQuantizer):
-    def _threshold_update(self):
-        self._width -= self.scale
-
-    def _scale_roll_back(self):
-        self._width += self.scale
-
-    def _scale_update(self, update_factor):
-        self.scale = round(self.scale * update_factor)
-        if self.point < 1:
-            raise ValueError(
-                'DFP {}, Bitwidth should be bigger than 1'.format(self.point))
-
-    def _setup(self, session):
-        self.scale = round(session.config.retrain.scale)
-
-    def _update(self, session):
-        session.run(tf.assign(self.width, self._width))
-
 
 class MayoRecentralizedFixedPointQuantizer(MayoFixedPointQuantizer):
     def __init__(self, point, width, should_update=True):
@@ -259,23 +231,6 @@ class MayoRecentralizedFixedPointQuantizer(MayoFixedPointQuantizer):
         self._reform(self.before, session)
 
 
-class MayoDynamicFixedPointQuantizer(DGQuantizer):
-    def __init__(self, width, overflow_rate, should_update=True):
-        super().__init__(width, overflow_rate, should_update)
-
-    def _threshold_update(self):
-        self.width -= self.scale
-
-    def _scale_roll_back(self):
-        self.width += self.scale
-
-    def _scale_update(self, update_factor):
-        self.scale = round(self.scale * update_factor)
-
-    def _setup(self, session):
-        self.scale = round(session.config.retrain.scale)
-
-
 class FloatingPointQuantizer(QuantizerBase):
     """
     Minifloat quantization.
@@ -306,8 +261,11 @@ class FloatingPointQuantizer(QuantizerBase):
                 'where equalities must be exclusive.')
 
     def _decompose(self, value):
-        # decompose a single-precision floating-point into
-        # sign, exponent and mantissa components
+        """
+        Decompose a single-precision floating-point into
+        sign, exponent and mantissa components.
+        """
+        # smallest non-zero floating point
         descriminator = (2 ** self.exponent_bias) / 2
         sign = util.cast(value > descriminator, int)
         sign -= util.cast(value < -descriminator, int)
@@ -317,7 +275,7 @@ class FloatingPointQuantizer(QuantizerBase):
         return sign, exponent, mantissa
 
     def _transform(self, sign, exponent, mantissa):
-        # clip exponent and quantize mantissa
+        """ Clip exponent and quantize mantissa.  """
         exponent_min = self.exponent_bias
         exponent_max = exponent_min + 2 ** self.exponent_width - 1
         exponent = util.clip_by_value(exponent, exponent_min, exponent_max)
@@ -331,8 +289,10 @@ class FloatingPointQuantizer(QuantizerBase):
         return sign, exponent, mantissa
 
     def _represent(self, sign, exponent, mantissa):
-        # represent the value in floating-point using
-        # sign, exponent and mantissa
+        """
+        Represent the value in floating-point using
+        sign, exponent and mantissa.
+        """
         if util.is_constant(sign, exponent, mantissa):
             zeros = 0
         elif util.is_numpy(sign, exponent, mantissa):

@@ -80,25 +80,3 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         mask = util.logical_or(mask, on_mask)
         off_mask = util.abs(var) > self.off_factor * threshold
         return util.logical_and(mask, off_mask)
-
-
-class MayoDNSPruner(DynamicNetworkSurgeryPruner):
-    def __init__(
-            self, c_rate, on_factor=1.1, off_factor=0.9, should_update=True):
-        super().__init__(c_rate, on_factor, off_factor, should_update)
-
-    def _updated_mask(self, var, mask, session):
-        return super()._updated_mask(var, mask, session)
-
-    def _threshold_update(self):
-        self.alpha += self.scale
-        log.info('inside overrider, alpha is {}'.format(self.alpha))
-
-    def _scale_roll_back(self):
-        self.alpha -= self.scale
-
-    def _scale_update(self, update_factor):
-        self.scale = self.scale * update_factor
-
-    def _setup(self, session):
-        self.scale = session.config.retrain.scale

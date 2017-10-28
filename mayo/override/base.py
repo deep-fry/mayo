@@ -35,6 +35,14 @@ class OverriderBase(object):
         self.internals = {}
         self.should_update = should_update
 
+    def _parameter(self, para_name, initial, dtype, shape, trainable=False):
+        """ `tf.Variable`-based overrider hyperparameter.  """
+        name = '{}/{}'.format(self.name, para_name)
+        init = tf.constant_initializer(initial)
+        return self.getter(
+            name, dtype=dtype, shape=shape,
+            initializer=init, trainable=trainable)
+
     def _apply(self, value):
         """
         Override this method called in `.apply()` to modify the
