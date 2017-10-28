@@ -227,17 +227,13 @@ Arguments:
             meta[o.name] = session.run(o.after)
             if 'conv1' in o.name or 'fc1' in o.name:
                 picked.append(meta[o.name])
-        pass
         import pandas as pd
         import ggplot
         for name, data in meta.items():
-            df = pd.DataFrame({
-                name: meta[name].flatten()
-            })
+            df = pd.DataFrame({name: meta[name].flatten()})
             df = pd.melt(df)
-            p = ggplot.ggplot(
-                ggplot.aes(x='value', color='variable'), data=df) \
-                + ggplot.geom_histogram()
+            p = ggplot.ggplot(ggplot.aes(x='value', color='variable'), data=df)
+            p += ggplot.geom_histogram(bins=1024)
             directory = './plots/'
             name = name.replace('/', '_')
             p.save(directory + "{}.png".format(name))
