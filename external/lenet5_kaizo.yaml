@@ -1,18 +1,19 @@
 ---
 model.layers:
     _quantizer: &quantizer
-        type: mayo.override.FloatingPointQuantizer
-        exponent_width: 8
-        exponent_bias: -127
-        mantissa_width: 3
+        type: mayo.override.FixedPointQuantizer
+        width: 5
+        point: 2
         should_update: true
     _pruner: &pruner
         type: mayo.override.DNSPruner
         c_rate: 4
         should_update: false
     conv0: &overrider
-        weights_overrider: &pnq [*pruner, *quantizer]
+        weights_overrider: &composition
+            - *quantizer
+            # - *pruner
         activation_overrider: *quantizer
-        biases_overrider: *pnq
+        biases_overrider: *composition
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
