@@ -282,10 +282,7 @@ Arguments:
         info = session.info()
         print(info['variables'].format())
         print(info['layers'].format())
-        if not isinstance(self.session, Train):
-            return
-        for overrider_cls, table in self.session.overrider_info().items():
-            overrider_cls.finalize_info(table)
+        for table in info.get('overriders', {}).values():
             print(table.format())
 
     def cli_reset_num_epochs(self):
