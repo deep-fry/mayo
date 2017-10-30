@@ -5,6 +5,50 @@ import tensorflow as tf
 from mayo.log import log
 from mayo.session.train import Train
 
+class Overrider_info(object):
+    def __init__(self, overriders_info, overriders):
+        self.max_ths = {}
+        self.ths = {}
+        self.scales = {}
+        self.scale_update_factors = {}
+        self.targets = {}
+
+        for meta in overriders_info:
+            scale_dict = {}
+            update_dict = {}
+            th_dict = {}
+            th_max_dict = {}
+            for o in overriders:
+                if o.__class__.__name__ in meta.type:
+                    scale_dict[o.name] = meta.range['scale']
+                    update_dict[o.name] = meta.scale_update_factor
+                    th_dict[o.name] = meta.range['from']
+                    th_max_dict[o.name] = meta.range['to']
+                    cls_name = o.__class__.__name__
+            if scale_dict == {}:
+                raise ValueError('{} is not found in overrider definitions,'
+                    'but has specified as a target'.format(meta.type))
+            self.scales[cls_name] = scale_dict
+            self.ths[cls_name] = th_dict
+            self.max_ths[cls_name] = th_max_dict
+            self.scale_update_factors[cls_name] = update_dict
+            self.targets[cls_name] = str(meta.target)
+
+    def get(self, overrider, info_type):
+        cls_name = overrider.__class__.__name__
+        if info_type == 'end_threshold':
+            return self.max_ths[cls_name][overrider.name]
+        elif info_type == 'threshold':
+            return self.ths[cls_name][overrider.name]
+        elif info_type == 'scale':
+            return self.scales[cls_name][overrider.name]
+        elif info_type == 'scale_factor':
+            return self.scale_update_factors[cls_name][overrider.name]
+        elif info_type == 'target':
+            return self.targets[cls_name]
+        else:
+            raise ValueError('{} is not a collected info key.'
+                    .format(info_type))
 
 class RetrainBase(Train):
     def retrain(self):
@@ -21,11 +65,21 @@ class RetrainBase(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
+
+    def _init_scales(self):
+        # define initial scale
+        overriders_info = self.config.retrain.overriders
+        self.info = Overrider_info(overriders_info, self.nets[0].overriders)
+        x = self.nets[0].overriders[1]
+        x2 = self.info.get(x, 'target')
+        import pdb; pdb.set_trace()
+        return
+
     def _init_retrain(self):
+        self._init_scales()
         self._reset_stats()
         self._reset_vars()
-        for o in self.nets[0].overriders:
-            o._setup(self)
+
         self.threshold_name = str(self.config.retrain.name)
         self.profile_overrider(self.threshold_name, 'scale', start=True)
         self.profile_for_one_epoch()
@@ -92,10 +146,11 @@ class RetrainBase(Train):
         scales = {}
         for o in self.nets[0].overriders:
             name = o.name
-            # d[name] = self.run(o.after).size
             d[name] = self._metric_clac(o)
             thresholds[name] = getattr(o, threshold_name)
             scales[name] = getattr(o, scale_name)
+
+
         check_bias = self.config.retrain.bias
         for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
