@@ -445,5 +445,16 @@ class Net(BaseNet):
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
+    @one_to_one
+    def instantiate_hadamard(self, tensor, params):
+        import scipy
+        # generate a hadmard matrix
+        dim = int(tensor.shape[3])
+        hadamard_matrix = scipy.linalg.hadamard(dim)
+        hadamard_matrix = tf.constant(hadamard_matrix, dtype = tf.float32)
+        shape = tf.unstack(tf.shape(tensor))
+        tensor_reshaped = tf.reshape(tensor, [-1, dim])
+        return tf.reshape(tf.matmul(tensor_reshaped, hadamard_matrix), shape=tensor.shape)
+
     def instantiate_concat(self, tensors, params):
         return [tf.concat(tensors, **self._use_name_not_scope(params))]
