@@ -117,8 +117,7 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
         raise NotImplementedError
 
     def _update(self, session):
-        p = self._update_policy(session.run(self.before))
-        session.run(tf.assign(self.point, p))
+        self.point = self._update_policy(session.run(self.before))
 
 
 class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):
@@ -156,17 +155,12 @@ class DGTrainableQuantizer(DGQuantizer):
     """
     Backpropagatable precision.
 
-    Trainable width, but no gradients can be felt by it at the moment
+    Trainable width, but no gradients can be felt by it at the moment.
     """
-    init_width = 16
+    width = Parameter('width', 16, [], int, trainable=True)
 
     def __init__(self, overflow_rate, should_update=True):
         super().__init__(None, None, should_update=should_update)
-
-    @property
-    def width(self):
-        var = self._parameter('width', self._init_width, tf.float32, [], True)
-        return util.round(var)
 
     def _apply(self, value):
         return self._quantize(value, self.width, self.point)
