@@ -171,19 +171,22 @@ class Session(object):
         return overrider_info
 
     def run(self, ops, **kwargs):
-        # ensure variables are initialized
-        uninit_vars = []
-        for var in self.global_variables():
-            if var not in self.initialized_variables:
-                uninit_vars.append(var)
-        if uninit_vars:
-            desc = ', '.join(v.op.name for v in uninit_vars)
-            log.warn('Variables are not initialized: {}'.format(desc))
-            with self.as_default():
+        with self.as_default():
+            # ensure variables are initialized
+            uninit_vars = []
+            for var in self.global_variables():
+                if var not in self.initialized_variables:
+                    uninit_vars.append(var)
+            if uninit_vars:
+                desc = ', '.join(v.op.name for v in uninit_vars)
+                log.warn('Variables are not initialized: {}'.format(desc))
                 self.tf_session.run(tf.variables_initializer(uninit_vars))
-            self.initialized_variables += uninit_vars
-        # session run
-        return self.tf_session.run(ops, **kwargs)
+                self.initialized_variables += uninit_vars
+            # parameter assignments in overriders
+            for o in self.nets[0].overriders:
+                o.assign_parameters(self.tf_session)
+            # session run
+            return self.tf_session.run(ops, **kwargs)
 
     def _preprocess(self):
         with self.as_default():

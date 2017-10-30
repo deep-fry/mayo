@@ -103,13 +103,16 @@ Arguments:
         usage_meta['commands'] = '\n'.join(descriptions)
         return self.doc() + self._USAGE.format(**usage_meta)
 
-    def _validate_config(self, keys, action):
+    def _validate_config(self, keys, action, exit=True):
         for k in keys:
             if k in self.config:
                 continue
-            log.error_exit(
+            printer = log.error_exit if exit else log.error
+            printer(
                 'Please ensure config content {!r} is imported before '
                 'executing {!r}.'.format(k, action))
+            return False
+        return True
 
     _model_keys = [
         'model.name',
@@ -238,7 +241,6 @@ Arguments:
             name = name.replace('/', '_')
             p.save(directory + "{}.png".format(name))
 
-
     def cli_train(self):
         """Performs training.  """
         return self._get_session('train').train()
@@ -273,15 +275,11 @@ Arguments:
     def cli_info(self):
         """Prints parameter and layer info of the model.  """
         keys = self._model_keys
-        self._validate_config(keys, 'info')
-        config = self.config
-        batch_size_per_gpu = config.get('system.batch_size_per_gpu', None)
-        images_shape = (batch_size_per_gpu, ) + config.image_shape()
-        labels_shape = (batch_size_per_gpu, config.num_classes())
-        with tf.Graph().as_default():
-            images = tf.placeholder(tf.float32, images_shape, 'images')
-            labels = tf.placeholder(tf.int32, labels_shape, 'labels')
-            info = Net(config, images, labels, False).info()
+        if self._validate_config(keys, 'train', exit=False):
+            session = self._get_session('train')
+        else:
+            session = self._get_session('validate')
+        info = session.info()
         print(info['variables'].format())
         print(info['layers'].format())
         if not isinstance(self.session, Train):

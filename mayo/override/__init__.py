@@ -1,26 +1,37 @@
 from mayo.override.base import ChainOverrider
 from mayo.override.quantize import (
-    ThresholdBinarizer, FixedPointQuantizer,
-    CourbariauxQuantizer, DGQuantizer, DGTrainableQuantizer,
-    FloatingPointQuantizer, ShiftQuantizer, LogQuantizer,
-    MayoDynamicFixedPointQuantizer, MayoFixedPointQuantizer,
-    MayoRecentralizedFixedPointQuantizer)
+    ThresholdBinarizer,
+    FixedPointQuantizer,
+    CourbariauxQuantizer,
+    DGQuantizer,
+    DGTrainableQuantizer,
+    FloatingPointQuantizer,
+    ShiftQuantizer,
+    LogQuantizer,
+    Recentralizer,
+)
 from mayo.override.prune import (
-    ThresholdPruner, MeanStdPruner, DynamicNetworkSurgeryPruner,
-    MayoDNSPruner)
+    ThresholdPruner,
+    MeanStdPruner,
+    DynamicNetworkSurgeryPruner,
+)
 
 
 FPQuantizer = FloatingPointQuantizer
 DNSPruner = DynamicNetworkSurgeryPruner
-MayoRFPQuantizer = MayoRecentralizedFixedPointQuantizer
-MayoDFPQuantizer = MayoDynamicFixedPointQuantizer
+
 __all__ = [
     ChainOverrider,
-    ThresholdBinarizer, FixedPointQuantizer,
-    CourbariauxQuantizer, DGQuantizer, DGTrainableQuantizer,
-    FloatingPointQuantizer, FPQuantizer, ShiftQuantizer, LogQuantizer,
-    ThresholdPruner, MeanStdPruner, DynamicNetworkSurgeryPruner, DNSPruner,
-    MayoDNSPruner, MayoDynamicFixedPointQuantizer,
-    MayoDFPQuantizer, MayoFixedPointQuantizer,
-    MayoRecentralizedFixedPointQuantizer, MayoRFPQuantizer,
+    ThresholdBinarizer,
+    FixedPointQuantizer,
+    CourbariauxQuantizer,
+    DGQuantizer,
+    DGTrainableQuantizer,
+    FloatingPointQuantizer, FPQuantizer,
+    ShiftQuantizer,
+    LogQuantizer,
+    ThresholdPruner,
+    MeanStdPruner,
+    DynamicNetworkSurgeryPruner, DNSPruner,
+    Recentralizer,
 ]

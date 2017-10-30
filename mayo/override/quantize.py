@@ -4,7 +4,7 @@ import tensorflow as tf
 from mayo.log import log
 from mayo.util import memoize_property
 from mayo.override import util
-from mayo.override.base import OverriderBase
+from mayo.override.base import OverriderBase, Parameter
 
 
 def _overflow_rate(mask):
@@ -48,25 +48,18 @@ class FixedPointQuantizer(QuantizerBase):
     References:
         [1] https://arxiv.org/pdf/1604.03168
     """
-    _defaults = {'width': 16, 'point': 1}
+    width = Parameter('width', 16, [], int)
+    point = Parameter('point', 2, [], int)
 
     def __init__(self, point=None, width=None, should_update=True):
         super().__init__(should_update)
-        self._point = point
-        self._width = width
-        if width is not None and width < 1:
-            raise ValueError(
-                'Width of quantized value must be greater than 0.')
-
-    @memoize_property
-    def width(self):
-        init = self._width or self._defaults['width']
-        return self._parameter('width', init, tf.float32, [])
-
-    @memoize_property
-    def point(self):
-        init = self._point or self._defaults['point']
-        return self._parameter('point', init, tf.float32, [], 1)
+        if point is not None:
+            self.point = point
+        if width is not None:
+            if width < 1:
+                raise ValueError(
+                    'Width of quantized value must be greater than 0.')
+            self.width = width
 
     def eval(self, session, attribute):
         if util.is_tensor(attribute):
