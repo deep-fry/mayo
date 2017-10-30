@@ -13,7 +13,7 @@ model.layers:
         weights_overrider: &composition
             - *quantizer
             # - *pruner
-        activation_overrider: *quantizer
-        biases_overrider: *composition
+        # activation_overrider: *quantizer
+        # biases_overrider: *composition
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}

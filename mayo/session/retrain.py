@@ -5,6 +5,7 @@ import tensorflow as tf
 from mayo.log import log
 from mayo.session.train import Train
 
+
 class Overrider_info(object):
     def __init__(self, overriders_info, overriders):
         self.max_ths = {}
@@ -47,8 +48,9 @@ class Overrider_info(object):
         elif info_type == 'target':
             return self.targets[cls_name]
         else:
-            raise ValueError('{} is not a collected info key.'
-                    .format(info_type))
+            raise ValueError('{} is not a collected info key.'.format(
+                info_type))
+
 
 class RetrainBase(Train):
     def retrain(self):
@@ -65,14 +67,10 @@ class RetrainBase(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
-
     def _init_scales(self):
         # define initial scale
         overriders_info = self.config.retrain.overriders
         self.info = Overrider_info(overriders_info, self.nets[0].overriders)
-        x = self.nets[0].overriders[1]
-        x2 = self.info.get(x, 'target')
-        import pdb; pdb.set_trace()
         return
 
     def _init_retrain(self):
@@ -80,10 +78,8 @@ class RetrainBase(Train):
         self._reset_stats()
         self._reset_vars()
 
-        self.threshold_name = str(self.config.retrain.name)
-        self.profile_overrider(self.threshold_name, 'scale', start=True)
+        self.profile_overrider(start=True)
         self.profile_for_one_epoch()
-        self._reset_stats()
         self.overriders_refresh()
 
     def _retrain_iteration(self):
@@ -133,7 +129,7 @@ class RetrainBase(Train):
             if o.name == self.target_layer:
                 return o.scale
 
-    def profile_overrider(self, threshold_name, scale_name, start=False):
+    def profile_overrider(self, start=False):
         self.priority_list = []
         if start:
             self.best_ckpt = 'pretrained'
@@ -147,25 +143,16 @@ class RetrainBase(Train):
         for o in self.nets[0].overriders:
             name = o.name
             d[name] = self._metric_clac(o)
-            thresholds[name] = getattr(o, threshold_name)
-            scales[name] = getattr(o, scale_name)
+            thresholds[name] = self.info.get(o, 'threshold')
+            scales[name] = self.info.get(o, 'scale')
 
-
-        check_bias = self.config.retrain.bias
         for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            if check_bias:
-                if self.cont[key]:
-                    self.priority_list.append(key)
-            else:
-                if self.cont[key] and ('biases' not in key):
-                    self.priority_list.append(key)
+            self.priority_list.append(key)
         log.debug('display thresholds')
         log.debug('{}'.format(thresholds))
         log.debug('display scales')
         log.debug('{}'.format(scales))
-        # log.debug('display profiling info')
-        # log.debug('{}'.format(d))
         log.debug('display priority list info')
         log.debug('{}'.format(self.priority_list))
         log.debug('stored checkpoint')
@@ -210,6 +197,7 @@ class RetrainBase(Train):
             self.loss_base,
             self.acc_base,
         ))
+        self._reset_stats()
 
     def _metric_clac(self, o):
         metric_value = num_elements = self.run(o.after).size
@@ -256,16 +244,9 @@ class RetrainBase(Train):
 
 class GlobalRetrain(RetrainBase):
     def overriders_refresh(self):
-        check_bias = self.config.retrain.bias
-        if check_bias:
-            for o in self.nets[0].overriders:
-                o._threshold_update()
-                o.should_update = True
-        else:
-            for o in self.nets[0].overriders:
-                if 'biases' not in o.name:
-                    o._threshold_update()
-                    o.should_update = True
+        for o in self.nets[0].overriders:
+            o._threshold_update()
+            o.should_update = True
         self.overriders_update()
 
     def forward_policy(self, floor_epoch):
