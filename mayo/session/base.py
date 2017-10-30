@@ -154,7 +154,11 @@ class Session(object):
         self.checkpoint.save(name)
 
     def info(self):
-        return self.nets[0].info()
+        with self.as_default():
+            info_dict = self.nets[0].info()
+            if self.nets[0].overriders:
+                info_dict['overriders'] = self.overrider_info()
+        return info_dict
 
     def overrider_info(self):
         def flatten(overriders):
@@ -168,6 +172,8 @@ class Session(object):
             info = o.info(self)
             table = overrider_info.setdefault(o.__class__, Table(info._fields))
             table.add_row(info)
+        for cls, table in overrider_info.items():
+            cls.finalize_info(table)
         return overrider_info
 
     def run(self, ops, **kwargs):
