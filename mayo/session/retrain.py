@@ -9,6 +9,7 @@ from mayo.session.train import Train
 class Overrider_info(object):
     def __init__(self, overriders_info, overriders):
         self.max_ths = {}
+        self.min_scales = {}
         self.ths = {}
         self.scales = {}
         self.scale_update_factors = {}
@@ -19,9 +20,11 @@ class Overrider_info(object):
             update_dict = {}
             th_dict = {}
             th_max_dict = {}
+            scale_min_dict = {}
             for o in overriders:
                 if o.__class__.__name__ in meta.type:
                     scale_dict[o.name] = meta.range['scale']
+                    scale_min_dict[o.name] = meta.range['min_scale']
                     update_dict[o.name] = meta.scale_update_factor
                     th_dict[o.name] = meta.range['from']
                     th_max_dict[o.name] = meta.range['to']
@@ -30,6 +33,7 @@ class Overrider_info(object):
                 raise ValueError('{} is not found in overrider definitions,'
                     'but has specified as a target'.format(meta.type))
             self.scales[cls_name] = scale_dict
+            self.min_scales[cls_name] = scale_min_dict
             self.ths[cls_name] = th_dict
             self.max_ths[cls_name] = th_max_dict
             self.scale_update_factors[cls_name] = update_dict
@@ -39,6 +43,8 @@ class Overrider_info(object):
         cls_name = overrider.__class__.__name__
         if info_type == 'end_threshold':
             return self.max_ths[cls_name][overrider.name]
+        elif info_type == 'end_scale':
+            return self.min_scales[cls_name][overrider.name]
         elif info_type == 'threshold':
             return self.ths[cls_name][overrider.name]
         elif info_type == 'scale':
@@ -50,6 +56,19 @@ class Overrider_info(object):
         else:
             raise ValueError('{} is not a collected info key.'.format(
                 info_type))
+
+    def set(self, overrider, info_type, value):
+        cls_name = overrider.__class__.__name__
+        if info_type == 'threshold':
+            self.ths[cls_name][overrider.name] = value
+            return
+        elif info_type == 'scale':
+            self.scales[cls_name][overrider.name] = value
+            return
+        else:
+            raise ValueError('{} is not a collected info key.'.format(
+                info_type))
+
 
 
 class RetrainBase(Train):
@@ -80,7 +99,9 @@ class RetrainBase(Train):
 
         self.profile_overrider(start=True)
         self.profile_for_one_epoch()
-        self.overriders_refresh()
+        # init all overriders
+        for o in self.nets[0].overriders:
+            self.overrider_init(o)
 
     def _retrain_iteration(self):
         system = self.config.system
@@ -104,17 +125,17 @@ class RetrainBase(Train):
 
             iter_max_epoch = self.config.retrain.iter_max_epoch
 
+            # current setup exceeds max epoches, retrieve backwards
             if epoch >= iter_max_epoch and epoch > 0:
                 self.retrain_cnt += 1
                 self.reset_num_epochs()
                 self.log_thresholds(self.loss_avg, self.acc_avg)
-                # all layers done
-                return self.update_policy()
+                return self.backward_policy()
         return True
 
-    def update_policy(self):
+    def backward_policy(self):
         raise NotImplementedError(
-            'Method of update policy is not implemented.')
+            'Method of backward policy is not implemented.')
 
     def forward_policy(self, floor_epoch):
         raise NotImplementedError(
@@ -127,7 +148,7 @@ class RetrainBase(Train):
     def _fetch_scale(self):
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
-                return o.scale
+                return self.info.get(o, 'scale')
 
     def profile_overrider(self, start=False):
         self.priority_list = []
@@ -183,17 +204,20 @@ class RetrainBase(Train):
             ))
             return
         tolerance = self.config.retrain.tolerance
-        while epoch < 1.0:
+        log.info('profiling baseline')
+        # while epoch < 1.0:
+        while epoch < 0.1:
             _, loss, acc, epoch = self.run(
                 self.empty_eval_run())
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
+            self._update_progress(epoch, loss, acc, self._cp_epoch)
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
         self._reset_stats()
         self.reset_num_epochs()
-        log.debug('profiled baselines, loss is {}, acc is {}'.format(
+        log.info('profiled baseline, loss is {}, acc is {}'.format(
             self.loss_base,
             self.acc_base,
         ))
@@ -241,11 +265,23 @@ class RetrainBase(Train):
         raise NotImplementedError(
             'Method to refresh overriders is not implemented.')
 
+    def overrider_init(self, o):
+        threshold = self.info.get(o, 'threshold')
+        target = self.info.get(o, 'target')
+        o._parameter_variables_assignment[target] = threshold
+
+    def overrider_refresh(self, o):
+        threshold = self.info.get(o, 'threshold')
+        scale = self.info.get(o, 'scale')
+        target = self.info.get(o, 'target')
+        self.info.set(o, 'threshold', threshold + scale)
+        o._parameter_variables_assignment[target] = threshold + scale
+
 
 class GlobalRetrain(RetrainBase):
     def overriders_refresh(self):
         for o in self.nets[0].overriders:
-            o._threshold_update()
+            self.overrider_refresh(o)
             o.should_update = True
         self.overriders_update()
 
@@ -260,7 +296,7 @@ class GlobalRetrain(RetrainBase):
         self._cp_epoch = floor_epoch
         self.retrain_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
-        self.profile_overrider(self.threshold_name, 'scale')
+        self.profile_overrider()
         self.overriders_refresh()
         self.reset_num_epochs()
         return True
@@ -268,21 +304,23 @@ class GlobalRetrain(RetrainBase):
     def log_thresholds(self, loss, acc):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
         for o in self.nets[0].overriders:
-            value = getattr(o, self.threshold_name)
+            value = self.info.get(o, 'threshold')
             if prev_loss is None:
                 self.log[o.name] = (value, loss, acc)
             else:
                 if acc > self.acc_base:
                     self.log[self.target_layer] = (value, loss, acc)
 
-    def update_policy(self):
-        if self._fetch_scale() >= self.config.retrain.min_scale:
+    def backward_policy(self):
+        # if did not reach min scale
+        if self._fetch_scale() >= self.info.get(self.nets[0].overriders[0],
+                                                'end_scale'):
             self._decrease_scale()
-            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
-            log.debug('decrease threholds to {}'.format(
+            log.debug('recover threholds to {}'.format(
                 self._fetch_scale()
             ))
             return True
+        # stop if reach min scale
         else:
             for o in self.nets[0].overriders:
                 self.cont[self.target_layer] = False
@@ -291,20 +329,14 @@ class GlobalRetrain(RetrainBase):
 
     def _decrease_scale(self):
         # decrease scale factor, for quantizer, this factor might be 1
-        check_bias = self.config.retrain.bias
-        factor = self.config.retrain.scale_update_factor
-        if check_bias:
-            for o in self.nets[0].overriders:
-                o._scale_roll_back()
-                o._scale_update(factor)
-                record = o.scale
-        else:
-            for o in self.nets[0].overriders:
-                if 'biases' not in o.name:
-                    o._scale_roll_back()
-                    o._scale_update(factor)
-                    record = o.scale
-        log.debug('decrease scaling factor to {}'.format(record))
+        for o in self.nets[0].overriders:
+            # roll back on thresholds
+            threshold = self.info.get(o, 'threshold')
+            scale = self.info.get(o, 'scale')
+            self.info.set(o, 'threshold', threshold - scale)
+            # decrease scale
+            factor = self.info.get(o, 'scale_factor')
+            self.info.set(o, 'scale', scale * factor)
 
 
 class LayerwiseRetrain(RetrainBase):
@@ -326,12 +358,12 @@ class LayerwiseRetrain(RetrainBase):
         self._cp_epoch = floor_epoch
         self.retrain_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
-        self.profile_overrider(self.threshold_name, 'scale')
+        self.profile_overrider()
         self.overriders_refresh()
         self.reset_num_epochs()
         return True
 
-    def update_policy(self):
+    def backward_policy(self):
         finished = self.cont[self.target_layer] is False
         if self.priority_list == [] and finished:
             log.info('overrider is done, model stored at {}'.format(
@@ -344,28 +376,27 @@ class LayerwiseRetrain(RetrainBase):
             return False
         else:
             # current layer is done
-            self._control_threholds()
+            if self._fetch_scale() >= self.config.retrain.min_scale:
+                self._decrease_scale()
+                log.debug('min scale is {}'.format(
+                    self.config.retrain.min_scale))
+                log.debug('decrease threholds {}, decreased results {}'.format(
+                    self.target_layer,
+                    self._fetch_scale()
+                ))
+            else:
+                for o in self.nets[0].overriders:
+                    if o.name == self.target_layer:
+                        o._scale_roll_back()
+                self.cont[self.target_layer] = False
+
             # trace back the ckpt
             self.save_checkpoint(self.best_ckpt)
             # fetch a new layer to retrain
-            self.profile_overrider(self.threshold_name, 'scale')
+            self.profile_overrider()
             self.overriders_refresh()
             self.reset_num_epochs()
             return True
-
-    def _control_threholds(self):
-        if self._fetch_scale() >= self.config.retrain.min_scale:
-            self._decrease_scale()
-            log.debug('min scale is {}'.format(self.config.retrain.min_scale))
-            log.debug('decrease threholds at {}, decreased result is {}'.format(
-                self.target_layer,
-                self._fetch_scale()
-            ))
-        else:
-            for o in self.nets[0].overriders:
-                if o.name == self.target_layer:
-                    o._scale_roll_back()
-            self.cont[self.target_layer] = False
 
     def _decrease_scale(self):
         # decrease scale factor, for quantizer, this factor might be 1

@@ -9,13 +9,18 @@ model.layers:
             type: mayo.override.MayoDNSPruner
             c_rate: 0
             should_update: false
-    fire2: {<<: *overrider}
-    fire3: {<<: *overrider}
-    fire4: {<<: *overrider}
-    fire5: {<<: *overrider}
-    fire6: {<<: *overrider}
-    fire7: {<<: *overrider}
-    fire8: {<<: *overrider}
-    fire9: {<<: *overrider}
+
+    fire2: &fire_overrider
+      layers:
+        squeeze: {<<: *overrider}
+        expand1: {<<: *overrider}
+        expand3: {<<: *overrider}
+    fire3: {<<: *fire_overrider}
+    fire4: {<<: *fire_overrider}
+    fire5: {<<: *fire_overrider}
+    fire6: {<<: *fire_overrider}
+    fire7: {<<: *fire_overrider}
+    fire8: {<<: *fire_overrider}
+    fire9: {<<: *fire_overrider}
     conv10: {<<: *overrider}
     logits: {<<: *overrider}

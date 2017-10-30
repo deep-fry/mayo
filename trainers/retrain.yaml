@@ -4,5 +4,5 @@ retrain:
     overriders:
         - type: mayo.override.FixedPointQuantizer
           target: width
-          range: {from: 16, to: 1, scale: -1}
+          range: {from: 16, to: 1, scale: -1, min_scale: -1}
           scale_update_factor: 0.5
