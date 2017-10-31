@@ -5,7 +5,6 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import memoize_property
-from mayo.override import util
 
 
 class OverrideNotAppliedError(Exception):
@@ -23,29 +22,40 @@ def _getter_not_initialized(*args, **kwargs):
 
 class Parameter(object):
     """ `tf.Variable`-based overrider hyperparameter.  """
-    def __init__(self, name, initial, shape=None, dtype=None, trainable=False):
+    def __init__(
+            self, name, initial=None, shape=None,
+            dtype=tf.float32, trainable=False):
         super().__init__()
-        if dtype not in (int, float):
-            raise TypeError('Parameter accepts only int or float data-types.')
         self.name = name
         self.initial = initial
         self.shape = shape
         self.dtype = dtype
         self.trainable = trainable
 
+    def _getter_kwargs(self, instance):
+        kwargs = {}
+        for key in ['initial', 'shape']:
+            value = getattr(self, key, None)
+            if value is None:
+                value = instance._parameter_config(self.name, key)
+            kwargs[key] = value
+        kwargs['name'] = '{}/{}'.format(instance.name, self.name)
+        init = kwargs.pop('initial')
+        if init is not None:
+            init = tf.constant_initializer(init)
+        kwargs['initializer'] = init
+        kwargs['dtype'] = self.dtype
+        kwargs['trainable'] = self.trainable
+        return kwargs
+
     def __get__(self, instance, owner):
         try:
             return instance._parameter_variables[self.name]
         except KeyError:
             pass
-        name = '{}/{}'.format(instance.name, self.name)
-        init = tf.constant_initializer(float(self.initial))
-        var = instance._getter(
-            name, initializer=init, shape=self.shape,
-            dtype=tf.float32, trainable=self.trainable)
+        kwargs = self._getter_kwargs(instance)
+        var = instance._getter(**kwargs)
         instance._parameter_variables[self.name] = var
-        if self.dtype is int:
-            return util.round(var)
         return var
 
     def __set__(self, instance, value):
@@ -70,6 +80,12 @@ class OverriderBase(object):
         self.name = None
         self.internals = {}
         self.should_update = should_update
+
+    def _parameter_config(self, name, key):
+        """
+        Override this method to specify run-time variable configurations.
+        """
+        return None
 
     @memoize_property
     def parameters(self):

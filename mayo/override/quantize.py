@@ -48,8 +48,8 @@ class FixedPointQuantizer(QuantizerBase):
     References:
         [1] https://arxiv.org/pdf/1604.03168
     """
-    width = Parameter('width', 16, [], int)
-    point = Parameter('point', 2, [], int)
+    width = Parameter('width', 16, [], tf.int32)
+    point = Parameter('point', 2, [], tf.int32)
 
     def __init__(self, point=None, width=None, should_update=True):
         super().__init__(should_update)
@@ -68,8 +68,8 @@ class FixedPointQuantizer(QuantizerBase):
 
     def _quantize(
             self, value, point=None, width=None, compute_overflow_rate=False):
-        point = self.point if point is None else point
-        width = self.width if width is None else width
+        point = util.cast(self.point if point is None else point, float)
+        width = util.cast(self.width if width is None else width, float)
         # x << (width - point)
         shift = 2.0 ** (util.round(width) - util.round(point))
         value = value * shift
@@ -157,7 +157,7 @@ class DGTrainableQuantizer(DGQuantizer):
 
     Trainable width, but no gradients can be felt by it at the moment.
     """
-    width = Parameter('width', 16, [], int, trainable=True)
+    width = Parameter('width', 16, [], tf.float32, trainable=True)
 
     def __init__(self, overflow_rate, should_update=True):
         super().__init__(None, None, should_update=should_update)
@@ -167,39 +167,40 @@ class DGTrainableQuantizer(DGQuantizer):
 
 
 class Recentralizer(QuantizerBase):
+    """ Recentralizes the distribution of pruned weights.  """
+    class QuantizedParameter(Parameter):
+        def __get__(self, instance, owner):
+            var = super().__get__(instance, owner)
+            return instance.quantizer._quantize(var)
+
     def __init__(self, quantizer=None, should_update=True):
         super().__init__(should_update)
         self.quantizer = quantizer
 
-    @memoize_property
-    def positives(self):
+    def _parameter_config(self, name, key):
         shape = self.before.shape
         ones = tf.ones(shape=shape)
-        return self._parameter('positives', ones, tf.int32, shape)
+        return {
+            'positives': {'initial': ones, 'shape': shape},
+        }
+
+    positives = Parameter('positives', None, None, tf.int32)
+    positives_mean = QuantizedParameter('positives/mean', 1, [], tf.float32)
+    negatives_mean = QuantizedParameter('negatives/mean', -1, [], tf.float32)
 
     @memoize_property
     def negatives(self):
         return util.logical_not(self.positives)
 
-    @memoize_property
-    def posmean(self):
-        var = self._parameter('posmean', 1, tf.float32, [])
-        return self.quantizer._quantize(var)
-
-    @memoize_property
-    def negmean(self):
-        var = self._quantize(self._parameter('negmean', -1, tf.float32, []))
-        return self.quantizer._quantize(var)
-
     def _apply(self, value):
         positives = util.cast(self.positives, float)
         negatives = util.cast(self.negatives, float)
-        positives_centralized = positives * (value - self.posmean)
-        negatives_centralized = negatives * (value - self.negmean)
+        positives_centralized = positives * (value - self.positives_mean)
+        negatives_centralized = negatives * (value - self.negatives_mean)
         quantized = self._quantize(
             positives_centralized + negatives_centralized)
-        value = positives * (quantized + self.posmean)
-        value += negatives * (quantized + self.negmean)
+        value = positives * (quantized + self.positives_mean)
+        value += negatives * (quantized + self.negatives_mean)
         return value
 
     def _update(self, session):
@@ -211,15 +212,10 @@ class Recentralizer(QuantizerBase):
         mean = util.mean(value)
         # find two central points
         positives = value >= mean
+        self.positives = positives
+        self.positives_mean = util.mean(value[util.where(positives)])
         negatives = util.logical_not(positives)
-        posmean = util.mean(value[util.where(positives)])
-        negmean = util.mean(value[util.where(negatives)])
-        ops = [
-            tf.assign(self.positives, positives),
-            tf.assign(self.posmean, posmean),
-            tf.assign(self.negmean, negmean),
-        ]
-        session.run(ops)
+        self.negatives_mean = util.mean(value[util.where(negatives)])
 
 
 class FloatingPointQuantizer(QuantizerBase):
@@ -237,6 +233,10 @@ class FloatingPointQuantizer(QuantizerBase):
     When both exponent_width and mantissa_width are 0, the quantized value can
     only represent $2^{-bias}$ or 0, which is not very useful.
     """
+    exponent_width = Parameter('exponent_width', 8, [], tf.int32)
+    exponent_bias = Parameter('exponent_bias', -127, [], tf.int32)
+    mantissa_width = Parameter('mantissa_width', 23, [], tf.int32)
+
     def __init__(
             self, exponent_width, exponent_bias, mantissa_width,
             should_update=True):
