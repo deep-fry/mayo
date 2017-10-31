@@ -5,13 +5,11 @@ import time
 
 import yaml
 import tensorflow as tf
-import numpy as np
 
 from docopt import docopt
 
 from mayo.log import log
 from mayo.config import Config
-from mayo.net import Net
 from mayo.session import (
     Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain)
 
