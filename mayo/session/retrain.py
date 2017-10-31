@@ -70,7 +70,6 @@ class Overrider_info(object):
                 info_type))
 
 
-
 class RetrainBase(Train):
     def retrain(self):
         log.debug('Retraining start.')
@@ -205,8 +204,8 @@ class RetrainBase(Train):
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
-        # while epoch < 1.0:
-        while epoch < 0.1:
+        # while epoch < 0.1:
+        while epoch < 1.0:
             _, loss, acc, epoch = self.run(
                 self.empty_eval_run())
             self.loss_total += loss
@@ -312,12 +311,14 @@ class GlobalRetrain(RetrainBase):
                     self.log[self.target_layer] = (value, loss, acc)
 
     def backward_policy(self):
+        # retrace the best ckpt
+        self.load_checkpoint(self.best_ckpt)
         # if did not reach min scale
-        if self._fetch_scale() >= self.info.get(self.nets[0].overriders[0],
-                                                'end_scale'):
+        if abs(self._fetch_scale()) > abs(self.info.get(
+                self.nets[0].overriders[0], 'end_scale')):
             self._decrease_scale()
             log.debug('recover threholds to {}'.format(
-                self._fetch_scale()
+                self.info.get(self.nets[0].overriders[0], 'threshold')
             ))
             return True
         # stop if reach min scale
@@ -333,10 +334,11 @@ class GlobalRetrain(RetrainBase):
             # roll back on thresholds
             threshold = self.info.get(o, 'threshold')
             scale = self.info.get(o, 'scale')
-            self.info.set(o, 'threshold', threshold - scale)
             # decrease scale
             factor = self.info.get(o, 'scale_factor')
             self.info.set(o, 'scale', scale * factor)
+            # use new scale
+            self.info.set(o, 'threshold', threshold + scale * factor)
 
 
 class LayerwiseRetrain(RetrainBase):
