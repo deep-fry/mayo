@@ -374,6 +374,10 @@ class Net(BaseNet):
         return slim.conv2d(tensor, **params)
 
     @one_to_one
+    def instantiate_separable_conv2d(self, tensor, params):
+        return slim.separable_conv2d(tensor, **params)
+
+    @one_to_one
     def instantiate_depthwise_separable_convolution(self, tensor, params):
         scope = params.pop('scope')
         num_outputs = params.pop('num_outputs')
@@ -451,10 +455,16 @@ class Net(BaseNet):
         # generate a hadmard matrix
         dim = int(tensor.shape[3])
         hadamard_matrix = scipy.linalg.hadamard(dim)
-        hadamard_matrix = tf.constant(hadamard_matrix, dtype = tf.float32)
-        shape = tf.unstack(tf.shape(tensor))
+        hadamard_matrix = tf.constant(hadamard_matrix, dtype=tf.float32)
         tensor_reshaped = tf.reshape(tensor, [-1, dim])
-        return tf.reshape(tf.matmul(tensor_reshaped, hadamard_matrix), shape=tensor.shape)
+        # large channel scales lead to divergence
+        init = tf.truncated_normal_initializer(mean=1 / float(dim),
+                                               stddev=0.001)
+        channel_scales = tf.get_variable(name='channel_scale',
+                                         shape=[dim], initializer=init)
+        tensor_reshaped = tensor_reshaped * channel_scales
+        return tf.reshape(tf.matmul(tensor_reshaped, hadamard_matrix),
+                          shape=tensor.shape)
 
     def instantiate_concat(self, tensors, params):
         return [tf.concat(tensors, **self._use_name_not_scope(params))]
