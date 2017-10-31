@@ -1,34 +1,33 @@
 import tensorflow as tf
 
-from mayo.log import log
 from mayo.util import Percent
 from mayo.override import util
-from mayo.override.base import OverriderBase
+from mayo.override.base import OverriderBase, Parameter
 
 
 class PrunerBase(OverriderBase):
+    mask = Parameter('mask', None, None, tf.bool)
+
+    def _parameter_config(self):
+        shape = self.before.shape
+        ones = tf.ones_initializer(dtype=tf.bool)
+        return {'mask': {'initial': ones, 'shape': shape}}
+
     def _apply(self, value):
-        shape = value.get_shape()
-        name = '{}/mask'.format(value.op.name)
-        self._mask = self.getter(
-            name, dtype=tf.bool, shape=shape,
-            initializer=tf.ones_initializer(), trainable=False)
-        mask = util.cast(self._mask, float)
-        return value * mask
+        return value * util.cast(self.mask, float)
 
     def _updated_mask(self, var, mask, session):
         raise NotImplementedError(
             'Method to compute an updated mask is not implemented.')
 
     def _update(self, session):
-        mask = self._updated_mask(self.before, self._mask, session)
-        return session.run(tf.assign(self._mask, mask))
+        self.mask = self._updated_mask(self.before, self.mask, session)
 
-    def info(self, session):
-        mask = util.cast(session.run(self._mask), int)
+    def _info(self, session):
+        mask = util.cast(session.run(self.mask), int)
         density = Percent(util.sum(mask) / util.count(mask))
         return self._info_tuple(
-            mask=self._mask.name, density=density, count_=mask.size)
+            mask=self.mask.name, density=density, count_=mask.size)
 
     @classmethod
     def finalize_info(cls, table):
@@ -39,15 +38,19 @@ class PrunerBase(OverriderBase):
 
 
 class ThresholdPruner(PrunerBase):
-    def __init__(self, threshold, should_update=True):
+    threshold = Parameter('threshold', 1, [], tf.float32)
+
+    def __init__(self, threshold=None, should_update=True):
         super().__init__(should_update)
         self.threshold = threshold
 
     def _updated_mask(self, var, mask, session):
-        return util.binarize(var, self.threshold)
+        return util.absolute_binarize(var, self.threshold)
 
 
 class MeanStdPruner(PrunerBase):
+    alpha = Parameter('alpha', 1, [], tf.float32)
+
     def __init__(self, alpha, should_update=True):
         super().__init__(should_update)
         self.alpha = alpha
@@ -59,7 +62,7 @@ class MeanStdPruner(PrunerBase):
         return mean + self.alpha * util.sqrt(var)
 
     def _updated_mask(self, var, mask, session):
-        return util.binarize(var, self._threshold(var))
+        return util.absolute_binarize(var, self._threshold(var))
 
 
 class DynamicNetworkSurgeryPruner(MeanStdPruner):
@@ -69,8 +72,9 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         2. https://arxiv.org/abs/1608.04493
     """
     def __init__(
-            self, c_rate, on_factor=1.1, off_factor=0.9, should_update=True):
-        super().__init__(c_rate, should_update)
+            self, alpha=None, on_factor=1.1, off_factor=0.9,
+            should_update=True):
+        super().__init__(alpha, should_update)
         self.on_factor = on_factor
         self.off_factor = off_factor
 

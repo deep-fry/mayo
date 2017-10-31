@@ -177,7 +177,7 @@ class Recentralizer(QuantizerBase):
         super().__init__(should_update)
         self.quantizer = quantizer
 
-    def _parameter_config(self, name, key):
+    def _parameter_config(self):
         shape = self.before.shape
         ones = tf.ones(shape=shape)
         return {

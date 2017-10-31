@@ -2,6 +2,7 @@ import functools
 from collections import Sequence, namedtuple
 
 import tensorflow as tf
+from tensorflow.python.ops.init_ops import Initializer
 
 from mayo.log import log
 from mayo.util import memoize_property
@@ -33,16 +34,23 @@ class Parameter(object):
         self.trainable = trainable
 
     def _getter_kwargs(self, instance):
+        defaults = instance._parameter_config().get(self.name, {})
         kwargs = {}
         for key in ['initial', 'shape']:
             value = getattr(self, key, None)
             if value is None:
-                value = instance._parameter_config(self.name, key)
+                try:
+                    value = defaults[key]
+                except KeyError:
+                    raise KeyError(
+                        'Parameter {} does not specify a configuration for {}.'
+                        .format(self.name, key))
             kwargs[key] = value
         kwargs['name'] = '{}/{}'.format(instance.name, self.name)
         init = kwargs.pop('initial')
-        if init is not None:
-            init = tf.constant_initializer(init)
+        if init is not None and not isinstance(init, Initializer):
+            init = tf.constant_initializer(
+                value=init, dtype=self.dtype, verify_shape=True)
         kwargs['initializer'] = init
         kwargs['dtype'] = self.dtype
         kwargs['trainable'] = self.trainable
@@ -72,20 +80,21 @@ class OverriderBase(object):
     overridden result; `_update` updates states of tensorflow variables used in
     `_apply`.
     """
-    _parameter_variables = {}
-    _parameter_variables_assignment = {}
 
     def __init__(self, should_update=True):
         super().__init__()
+        self._applied = False
         self.name = None
         self.internals = {}
+        self._parameter_variables = {}
+        self._parameter_variables_assignment = {}
         self.should_update = should_update
 
-    def _parameter_config(self, name, key):
+    def _parameter_config(self):
         """
         Override this method to specify run-time variable configurations.
         """
-        return None
+        return {}
 
     @memoize_property
     def parameters(self):
@@ -98,10 +107,13 @@ class OverriderBase(object):
     def assign_parameters(self, tf_session):
         ops = []
         for name, value in self._parameter_variables_assignment.items():
+            if value is None:
+                continue
             log.debug(
                 'Assigning overrider parameter: {}.{} = {}'
                 .format(self, name, value))
-            ops.append(tf.assign(self._parameter_variables[name], value))
+            var = getattr(self, name)  # ensure variable is instantiated
+            ops.append(tf.assign(var, value))
         tf_session.run(ops)
         self._parameter_variables_assignment = {}
 
@@ -144,20 +156,23 @@ class OverriderBase(object):
         """Update things to apply during training.  """
         if not self.should_update:
             return
-        if not getattr(self, '_applied', False):
+        if not self._applied:
             raise OverrideNotAppliedError(
                 'Method "apply" must be invoked before call "update".')
-        self._update(session)
+        with session.as_default():
+            self._update(session)
         log.debug('Updated overrider {!r}'.format(self.info(session)))
 
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """
-        session.run(tf.assign(self.before, self.after))
+        with session.as_default():
+            session.run(tf.assign(self.before, self.after))
 
     def reset(self, session):
         """Reset internal variables to their respective initial values.  """
-        for var in self.internals.values():
-            session.run(tf.assign(var, var.initial_value))
+        with session.as_default():
+            for var in self.internals.values():
+                session.run(tf.assign(var, var.initial_value))
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
@@ -167,8 +182,12 @@ class OverriderBase(object):
         kwargs[cls] = self.name
         return Tuple(**kwargs)
 
-    def info(self, session):
+    def _info(self, session):
         return self._info_tuple()
+
+    def info(self, session):
+        with session.as_default():
+            return self._info(session)
 
     @classmethod
     def finalize_info(cls, table):
@@ -210,7 +229,7 @@ class ChainOverrider(OverriderBase, Sequence):
         for o in self._overriders:
             o.reset(session)
 
-    def info(self, session):
+    def _info(self, session):
         return self._info_tuple(overriders=self._overriders)
 
     def __repr__(self):

@@ -26,11 +26,13 @@ def cast(value, dtype):
         dtypes = {
             float: np.float32,
             int: np.int32,
+            bool: np.bool,
         }
         return np.cast[dtypes[dtype]](value)
     dtypes = {
         float: tf.float32,
         int: tf.int32,
+        bool: tf.bool,
     }
     return tf.cast(value, dtypes[dtype])
 
@@ -144,7 +146,7 @@ min = partial(_clip, min_max=True)
 max = partial(_clip, min_max=False)
 
 
-def binarize(tensor, threshold):
+def absolute_binarize(tensor, threshold):
     return cast(abs(tensor) > threshold, float)
 
 
