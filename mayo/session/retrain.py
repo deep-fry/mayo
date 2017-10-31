@@ -274,7 +274,7 @@ class RetrainBase(Train):
         scale = self.info.get(o, 'scale')
         target = self.info.get(o, 'target')
         self.info.set(o, 'threshold', threshold + scale)
-        o._parameter_variables_assignment[target] = threshold + scale
+        setattr(o, target, threshold + scale)
 
 
 class GlobalRetrain(RetrainBase):
@@ -334,18 +334,22 @@ class GlobalRetrain(RetrainBase):
             # roll back on thresholds
             threshold = self.info.get(o, 'threshold')
             scale = self.info.get(o, 'scale')
+            self.info.set(o, threshold - scale, 'threshold')
             # decrease scale
             factor = self.info.get(o, 'scale_factor')
-            self.info.set(o, 'scale', scale * factor)
+            if isinstance(scale, int) and isinstance(threshold, int):
+                self.info.set(o, 'scale', int(scale * factor))
+            else:
+                self.info.set(o, 'scale', scale * factor)
             # use new scale
-            self.info.set(o, 'threshold', threshold + scale * factor)
+            self.overrider_refresh(o)
 
 
 class LayerwiseRetrain(RetrainBase):
     def overriders_refresh(self):
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
-                o._threshold_update()
+                self.overrider_refresh(o)
                 o.should_update = True
         self.overriders_update()
 
@@ -367,6 +371,7 @@ class LayerwiseRetrain(RetrainBase):
 
     def backward_policy(self):
         finished = self.cont[self.target_layer] is False
+        self.load_checkpoint(self.best_ckpt)
         if self.priority_list == [] and finished:
             log.info('overrider is done, model stored at {}'.format(
                 self.best_ckpt))
@@ -378,22 +383,26 @@ class LayerwiseRetrain(RetrainBase):
             return False
         else:
             # current layer is done
-            if self._fetch_scale() >= self.config.retrain.min_scale:
+            for o in self.nets[0].overriders:
+                if o.name == self.target_layer:
+                    o_recorded = o
+                    break
+            if abs(self._fetch_scale()) >= abs(self.info.get(o_recorded,
+                'end_scale')):
                 self._decrease_scale()
                 log.debug('min scale is {}'.format(
-                    self.config.retrain.min_scale))
+                    self.info.get(o_recorded, min_scale)))
                 log.debug('decrease threholds {}, decreased results {}'.format(
                     self.target_layer,
                     self._fetch_scale()
                 ))
             else:
-                for o in self.nets[0].overriders:
-                    if o.name == self.target_layer:
-                        o._scale_roll_back()
+                # threshold roll back
+                factor = self.info.get(o_recorded, 'scale_factor')
+                threshold = self.info.get(o_recorded, 'threshold')
+                scale = self.info.get(o_recorded, 'scale')
+                self.info.set(o_recorded, threshold - scale, 'threshold')
                 self.cont[self.target_layer] = False
-
-            # trace back the ckpt
-            self.save_checkpoint(self.best_ckpt)
             # fetch a new layer to retrain
             self.profile_overrider()
             self.overriders_refresh()
@@ -402,19 +411,25 @@ class LayerwiseRetrain(RetrainBase):
 
     def _decrease_scale(self):
         # decrease scale factor, for quantizer, this factor might be 1
-        factor = self.config.retrain.scale_update_factor
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
-                o._scale_roll_back()
-                o._scale_update(factor)
-                record = o.scale
-        log.debug('decrease scaling factor to {}'.format(record))
+                # threshold roll back
+                factor = self.info.get(o, 'scale_factor')
+                threshold = self.info.get(o, 'threshold')
+                scale = self.info.get(o, 'scale')
+                self.info.set(o, threshold - scale, 'threshold')
+                # update scale
+                if isinstance(scale, int) and isinstance(threshold, int):
+                    self.info.set(o, 'scale', int(scale * factor))
+                else:
+                    self.info.set(o, 'scale', scale * factor)
+                self.overrider_refresh(o)
 
     def log_thresholds(self, loss, acc):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
-                value = getattr(o, self.threshold_name)
+                value = self.info.get(o, 'threshold')
                 break
         if prev_loss is None:
             self.log[self.target_layer] = (value, loss, acc)

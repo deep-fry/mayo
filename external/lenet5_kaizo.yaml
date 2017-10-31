@@ -7,8 +7,8 @@ model.layers:
     conv0: &overrider
         weights_overrider: &composition
             - *quantizer
-            - *pruner
-        activation_overrider: *quantizer
-        biases_overrider: *quantizer
+            # - *pruner
+        # activation_overrider: *quantizer
+        # biases_overrider: *quantizer
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
