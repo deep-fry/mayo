@@ -11,7 +11,6 @@ from mayo.override.quantize import (
     Recentralizer,
 )
 from mayo.override.prune import (
-    ThresholdPruner,
     MeanStdPruner,
     DynamicNetworkSurgeryPruner,
 )
@@ -30,7 +29,6 @@ __all__ = [
     FloatingPointQuantizer, FPQuantizer,
     ShiftQuantizer,
     LogQuantizer,
-    ThresholdPruner,
     MeanStdPruner,
     DynamicNetworkSurgeryPruner, DNSPruner,
     Recentralizer,

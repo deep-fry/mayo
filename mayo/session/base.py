@@ -190,7 +190,7 @@ class Session(object):
                 self.initialized_variables += uninit_vars
             # parameter assignments in overriders
             for o in self.nets[0].overriders:
-                o.assign_parameters(self.tf_session)
+                o.assign_parameters(self)
             # session run
             return self.tf_session.run(ops, **kwargs)
 

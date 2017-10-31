@@ -8,12 +8,16 @@ from mayo.override.base import OverriderBase, Parameter
 class PrunerBase(OverriderBase):
     mask = Parameter('mask', None, None, tf.bool)
 
-    def _parameter_config(self):
-        shape = self.before.shape
-        ones = tf.ones_initializer(dtype=tf.bool)
-        return {'mask': {'initial': ones, 'shape': shape}}
+    def __init__(self, should_update=True):
+        super().__init__(should_update)
 
     def _apply(self, value):
+        self._parameter_config = {
+            'mask': {
+                'initial': tf.ones_initializer(dtype=tf.bool),
+                'shape': value.shape,
+            }
+        }
         return value * util.cast(self.mask, float)
 
     def _updated_mask(self, var, mask, session):
@@ -21,7 +25,8 @@ class PrunerBase(OverriderBase):
             'Method to compute an updated mask is not implemented.')
 
     def _update(self, session):
-        self.mask = self._updated_mask(self.before, self.mask, session)
+        mask = self._updated_mask(self.before, self.mask, session)
+        session.run(tf.assign(self.mask, mask))
 
     def _info(self, session):
         mask = util.cast(session.run(self.mask), int)
@@ -34,18 +39,9 @@ class PrunerBase(OverriderBase):
         densities = table.get_column('density')
         count = table.get_column('count_')
         avg_density = sum(d * c for d, c in zip(densities, count)) / sum(count)
-        table.set_footer([None, '    overall: ', Percent(avg_density), None])
-
-
-class ThresholdPruner(PrunerBase):
-    threshold = Parameter('threshold', 1, [], tf.float32)
-
-    def __init__(self, threshold=None, should_update=True):
-        super().__init__(should_update)
-        self.threshold = threshold
-
-    def _updated_mask(self, var, mask, session):
-        return util.absolute_binarize(var, self.threshold)
+        footer = [None, '    overall: ', Percent(avg_density), None]
+        table.set_footer(footer)
+        return footer
 
 
 class MeanStdPruner(PrunerBase):
@@ -63,6 +59,17 @@ class MeanStdPruner(PrunerBase):
 
     def _updated_mask(self, var, mask, session):
         return util.absolute_binarize(var, self._threshold(var))
+
+    def _info(self, session):
+        _, mask, density, count = super()._info(session)
+        alpha = session.run(self.alpha)
+        return self._info_tuple(
+            mask=mask, alpha=alpha, density=density, count_=count)
+
+    @classmethod
+    def finalize_info(cls, table):
+        footer = super().finalize_info(table)
+        table.set_footer([None] + footer)
 
 
 class DynamicNetworkSurgeryPruner(MeanStdPruner):

@@ -173,26 +173,25 @@ class Recentralizer(QuantizerBase):
             var = super().__get__(instance, owner)
             return instance.quantizer._quantize(var)
 
-    def __init__(self, quantizer=None, should_update=True):
-        super().__init__(should_update)
-        self.quantizer = quantizer
-
-    def _parameter_config(self):
-        shape = self.before.shape
-        ones = tf.ones(shape=shape)
-        return {
-            'positives': {'initial': ones, 'shape': shape},
-        }
-
     positives = Parameter('positives', None, None, tf.int32)
     positives_mean = QuantizedParameter('positives/mean', 1, [], tf.float32)
     negatives_mean = QuantizedParameter('negatives/mean', -1, [], tf.float32)
+
+    def __init__(self, quantizer=None, should_update=True):
+        super().__init__(should_update)
+        self.quantizer = quantizer
 
     @memoize_property
     def negatives(self):
         return util.logical_not(self.positives)
 
     def _apply(self, value):
+        self._parameter_config = {
+            'positives': {
+                'initial': tf.ones_initializer(tf.bool),
+                'shape': value.shape,
+            },
+        }
         positives = util.cast(self.positives, float)
         negatives = util.cast(self.negatives, float)
         positives_centralized = positives * (value - self.positives_mean)

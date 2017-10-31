@@ -34,7 +34,7 @@ class Parameter(object):
         self.trainable = trainable
 
     def _getter_kwargs(self, instance):
-        defaults = instance._parameter_config().get(self.name, {})
+        defaults = instance._parameter_config.get(self.name, {})
         kwargs = {}
         for key in ['initial', 'shape']:
             value = getattr(self, key, None)
@@ -86,15 +86,10 @@ class OverriderBase(object):
         self._applied = False
         self.name = None
         self.internals = {}
+        self._parameter_config = {}
         self._parameter_variables = {}
         self._parameter_variables_assignment = {}
         self.should_update = should_update
-
-    def _parameter_config(self):
-        """
-        Override this method to specify run-time variable configurations.
-        """
-        return {}
 
     @memoize_property
     def parameters(self):
@@ -104,7 +99,7 @@ class OverriderBase(object):
                 params[key] = value
         return params
 
-    def assign_parameters(self, tf_session):
+    def assign_parameters(self, session):
         ops = []
         for name, value in self._parameter_variables_assignment.items():
             if value is None:
@@ -112,9 +107,12 @@ class OverriderBase(object):
             log.debug(
                 'Assigning overrider parameter: {}.{} = {}'
                 .format(self, name, value))
-            var = getattr(self, name)  # ensure variable is instantiated
+            getattr(self, name)  # ensure variable is instantiated
+            var = self._parameter_variables[name]
             ops.append(tf.assign(var, value))
-        tf_session.run(ops)
+            # add our variable to the list of initialized_variables
+            session.initialized_variables.append(var)
+        session.tf_session.run(ops)
         self._parameter_variables_assignment = {}
 
     def _apply(self, value):

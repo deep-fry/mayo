@@ -254,10 +254,15 @@ class Table(collections.Sequence):
 
     def _column_widths(self):
         row_widths = []
+        num_columns = len(self._headers)
         others = [self._headers, self._footers]
         for row in self._rows + others:
             if row is None:
                 continue
+            if len(row) != num_columns:
+                raise ValueError(
+                    'Number of columns in row {} does not match headers {}.'
+                    .format(row, self._headers))
             formatters = self._formatters
             if row in others:
                 formatters = self._empty_formatters
