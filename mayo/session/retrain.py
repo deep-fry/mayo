@@ -12,6 +12,7 @@ class Overrider_info(object):
         self.min_scales = {}
         self.ths = {}
         self.scales = {}
+        self.start_ths = {}
         self.scale_update_factors = {}
         self.targets = {}
 
@@ -20,6 +21,7 @@ class Overrider_info(object):
             update_dict = {}
             th_dict = {}
             th_max_dict = {}
+            th_start_dict = {}
             scale_min_dict = {}
             for o in overriders:
                 if o.__class__.__name__ in meta.type:
@@ -27,6 +29,7 @@ class Overrider_info(object):
                     scale_min_dict[o.name] = meta.range['min_scale']
                     update_dict[o.name] = meta.scale_update_factor
                     th_dict[o.name] = meta.range['from']
+                    th_start_dict[o.name] = meta.range['from']
                     th_max_dict[o.name] = meta.range['to']
                     cls_name = o.__class__.__name__
             if scale_dict == {}:
@@ -35,6 +38,7 @@ class Overrider_info(object):
             self.scales[cls_name] = scale_dict
             self.min_scales[cls_name] = scale_min_dict
             self.ths[cls_name] = th_dict
+            self.start_ths[cls_name] = th_start_dict
             self.max_ths[cls_name] = th_max_dict
             self.scale_update_factors[cls_name] = update_dict
             self.targets[cls_name] = str(meta.target)
@@ -47,6 +51,8 @@ class Overrider_info(object):
             return self.min_scales[cls_name][overrider.name]
         elif info_type == 'threshold':
             return self.ths[cls_name][overrider.name]
+        elif info_type == 'start_threshold':
+            return self.start_ths[cls_name][overrider.name]
         elif info_type == 'scale':
             return self.scales[cls_name][overrider.name]
         elif info_type == 'scale_factor':
@@ -168,7 +174,10 @@ class RetrainBase(Train):
 
         for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            self.priority_list.append(key)
+            if self.cont[key]:
+                self.priority_list.append(key)
+        log.debug('display layerwise metric')
+        log.debug('{}'.format(d))
         log.debug('display thresholds')
         log.debug('{}'.format(thresholds))
         log.debug('display scales')
@@ -311,21 +320,29 @@ class GlobalRetrain(RetrainBase):
                     self.log[self.target_layer] = (value, loss, acc)
 
     def backward_policy(self):
-        # retrace the best ckpt
-        self.load_checkpoint(self.best_ckpt)
         # if did not reach min scale
-        if abs(self._fetch_scale()) > abs(self.info.get(
-                self.nets[0].overriders[0], 'end_scale')):
+        end_scale = self.info.get(self.nets[0].overriders[0], 'end_scale')
+        scale = self.info.get(self.nets[0].overriders[0], 'scale')
+        if scale >= 0:
+            is_contiunue = self._fetch_scale() > end_scale
+        else:
+            is_contiunue = self._fetch_scale() < end_scale
+
+        if is_contiunue:
+            # retrace the best ckpt
+            self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
             log.debug('recover threholds to {}'.format(
                 self.info.get(self.nets[0].overriders[0], 'threshold')
             ))
+            self.reset_num_epochs()
             return True
         # stop if reach min scale
         else:
             for o in self.nets[0].overriders:
                 self.cont[self.target_layer] = False
             log.debug('all layers done')
+            self.reset_num_epochs()
             return False
 
     def _decrease_scale(self):
@@ -334,7 +351,11 @@ class GlobalRetrain(RetrainBase):
             # roll back on thresholds
             threshold = self.info.get(o, 'threshold')
             scale = self.info.get(o, 'scale')
-            self.info.set(o, threshold - scale, 'threshold')
+            if threshold == self.info.get(o, 'start_threshold'):
+                raise ValueError('threshold failed on starting point, consider '
+                'change your starting point')
+            else:
+                self.info.set(o, 'threshold', threshold - scale)
             # decrease scale
             factor = self.info.get(o, 'scale_factor')
             if isinstance(scale, int) and isinstance(threshold, int):
@@ -370,43 +391,48 @@ class LayerwiseRetrain(RetrainBase):
         return True
 
     def backward_policy(self):
-        finished = self.cont[self.target_layer] is False
-        self.load_checkpoint(self.best_ckpt)
+        finished = self.cont[self.target_layer] == False
         if self.priority_list == [] and finished:
             log.info('overrider is done, model stored at {}'.format(
                 self.best_ckpt))
             for o in self.nets[0].overriders:
-                log.info('layer name: {}, crate:{}, scale:{}'.format(
+                log.info('layer name: {}, threshold:{}, scale:{}'.format(
                     o.name,
-                    getattr(o, self.threshold_name),
-                    o.scale))
+                    self.info.get(o, 'threshold'),
+                    self.info.get(o, 'scale')))
             return False
         else:
+            # trace back
+            self.load_checkpoint(self.best_ckpt)
             # current layer is done
             for o in self.nets[0].overriders:
                 if o.name == self.target_layer:
                     o_recorded = o
                     break
-            if abs(self._fetch_scale()) >= abs(self.info.get(o_recorded,
-                'end_scale')):
+            end_scale = self.info.get(o_recorded, 'end_scale')
+            scale = self.info.get(o_recorded, 'scale')
+            if scale >= 0:
+                is_contiunue = self._fetch_scale() > end_scale
+            else:
+                is_contiunue = self._fetch_scale() < end_scale
+            if is_contiunue:
                 self._decrease_scale()
-                log.debug('min scale is {}'.format(
-                    self.info.get(o_recorded, min_scale)))
-                log.debug('decrease threholds {}, decreased results {}'.format(
+                log.debug('layer {} decreases its scale to {}'.format(
                     self.target_layer,
                     self._fetch_scale()
                 ))
+                self.reset_num_epochs()
             else:
                 # threshold roll back
                 factor = self.info.get(o_recorded, 'scale_factor')
                 threshold = self.info.get(o_recorded, 'threshold')
                 scale = self.info.get(o_recorded, 'scale')
-                self.info.set(o_recorded, threshold - scale, 'threshold')
+                self.info.set(o_recorded, 'threshold', threshold - scale)
                 self.cont[self.target_layer] = False
-            # fetch a new layer to retrain
-            self.profile_overrider()
-            self.overriders_refresh()
-            self.reset_num_epochs()
+                # fetch a new layer to retrain
+                self.profile_overrider()
+                self.overriders_refresh()
+                self.reset_num_epochs()
             return True
 
     def _decrease_scale(self):
@@ -414,10 +440,14 @@ class LayerwiseRetrain(RetrainBase):
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
                 # threshold roll back
-                factor = self.info.get(o, 'scale_factor')
                 threshold = self.info.get(o, 'threshold')
                 scale = self.info.get(o, 'scale')
-                self.info.set(o, threshold - scale, 'threshold')
+                if threshold == self.info.get(o, 'start_threshold'):
+                    raise ValueError('threshold failed on starting point, consider '
+                        'change your starting point')
+                else:
+                    self.info.set(o, 'threshold', threshold - scale)
+                factor = self.info.get(o, 'scale_factor')
                 # update scale
                 if isinstance(scale, int) and isinstance(threshold, int):
                     self.info.set(o, 'scale', int(scale * factor))

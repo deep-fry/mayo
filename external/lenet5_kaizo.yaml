@@ -12,3 +12,4 @@ model.layers:
         # biases_overrider: *quantizer
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
+    logits: {<<: *overrider}

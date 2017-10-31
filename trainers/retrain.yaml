@@ -1,8 +1,8 @@
 retrain:
     iter_max_epoch: 1
-    tolerance: 0.001
+    tolerance: 0.002
     overriders:
         - type: mayo.override.FixedPointQuantizer
           target: width
-          range: {from: 4, to: 1, scale: -2, min_scale: -1}
+          range: {from: 16, to: 1, scale: -4, min_scale: -2}
           scale_update_factor: 0.5
