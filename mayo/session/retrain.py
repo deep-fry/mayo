@@ -158,7 +158,8 @@ class RetrainBase(Train):
     def profile_overrider(self, start=False):
         self.priority_list = []
         if start:
-            self.best_ckpt = 'pretrained'
+            name = self.config.system.checkpoint.load
+            self.best_ckpt = name
             self.cont = {}
             for o in self.nets[0].overriders:
                 name = o.name
