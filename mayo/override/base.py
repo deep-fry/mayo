@@ -94,7 +94,10 @@ class OverriderBase(object):
     @memoize_property
     def parameters(self):
         params = {}
-        for key, value in self.__class__.__dict__.items():
+        for key in dir(self):
+            if key == 'parameters':
+                continue
+            value = getattr(self, key)
             if isinstance(value, Parameter):
                 params[key] = value
         return params
@@ -142,6 +145,9 @@ class OverriderBase(object):
         self.name = value.op.name
         self.before = value
         self.after = self._apply(value)
+        # ensure instantiation of all parameter variables
+        for param in self.parameters:
+            getattr(self, param)
         return self.after
 
     def _update(self, session):
