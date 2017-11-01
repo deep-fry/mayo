@@ -1,0 +1,84 @@
+---
+dataset:
+    background_class: {use: true}
+    preprocess:
+        shape:
+            height: 224
+            width: 224
+            channels: 3
+        validate: {type: central_crop, fraction: 0.875}
+        final_cpu:
+            - {type: resize, fill: false}
+            - {type: linear_map, scale: 2.0, shift: -1.0}
+model:
+    name: mobilenet_v1
+    description:
+        MobileNet implementation from::
+            https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.py
+    layers:
+        _regu: &regularizer
+            type: tensorflow.contrib.layers.l2_regularizer
+            scale: 0.00004
+        _conv: &conv
+            type: convolution
+            kernel_size: [3, 3]
+            padding: same
+            normalizer_fn:
+                type: tensorflow.contrib.slim.batch_norm
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            activation_fn: tensorflow.nn.relu6
+        _dhconv: &dhconv
+            type: module
+            kwargs: {stride: null, num_outputs: null}
+            layers:
+                depthwise:
+                    type: separable_conv2d
+                    <<: *conv
+                    num_outputs: ^num_outputs
+                    stride: ^stride
+                    depth_multiplier: 1
+                hadamard:
+                    type: hadamard
+            graph:
+                - {from: input, with: [depthwise, hadamard], to: output}
+        conv0:
+            <<: *conv
+            stride: 2
+            num_outputs: !arith >
+                max(32, 8)
+            weights_regularizer: *regularizer
+        conv1: {<<: *dhconv, stride: 1, num_outputs: 64}
+        conv2: {<<: *dhconv, stride: 2, num_outputs: 128}
+        conv3: {<<: *dhconv, stride: 1, num_outputs: 128}
+        conv4: {<<: *dhconv, stride: 2, num_outputs: 256}
+        conv5: {<<: *dhconv, stride: 1, num_outputs: 256}
+        conv6: {<<: *dhconv, stride: 2, num_outputs: 512}
+        conv7: {<<: *dhconv, stride: 1, num_outputs: 512}
+        conv8: {<<: *dhconv, stride: 1, num_outputs: 512}
+        conv9: {<<: *dhconv, stride: 1, num_outputs: 512}
+        conv10: {<<: *dhconv, stride: 1, num_outputs: 512}
+        conv11: {<<: *dhconv, stride: 1, num_outputs: 512}
+        conv12: {<<: *dhconv, stride: 2, num_outputs: 1024}
+        conv13: {<<: *dhconv, stride: 1, num_outputs: 1024}
+        pool: {type: average_pool, kernel_size: 7, stride: 2, padding: valid}
+        dropout: {type: dropout, keep_prob: 0.999}
+        fc:
+            type: convolution
+            kernel_size: 1
+            num_outputs: num_classes
+            activation_fn: null
+            normalizer_fn: null
+            weights_regularizer: *regularizer
+        logits: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: images
+        with: [
+            conv0, conv1, conv2, conv3, conv4, conv5, conv6, conv7, conv8,
+            conv9, conv10, conv11, conv12, conv13, pool, dropout, fc, logits]
+        to: logits
