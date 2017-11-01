@@ -102,13 +102,12 @@ class CheckpointHandler(object):
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
         restore_vars = []
+        missing_vars = []
         for v in self._global_variables():
             base_name, _ = v.name.split(':')
             shape = var_shape_map.get(base_name, None)
             if shape is None:
-                log.warn(
-                    'Variable named {!r} does not exist in checkpoint.'
-                    .format(base_name))
+                missing_vars.append(base_name)
                 continue
             v_shape = v.shape.as_list()
             if shape != v_shape:
@@ -119,9 +118,13 @@ class CheckpointHandler(object):
                 log.warn(msg)
                 continue
             restore_vars.append(v)
+        if missing_vars:
+            log.warn(
+                'Variables missing in checkpoint:\n    {}'
+                .format('\n    '.join(missing_vars)))
         log.debug(
-            'Checkpoint variables to restore: {}.'
-            .format(', '.join(v.name for v in restore_vars)))
+            'Checkpoint variables to restore:\n    {}'
+            .format('\n    '.join(v.name for v in restore_vars)))
         restorer = tf.train.Saver(restore_vars)
         restorer.restore(self._session, path)
         log.debug('Checkpoint restored.')
