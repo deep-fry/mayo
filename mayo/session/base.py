@@ -145,6 +145,7 @@ class Session(object):
             return var_avgs.apply(avg_vars)
 
     def load_checkpoint(self, name):
+        # restore variables
         restore_vars = self.checkpoint.load(name)
         for v in restore_vars:
             if v not in self.initialized_variables:
@@ -176,6 +177,11 @@ class Session(object):
             cls.finalize_info(table)
         return overrider_info
 
+    def _overrider_assign_parameters(self):
+        # parameter assignments in overriders
+        for o in self.nets[0].overriders:
+            o.assign_parameters(self)
+
     def run(self, ops, **kwargs):
         with self.as_default():
             # ensure variables are initialized
@@ -188,9 +194,8 @@ class Session(object):
                 log.warn('Variables are not initialized: {}'.format(desc))
                 self.tf_session.run(tf.variables_initializer(uninit_vars))
                 self.initialized_variables += uninit_vars
-            # parameter assignments in overriders
-            for o in self.nets[0].overriders:
-                o.assign_parameters(self)
+            # assign overrider hyperparameters
+            self._overrider_assign_parameters()
             # session run
             return self.tf_session.run(ops, **kwargs)
 

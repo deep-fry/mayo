@@ -47,7 +47,7 @@ class PrunerBase(OverriderBase):
 class MeanStdPruner(PrunerBase):
     alpha = Parameter('alpha', 1, [], tf.float32)
 
-    def __init__(self, alpha, should_update=True):
+    def __init__(self, alpha=None, should_update=True):
         super().__init__(should_update)
         self.alpha = alpha
 
