@@ -6,8 +6,8 @@ model.layers:
         type: mayo.override.DynamicNetworkSurgeryPruner
     conv0: &overrider
         weights_overrider: &composition
-            - *quantizer
-            # - *pruner
+            # - *quantizer
+            - *pruner
         # activation_overrider: *quantizer
         # biases_overrider: *quantizer
     conv1: {<<: *overrider}

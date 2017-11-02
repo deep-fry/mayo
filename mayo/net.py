@@ -374,10 +374,6 @@ class Net(BaseNet):
         return slim.conv2d(tensor, **params)
 
     @one_to_one
-    def instantiate_separable_conv2d(self, tensor, params):
-        return slim.separable_conv2d(tensor, **params)
-
-    @one_to_one
     def instantiate_depthwise_separable_convolution(self, tensor, params):
         scope = params.pop('scope')
         num_outputs = params.pop('num_outputs')
@@ -391,6 +387,9 @@ class Net(BaseNet):
             tensor, num_outputs=None, kernel_size=kernel, stride=stride,
             weights_regularizer=depthwise_regularizer,
             depth_multiplier=1, scope='{}_depthwise'.format(scope), **params)
+        if num_outputs is None:
+            # if num_outputs is none, it is a depthwise by default
+            return depthwise
         # pointwise layer
         num_outputs = max(int(num_outputs * depth_multiplier), 8)
         pointwise = slim.conv2d(
@@ -453,16 +452,28 @@ class Net(BaseNet):
     def instantiate_hadamard(self, tensor, params):
         import scipy
         # generate a hadmard matrix
-        dim = int(tensor.shape[3])
+        input_channels = dim = int(tensor.shape[3])
+        output_channels = params.pop('num_outputs')
+        if output_channels % input_channels != 0:
+            raise ValueError('inputs and outputs must have a multiply factor'
+                                'of 2')
+        duplications = output_channels / input_channels
+        #spawn hadamard matrix from scipy
         hadamard_matrix = scipy.linalg.hadamard(dim)
         hadamard_matrix = tf.constant(hadamard_matrix, dtype=tf.float32)
         tensor_reshaped = tf.reshape(tensor, [-1, dim])
         # large channel scales lead to divergence
         init = tf.truncated_normal_initializer(mean=1 / float(dim),
                                                stddev=0.001)
-        channel_scales = tf.get_variable(name='channel_scale',
-                                         shape=[dim], initializer=init)
-        tensor_reshaped = tensor_reshaped * channel_scales
+        tensors_scaled = []
+        tensors_out = []
+        for i in range(duplications):
+            channel_scales = tf.get_variable(name='channel_scale' + str(i),
+                                             shape=[dim], initializer=init)
+            tensor_scaled.append(tensor_reshaped * channel_scales)
+            tensors_out.append(tf.reshape(tf.matmul(tensor_reshaped,
+                hadamard_matrix), shape=tensor.shape))
+
         return tf.reshape(tf.matmul(tensor_reshaped, hadamard_matrix),
                           shape=tensor.shape)
 
