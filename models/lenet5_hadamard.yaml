@@ -23,6 +23,7 @@ model:
             num_outputs: 16
         had0: &had
             type: hadamard
+            num_outputs: 32
         pool0: &pool
             type: max_pool
             kernel_size: 2

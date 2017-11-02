@@ -449,6 +449,23 @@ class Net(BaseNet):
         return slim.flatten(tensor, **params)
 
     @one_to_one
+    def instantiate_gating(self, tensor, params):
+        import scipy
+        # generate a hadmard matrix
+        dim = int(tensor.shape[3])
+        hadamard_matrix = scipy.linalg.hadamard(dim)
+        hadamard_matrix = tf.constant(hadamard_matrix, dtype=tf.float32)
+        tensor_reshaped = tf.reshape(tensor, [-1, dim])
+        # large channel scales lead to divergence
+        init = tf.truncated_normal_initializer(mean=1 / float(dim),
+                                               stddev=0.001)
+        channel_scales = tf.get_variable(name='channel_scale',
+                                         shape=[dim], initializer=init)
+        tensor_reshaped = tensor_reshaped * channel_scales
+        return tf.reshape(tf.matmul(tensor_reshaped, hadamard_matrix),
+                          shape=tensor.shape)
+
+    @one_to_one
     def instantiate_hadamard(self, tensor, params):
         import scipy
         # generate a hadmard matrix
@@ -457,25 +474,23 @@ class Net(BaseNet):
         if output_channels % input_channels != 0:
             raise ValueError('inputs and outputs must have a multiply factor'
                                 'of 2')
-        duplications = output_channels / input_channels
-        #spawn hadamard matrix from scipy
+        duplications = int(output_channels / input_channels)
+        # spawn hadamard matrix from scipy
         hadamard_matrix = scipy.linalg.hadamard(dim)
         hadamard_matrix = tf.constant(hadamard_matrix, dtype=tf.float32)
         tensor_reshaped = tf.reshape(tensor, [-1, dim])
         # large channel scales lead to divergence
         init = tf.truncated_normal_initializer(mean=1 / float(dim),
                                                stddev=0.001)
-        tensors_scaled = []
         tensors_out = []
         for i in range(duplications):
             channel_scales = tf.get_variable(name='channel_scale' + str(i),
                                              shape=[dim], initializer=init)
-            tensor_scaled.append(tensor_reshaped * channel_scales)
-            tensors_out.append(tf.reshape(tf.matmul(tensor_reshaped,
+            tensor_scaled = tensor_reshaped * channel_scales
+            tensors_out.append(tf.reshape(tf.matmul(tensor_scaled,
                 hadamard_matrix), shape=tensor.shape))
-
-        return tf.reshape(tf.matmul(tensor_reshaped, hadamard_matrix),
-                          shape=tensor.shape)
+        tensors_out = tf.concat(tensors_out, 3)
+        return tensors_out
 
     def instantiate_concat(self, tensors, params):
         return [tf.concat(tensors, **self._use_name_not_scope(params))]
