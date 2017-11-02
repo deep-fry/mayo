@@ -146,10 +146,6 @@ min = partial(_clip, min_max=True)
 max = partial(_clip, min_max=False)
 
 
-def absolute_binarize(tensor, threshold):
-    return cast(abs(tensor) > threshold, float)
-
-
 def clip_by_value(tensor, minimum, maximum, transparent_backprop=False):
     if not is_tensor(tensor, minimum, maximum):
         return min(max(tensor, minimum), maximum)

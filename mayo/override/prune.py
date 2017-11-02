@@ -58,7 +58,7 @@ class MeanStdPruner(PrunerBase):
         return mean + self.alpha * util.sqrt(var)
 
     def _updated_mask(self, var, mask, session):
-        return util.absolute_binarize(var, self._threshold(var))
+        return abs(var) > self._threshold(var)
 
     def _info(self, session):
         _, mask, density, count = super()._info(session)
