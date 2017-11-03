@@ -1,0 +1,83 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 32
+            width: 32
+            channels: 3
+        validate:
+            - {type: crop_or_pad}
+            # - {type: central_crop, fraction: 0.875}
+        final_cpu:
+            - {type: standardize_image}
+model:
+    name: cifarnet_had
+    layers:
+        _conv: &conv
+            type: convolution
+            kernel_size: [3, 3]
+            padding: same
+            normalizer_fn:
+                type: tensorflow.contrib.slim.batch_norm
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
+            weights_initializer: &trunc_norm_init
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            activation_fn: tensorflow.nn.relu6
+        _dhconv: &dhconv
+            type: module
+            kwargs: {stride: null, num_outputs: null}
+            layers:
+                depthwise:
+                    type: depthwise_separable_convolution
+                    <<: *conv
+                    stride: ^stride
+                    depth_multiplier: 1
+                    depthwise_regularizer:
+                        type: tensorflow.contrib.layers.l2_regularizer
+                        scale: 0.00004
+                hadamard:
+                    type: hadamard
+                    num_outputs: ^num_outputs
+            graph:
+                - {from: input, with: [depthwise, hadamard], to: output}
+        _pool: &pool
+            type: max_pool
+            kernel_size: 3
+            stride: 2
+            padding: valid
+        _fc: &fc
+            type: fully_connected
+            weights_initializer:
+                <<: *trunc_norm_init
+                stddev: 0.04
+            biases_initializer: &bias_init
+                type: tensorflow.constant_initializer
+                value: 0.1
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.004
+        conv0: {<<: *conv, kernel_size: 3, num_outputs: 64}
+        pool0: *pool
+        conv1: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 128}
+        pool1: *pool
+        conv2: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 128}
+        pool2: *pool
+        flatten: {type: flatten}
+        dropout: {type: dropout, keep_prob: 0.5}
+        logits:
+            <<: *fc
+            num_outputs: num_classes
+            biases_initializer: {type: tensorflow.zeros_initializer}
+            weights_initializer:
+                {<<: *trunc_norm_init, stddev: !arith 1.0 / 100.0}
+            weights_regularizer: null
+            activation_fn: null
+    graph:
+        from: images
+        with: [conv0, pool0, conv1, pool1, conv2, pool2, flatten, dropout, logits]
+        to: logits

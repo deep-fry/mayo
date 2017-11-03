@@ -376,12 +376,13 @@ class Net(BaseNet):
     @one_to_one
     def instantiate_depthwise_separable_convolution(self, tensor, params):
         scope = params.pop('scope')
-        num_outputs = params.pop('num_outputs')
+        num_outputs = params.pop('num_outputs', None)
         stride = params.pop('stride')
         kernel = params.pop('kernel_size')
         depth_multiplier = params.pop('depth_multiplier', 1)
         depthwise_regularizer = params.pop('depthwise_regularizer')
-        pointwise_regularizer = params.pop('pointwise_regularizer')
+        if num_outputs is not None:
+            pointwise_regularizer = params.pop('pointwise_regularizer')
         # depthwise layer
         depthwise = slim.separable_conv2d(
             tensor, num_outputs=None, kernel_size=kernel, stride=stride,
