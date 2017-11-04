@@ -45,6 +45,14 @@ model:
                     num_outputs: ^num_outputs
             graph:
                 - {from: input, with: [depthwise, hadamard], to: output}
+        _dsconv: &dsconv
+            <<: *conv
+            type: depthwise_separable_convolution
+            depth_multiplier: 1
+            depthwise_regularizer: null
+            pointwise_regularizer:
+                        type: tensorflow.contrib.layers.l2_regularizer
+                        scale: 0.00004
         _pool: &pool
             type: max_pool
             kernel_size: 3
@@ -61,23 +69,31 @@ model:
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.004
-        conv0: {<<: *conv, kernel_size: 3, num_outputs: 64}
-        pool0: *pool
-        conv1: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 128}
-        pool1: *pool
-        conv2: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 128}
-        pool2: *pool
-        flatten: {type: flatten}
+        conv0: {<<: *conv, kernel_size: 3, num_outputs: 128}
+        conv1: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        conv2: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        conv3: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        conv4: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        pool4: *pool
+        conv5: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        conv6: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        conv7: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        conv8: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 256}
+        pool8: {type: average_pool, kernel_size: 14, stride: 2, padding: valid}
         dropout: {type: dropout, keep_prob: 0.5}
-        logits:
-            <<: *fc
+        fc:
+            type: convolution
+            kernel_size: 1
             num_outputs: num_classes
-            biases_initializer: {type: tensorflow.zeros_initializer}
-            weights_initializer:
-                {<<: *trunc_norm_init, stddev: !arith 1.0 / 100.0}
-            weights_regularizer: null
             activation_fn: null
+            normalizer_fn: null
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
+        logits:
+           {type: squeeze, axis: [1, 2]}
     graph:
         from: images
-        with: [conv0, pool0, conv1, pool1, conv2, pool2, flatten, dropout, logits]
+        with: [conv0, conv1, conv2, conv3, conv4, pool4, conv5, conv6,
+        conv7, conv8, pool8, dropout, fc, logits]
         to: logits

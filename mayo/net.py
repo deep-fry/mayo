@@ -491,6 +491,7 @@ class Net(BaseNet):
             tensors_out.append(tf.reshape(tf.matmul(tensor_scaled,
                 hadamard_matrix), shape=tensor.shape))
         tensors_out = tf.concat(tensors_out, 3)
+        tensor_scaled = tf.nn.relu6(tensor_scaled)
         return tensors_out
 
     def instantiate_concat(self, tensors, params):
