@@ -468,10 +468,13 @@ class Net(BaseNet):
 
     @one_to_one
     def instantiate_hadamard(self, tensor, params):
+        # hadamard matrix is rescaled
+        # A channel wise scaling variable can be used
         import scipy
         # generate a hadmard matrix
         input_channels = dim = int(tensor.shape[3])
         output_channels = params.pop('num_outputs')
+        use_scales = params.pop('scales')
         if output_channels % input_channels != 0:
             raise ValueError('inputs and outputs must have a multiply factor'
                                 'of 2')
@@ -479,20 +482,24 @@ class Net(BaseNet):
         # spawn hadamard matrix from scipy
         hadamard_matrix = scipy.linalg.hadamard(dim)
         hadamard_matrix = tf.constant(hadamard_matrix, dtype=tf.float32)
+        # large channel scales lead to divergence, hence rescale
+        hadamard_matrix = hadamard_matrix / float(dim)
         tensor_reshaped = tf.reshape(tensor, [-1, dim])
-        # large channel scales lead to divergence
-        init = tf.truncated_normal_initializer(mean=1 / float(dim),
-                                               stddev=0.001)
+        if use_scales:
+            init = tf.truncated_normal_initializer(mean=1,
+                                                   stddev=0.001)
         tensors_out = []
         for i in range(duplications):
-            channel_scales = tf.get_variable(name='channel_scale' + str(i),
-                                             shape=[dim], initializer=init)
-            tensor_scaled = tensor_reshaped * channel_scales
-            tensors_out.append(tf.reshape(tf.matmul(tensor_scaled,
+            if use_scales:
+                channel_scales = tf.get_variable(name='channel_scale' + str(i),
+                    shape=[dim], initializer=init)
+                tensor_reshaped = tensor_reshaped * channel_scales
+            tensors_out.append(tf.reshape(tf.matmul(tensor_reshaped,
                 hadamard_matrix), shape=tensor.shape))
         tensors_out = tf.concat(tensors_out, 3)
-        tensor_scaled = tf.nn.relu6(tensor_scaled)
+        tensors_out = tf.nn.relu6(tensors_out)
         return tensors_out
+
 
     def instantiate_concat(self, tensors, params):
         return [tf.concat(tensors, **self._use_name_not_scope(params))]
