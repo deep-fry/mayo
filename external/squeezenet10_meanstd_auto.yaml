@@ -1,0 +1,19 @@
+---
+model.layers:
+    conv1: &overrider
+        weights_overrider:
+            type: mayo.override.MeanStdPruner
+    fire2: &fire_overrider
+      layers:
+        squeeze: {<<: *overrider}
+        expand1: {<<: *overrider}
+        expand3: {<<: *overrider}
+    fire3: {<<: *fire_overrider}
+    fire4: {<<: *fire_overrider}
+    fire5: {<<: *fire_overrider}
+    fire6: {<<: *fire_overrider}
+    fire7: {<<: *fire_overrider}
+    fire8: {<<: *fire_overrider}
+    fire9: {<<: *fire_overrider}
+    conv10: {<<: *overrider}
+    logits: {<<: *overrider}

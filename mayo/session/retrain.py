@@ -158,7 +158,8 @@ class RetrainBase(Train):
     def profile_overrider(self, start=False):
         self.priority_list = []
         if start:
-            self.best_ckpt = 'pretrained'
+            name = self.config.system.checkpoint.load
+            self.best_ckpt = name
             self.cont = {}
             for o in self.nets[0].overriders:
                 name = o.name
@@ -388,6 +389,7 @@ class LayerwiseRetrain(RetrainBase):
         self.profile_overrider()
         self.overriders_refresh()
         self.reset_num_epochs()
+        log.info('decarese threshold, working on {}'.format(self.target_layer))
         return True
 
     def backward_policy(self):
@@ -416,15 +418,13 @@ class LayerwiseRetrain(RetrainBase):
             else:
                 is_contiunue = self._fetch_scale() < end_scale
             if is_contiunue:
+                # overriders are refreshed inside decrease scale
                 self._decrease_scale()
-                log.debug('layer {} decreases its scale to {}'.format(
-                    self.target_layer,
-                    self._fetch_scale()
-                ))
                 self.reset_num_epochs()
+                log.info('decrease scale to {}, working on {}'.format(
+                    self._fetch_scale, self.target_layer))
             else:
                 # threshold roll back
-                factor = self.info.get(o_recorded, 'scale_factor')
                 threshold = self.info.get(o_recorded, 'threshold')
                 scale = self.info.get(o_recorded, 'scale')
                 self.info.set(o_recorded, 'threshold', threshold - scale)
@@ -433,6 +433,9 @@ class LayerwiseRetrain(RetrainBase):
                 self.profile_overrider()
                 self.overriders_refresh()
                 self.reset_num_epochs()
+                log.info('switching layer, working on {}'.format(
+                    self.target_layer))
+                log.info('priority_list: {}'.format(self.priority_list))
             return True
 
     def _decrease_scale(self):
