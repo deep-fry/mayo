@@ -487,29 +487,31 @@ class Net(BaseNet):
     def instantiate_channel_gating(self, tensor, params):
         # downsample the channels
         kernel_size = int(tensor.shape[2])
-        is_start = params.pop('start')
         # pool
         pooled = tf.nn.pool(tensor, pooling_type='AVG', padding='VALID',
                             window_shape=[kernel_size, kernel_size])
-        net_input = tf.squeeze(pooled)
+        net_input = tf.reshape(pooled,
+            shape=[int(pooled.shape[0]), int(pooled.shape[3])])
         # building the network
-        init = tf.truncated_normal_initializer(stddev=0.001)
+        init = tf.truncated_normal_initializer(stddev=0.01)
         output_dim = params.pop('num_outputs')
         scope = params.pop('scope')
         net_out = slim.fully_connected(net_input, num_outputs=output_dim,
-            weights_initializer=init, scope= '{}_fc'.format(scope))
-        threshold = params.pop('threshold')
-        if is_start:
-            self.gating = tf.cast(net_out > threshold, tf.float32)
-            return tensor
-        curr_gating = tf.stack(kernel_size * [self.gating], axis=1)
-        curr_gating = tf.stack(kernel_size * [curr_gating], axis=1)
-        tensor_out = tensor * curr_gating
-        # update self.gating
-        gating = tf.cast(net_out > threshold, tf.float32)
-        self.gating = gating
+            weights_initializer=init, activation_fn=None,
+            scope= '{}_fc'.format(scope))
+        omap = {"Sign": "Identity"}
+        with tf.get_default_graph().gradient_override_map(omap):
+            gating = tf.sign(net_out)
+        gating = tf.clip_by_value(gating, 0, 1)
+        gating = net_out
         tf.add_to_collection('GATING_LOSS', tf.reduce_sum(gating))
-        return tensor_out
+        return gating
+
+    def instantiate_gating_mult(self, tensors, params):
+        gating = tensors[1]
+        gating = tf.reshape(tensors[1],
+            [int(gating.shape[0]), 1, 1, int(gating.shape[1])])
+        return [tf.multiply(tensors[0], gating)]
 
     def instantiate_concat(self, tensors, params):
         return [tf.concat(tensors, **self._use_name_not_scope(params))]
