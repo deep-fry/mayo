@@ -188,6 +188,8 @@ class _DotDict(collections.MutableMapping):
                 'current object {!r} is not key-addressable.'
                 .format(dot_path_key, key, keyable))
 
+        if not hasattr(dot_path_key, 'split'):
+            type_error(self, dot_path_key)
         *dot_path, final_key = dot_path_key.split('.')
         keyable = dictionary or self._mapping
         for index, key in enumerate(dot_path):
