@@ -28,4 +28,5 @@ system:
     checkpoint:
         load: latest
         save: {interval: 1, countdown: 3}
-    summary: {save: true}
+    summary:
+        save: {interval: 0.1}

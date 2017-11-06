@@ -168,8 +168,8 @@ class Train(Session):
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         self._update_progress(epoch, loss, acc, self._cp_epoch)
-        summary_delta = self.change.delta('summary.epoch', epoch)
-        if system.summary.save and summary_delta >= 0.1:
+        summary_interval = system.summary.get('save.interval', 0)
+        if self.change.every('summary.epoch', epoch, summary_interval):
             self._save_summary(epoch)
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
