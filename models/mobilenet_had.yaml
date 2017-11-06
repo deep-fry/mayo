@@ -38,33 +38,43 @@ model:
             kwargs: {stride: null, num_outputs: null}
             layers:
                 depthwise:
-                    type: separable_conv2d
+                    type: depthwise_separable_convolution
                     <<: *conv
-                    num_outputs: ^num_outputs
                     stride: ^stride
                     depth_multiplier: 1
+                    depthwise_regularizer:
+                        type: tensorflow.contrib.layers.l2_regularizer
+                        scale: 0.00004
                 hadamard:
                     type: hadamard
+                    num_outputs: ^num_outputs
+                    use_scales: True
             graph:
-                - {from: input, with: [depthwise, hadamard], to: output}
+                - {from: input, with: [depthwise, hadamard], to: output}}
+        _dsconv: &dsconv
+            <<: *conv
+            type: depthwise_separable_convolution
+            depth_multiplier: 1
+            depthwise_regularizer: null
+            pointwise_regularizer: *regularizer
         conv0:
             <<: *conv
             stride: 2
-            num_outputs: !arith >
-                max(32, 8)
+            num_outputs: 128
             weights_regularizer: *regularizer
-        conv1: {<<: *dhconv, stride: 1, num_outputs: 64}
+        conv1: {<<: *dhconv, stride: 1, num_outputs: 128}
         conv2: {<<: *dhconv, stride: 2, num_outputs: 128}
         conv3: {<<: *dhconv, stride: 1, num_outputs: 128}
-        conv4: {<<: *dhconv, stride: 2, num_outputs: 256}
+        conv4: {<<: *dsconv, stride: 2, num_outputs: 256}
         conv5: {<<: *dhconv, stride: 1, num_outputs: 256}
-        conv6: {<<: *dhconv, stride: 2, num_outputs: 512}
+        conv5: {<<: *dhconv, stride: 1, num_outputs: 256}
+        conv6: {<<: *dsconv, stride: 2, num_outputs: 512}
         conv7: {<<: *dhconv, stride: 1, num_outputs: 512}
         conv8: {<<: *dhconv, stride: 1, num_outputs: 512}
         conv9: {<<: *dhconv, stride: 1, num_outputs: 512}
         conv10: {<<: *dhconv, stride: 1, num_outputs: 512}
         conv11: {<<: *dhconv, stride: 1, num_outputs: 512}
-        conv12: {<<: *dhconv, stride: 2, num_outputs: 1024}
+        conv12: {<<: *dsconv, stride: 2, num_outputs: 1024}
         conv13: {<<: *dhconv, stride: 1, num_outputs: 1024}
         pool: {type: average_pool, kernel_size: 7, stride: 2, padding: valid}
         dropout: {type: dropout, keep_prob: 0.999}
