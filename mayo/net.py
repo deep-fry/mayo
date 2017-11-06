@@ -503,7 +503,6 @@ class Net(BaseNet):
         with tf.get_default_graph().gradient_override_map(omap):
             gating = tf.sign(net_out)
         gating = tf.clip_by_value(gating, 0, 1)
-        gating = net_out
         tf.add_to_collection('GATING_LOSS', tf.reduce_sum(gating))
         return gating
 
