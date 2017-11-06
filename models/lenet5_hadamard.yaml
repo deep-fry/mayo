@@ -24,12 +24,19 @@ model:
         had0: &had
             type: hadamard
             num_outputs: 32
+            scales: False
         pool0: &pool
             type: max_pool
             kernel_size: 2
             stride: 2
             padding: valid
+        gate0: &gating
+            type: channel_gating
+            start: True
+            num_outputs: 64
+            threshold: 1.
         conv1: {<<: *conv, num_outputs: 64}
+        gate1: {<<: *gating, num_outputs: 64, start: False}
         pool1: *pool
         flatten: {type: flatten}
         dropout: {type: dropout, keep_prob: 0.5}
@@ -37,5 +44,5 @@ model:
         logits: {<<: *fc, activation_fn: null, num_outputs: num_classes}
     graph:
         from: images
-        with: [conv0, had0, pool0, conv1, pool1, flatten, dropout, fc1, logits]
+        with: [conv0, gate0, pool0, conv1, gate1, pool1, flatten, dropout, fc1, logits]
         to: logits
