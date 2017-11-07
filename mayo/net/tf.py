@@ -1,16 +1,13 @@
 from mayo.net.base import NetBase
-from mayo.net.util import one_to_one
 
 import tensorflow as tf
 from tensorflow.contrib import slim
 
 
 class Net(NetBase):
-    @one_to_one
     def instantiate_convolution(self, tensor, params):
         return slim.conv2d(tensor, **params)
 
-    @one_to_one
     def instantiate_depthwise_separable_convolution(self, tensor, params):
         scope = params.pop('scope')
         num_outputs = params.pop('num_outputs', None)
@@ -50,46 +47,34 @@ class Net(NetBase):
         # tensorflow complains when stride > kernel size
         params['stride'] = min(stride, kernel[0], kernel[1])
 
-    @one_to_one
     def instantiate_average_pool(self, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
         return slim.avg_pool2d(tensor, **params)
 
-    @one_to_one
     def instantiate_max_pool(self, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
         return slim.max_pool2d(tensor, **params)
 
-    @one_to_one
     def instantiate_fully_connected(self, tensor, params):
         return slim.fully_connected(tensor, **params)
 
-    @one_to_one
     def instantiate_softmax(self, tensor, params):
         return slim.softmax(tensor, **params)
 
-    @one_to_one
     def instantiate_dropout(self, tensor, params):
         params['is_training'] = self.is_training
         return slim.dropout(tensor, **params)
 
-    @one_to_one
     def instantiate_local_response_normalization(self, tensor, params):
         return tf.nn.local_response_normalization(
             tensor, **self._use_name_not_scope(params))
 
-    @one_to_one
     def instantiate_squeeze(self, tensor, params):
         return tf.squeeze(tensor, **self._use_name_not_scope(params))
 
-    @one_to_one
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
-    def instantiate_concat(self, tensors, params):
-        return [tf.concat(tensors, **self._use_name_not_scope(params))]
-
-    @one_to_one
     def instantiate_hadamard(self, tensor, params):
         import scipy
         # generate a hadmard matrix
@@ -112,3 +97,6 @@ class Net(NetBase):
         if activation_function is not None:
             transformed = activation_function(transformed)
         return transformed
+
+    def instantiate_concat(self, tensors, params):
+        return [tf.concat(tensors, **self._use_name_not_scope(params))]

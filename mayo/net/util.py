@@ -18,16 +18,6 @@ def use_name_not_scope(self, params):
     return params
 
 
-def one_to_one(inst_method):
-    @functools.wraps(inst_method)
-    def wrapper(self, tensors, params):
-        if len(tensors) != 1:
-            raise ValueError(
-                'We expect exactly one input for {!r}'.format(inst_method))
-        return [inst_method(self, tensors[0], params)]
-    return wrapper
-
-
 class ParameterTransformer(object):
     def __init__(self, num_classes, is_training, reuse):
         super().__init__()
