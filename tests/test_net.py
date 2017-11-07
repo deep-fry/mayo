@@ -8,7 +8,8 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.net.graph import Graph, TensorNode, LayerNode, JoinNode
-from mayo.net.legacy import _InstantiationParamTransformer
+from mayo.net.base import NetBase
+from mayo.net.util import ParameterTransformer
 from mayo.override import FixedPointQuantizer
 
 
@@ -100,8 +101,9 @@ class TestTransformer(TestCase):
     def setUp(self):
         self.num_classes = 10
         self.is_training = True
-        self.transformer = _InstantiationParamTransformer(
-            self.num_classes, self.is_training)
+        self.reuse = False
+        self.transformer = ParameterTransformer(
+            self.num_classes, self.is_training, self.reuse)
 
     def test_create_hyperobjects(self):
         initializer = {
@@ -154,11 +156,6 @@ class TestTransformer(TestCase):
             y = y_scope
         self.assertObjectEqual(x, y)
 
-    def test_empty_norm_scope(self):
-        null_scope = slim.arg_scope([])
-        test_scope = self.transformer._norm_scope({})
-        self._assertScopeEqual(test_scope, null_scope)
-
     def test_batch_norm_scope(self):
         kwargs = {
             'center': True,
@@ -169,16 +166,18 @@ class TestTransformer(TestCase):
         bn_scope = slim.arg_scope([slim.batch_norm], **kwargs)
         kwargs.update(type='tensorflow.contrib.slim.batch_norm')
         params = {'normalizer_fn': kwargs}
-        test_scope = self.transformer._norm_scope(params)
-        self._assertScopeEqual(test_scope, bn_scope)
+        scopes = []
+        self.transformer._add_norm_scope(params, scopes)
+        self._assertScopeEqual(scopes[0], bn_scope)
 
     def test_overrider_scope(self):
         params = {
             'biases_overrider': FixedPointQuantizer(),
             'weights_overrider': FixedPointQuantizer(),
         }
-        scope = self.transformer._overrider_scope(params)
-        with scope:
+        scopes = []
+        self.transformer._add_overrider_scope(params, scopes)
+        with scopes[0]:
             v = tf.get_variable('test', [1])
             b = tf.get_variable('biases', [1])
             w = tf.get_variable('weights', [1])
@@ -189,5 +188,30 @@ class TestTransformer(TestCase):
         self.assertEqual(w, self.transformer.overriders[1].after)
 
 
-class TestTensorFlowNet(TestCase):
-    pass
+class TestNetBase(TestCase):
+    class Base(NetBase):
+        def instantiate_identity(self, tensors, params):
+            return tensors
+
+        def instantiate_variable(self, tensors, params):
+            return tf.get_variable('var', [], tf.float32)
+
+    def test_propagation(self):
+        model = {
+            'name': 'test',
+            'layers': {'layer': {'type': 'identity'}},
+            'graph': {'from': 'input', 'with': 'layer', 'to': 'output'},
+        }
+        images = 'A'
+        net = self.Base(model, images, None, 10, False, False)
+        self.assertEqual(net.logits(), images)
+
+    def test_scope(self):
+        model = {
+            'name': 'test',
+            'layers': {'layer': {'type': 'variable'}},
+            'graph': {'from': 'input', 'with': 'layer', 'to': 'output'},
+        }
+        net = self.Base(model, None, None, 10, False, False)
+        variable = net.logits()
+        self.assertEqual(variable.name, 'test/layer/var:0')
