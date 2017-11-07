@@ -450,23 +450,6 @@ class Net(BaseNet):
         return slim.flatten(tensor, **params)
 
     @one_to_one
-    def instantiate_gating(self, tensor, params):
-        import scipy
-        # generate a hadmard matrix
-        dim = int(tensor.shape[3])
-        hadamard_matrix = scipy.linalg.hadamard(dim)
-        hadamard_matrix = tf.constant(hadamard_matrix, dtype=tf.float32)
-        tensor_reshaped = tf.reshape(tensor, [-1, dim])
-        # large channel scales lead to divergence
-        init = tf.truncated_normal_initializer(mean=1 / float(dim),
-                                               stddev=0.001)
-        channel_scales = tf.get_variable(name='channel_scale',
-                                         shape=[dim], initializer=init)
-        tensor_reshaped = tensor_reshaped * channel_scales
-        return tf.reshape(tf.matmul(tensor_reshaped, hadamard_matrix),
-                          shape=tensor.shape)
-
-    @one_to_one
     def instantiate_hadamard(self, tensor, params):
         # hadamard matrix is rescaled
         # A channel wise scaling variable can be used
@@ -500,6 +483,34 @@ class Net(BaseNet):
         tensors_out = tf.nn.relu6(tensors_out)
         return tensors_out
 
+    @one_to_one
+    def instantiate_channel_gating(self, tensor, params):
+        # downsample the channels
+        kernel_size = int(tensor.shape[2])
+        # pool
+        pooled = tf.nn.pool(tensor, pooling_type='AVG', padding='VALID',
+                            window_shape=[kernel_size, kernel_size])
+        net_input = tf.reshape(pooled,
+            shape=[int(pooled.shape[0]), int(pooled.shape[3])])
+        # building the network
+        init = tf.truncated_normal_initializer(stddev=0.01)
+        output_dim = params.pop('num_outputs')
+        scope = params.pop('scope')
+        net_out = slim.fully_connected(net_input, num_outputs=output_dim,
+            weights_initializer=init, activation_fn=None,
+            scope= '{}_fc'.format(scope))
+        omap = {"Sign": "Identity"}
+        with tf.get_default_graph().gradient_override_map(omap):
+            gating = tf.sign(net_out)
+        gating = tf.clip_by_value(gating, 0, 1)
+        tf.add_to_collection('GATING_LOSS', tf.reduce_sum(gating))
+        return gating
+
+    def instantiate_gating_mult(self, tensors, params):
+        gating = tensors[1]
+        gating = tf.reshape(tensors[1],
+            [int(gating.shape[0]), 1, 1, int(gating.shape[1])])
+        return [tf.multiply(tensors[0], gating)]
 
     def instantiate_concat(self, tensors, params):
         return [tf.concat(tensors, **self._use_name_not_scope(params))]

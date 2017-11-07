@@ -422,7 +422,7 @@ class LayerwiseRetrain(RetrainBase):
                 self._decrease_scale()
                 self.reset_num_epochs()
                 log.info('decrease scale to {}, working on {}'.format(
-                    self._fetch_scale, self.target_layer))
+                    self._fetch_scale(), self.target_layer))
             else:
                 # threshold roll back
                 threshold = self.info.get(o_recorded, 'threshold')
