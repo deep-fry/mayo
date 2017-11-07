@@ -7,9 +7,11 @@ import networkx as nx
 import tensorflow as tf
 from tensorflow.contrib import slim
 
+from mayo.config import Config
 from mayo.net.graph import Graph, TensorNode, LayerNode, JoinNode
-from mayo.net.base import NetBase
 from mayo.net.util import ParameterTransformer
+from mayo.net.base import NetBase
+from mayo.net.tf import Net
 from mayo.override import FixedPointQuantizer
 
 
@@ -206,12 +208,33 @@ class TestNetBase(TestCase):
         net = self.Base(model, images, None, 10, False, False)
         self.assertEqual(net.logits(), images)
 
-    def test_scope(self):
+    def _test_scope(self, reuse=False):
         model = {
             'name': 'test',
             'layers': {'layer': {'type': 'variable'}},
             'graph': {'from': 'input', 'with': 'layer', 'to': 'output'},
         }
-        net = self.Base(model, None, None, 10, False, False)
+        net = self.Base(model, None, None, 10, False, reuse)
         variable = net.logits()
         self.assertEqual(variable.name, 'test/layer/var:0')
+        return variable
+
+    def test_scope(self):
+        with tf.Graph().as_default():
+            return self._test_scope()
+
+    def test_reuse(self):
+        with tf.Graph().as_default():
+            var1 = self._test_scope(False)
+            var2 = self._test_scope(True)
+            self.assertEqual(var1, var2)
+
+
+class TestNet(TestCase):
+    def test_lenet5(self):
+        config = Config()
+        config.yaml_update('models/lenet5.yaml')
+        images = tf.ones([1, 28, 28, 1], dtype=tf.float32)
+        net = Net(config.model, images, None, 10, False, False)
+        logits = net.logits()
+        self.assertSequenceEqual(logits.shape, [1, 10])
