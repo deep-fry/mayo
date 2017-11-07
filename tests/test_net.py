@@ -192,11 +192,11 @@ class TestTransformer(TestCase):
 
 class TestNetBase(TestCase):
     class Base(NetBase):
-        def instantiate_identity(self, tensors, params):
-            return tensors
+        def instantiate_identity(self, tensor, params):
+            return tensor
 
-        def instantiate_variable(self, tensors, params):
-            return tf.get_variable('var', [], tf.float32)
+        def instantiate_concat(self, tensors, params):
+            return tf.concat(tensors, axis=-1)
 
     def test_propagation(self):
         model = {
@@ -205,8 +205,50 @@ class TestNetBase(TestCase):
             'graph': {'from': 'input', 'with': 'layer', 'to': 'output'},
         }
         images = 'A'
-        net = self.Base(model, images, None, 10, False, False)
-        self.assertEqual(net.logits(), images)
+        net = self.Base(model, {'input': images})
+        self.assertDictEqual(net.outputs(), {'output': images})
+
+    def test_module(self):
+        model = {
+            'name': 'test',
+            'layers': {
+                'mod': {
+                    'type': 'module',
+                    'layers': {'inner': {'type': 'identity'}},
+                    'graph':
+                        {'from': 'input', 'with': 'inner', 'to': 'output'},
+                }
+            },
+            'graph': {'from': 'input', 'with': 'mod', 'to': 'output'},
+        }
+        images = 'A'
+        net = self.Base(model, {'input': images})
+        self.assertDictEqual(net.outputs(), {'output': images})
+
+    def test_convergence(self):
+        model = {
+            'name': 'test',
+            'layers': {
+                'a': {'type': 'identity'},
+                'b': {'type': 'identity'},
+                'concat': {'type': 'concat'},
+            },
+            'graph': [
+                {'from': 'input', 'with': ['a'], 'to': 'a'},
+                {'from': 'input', 'with': ['b'], 'to': 'b'},
+                {'from': ['a', 'b'], 'with': ['concat'], 'to': 'output'},
+            ],
+        }
+        inputs = tf.ones([2, 3], dtype=tf.float32)
+        net = self.Base(model, {'input': inputs})
+        output = net.outputs()['output']
+        self.assertSequenceEqual(output.shape, [2, 6])
+
+
+class TestNet(TestCase):
+    class Net(Net):
+        def instantiate_variable(self, tensor, params):
+            return tf.get_variable('var', [], tf.float32)
 
     def _test_scope(self, reuse=False):
         model = {
@@ -214,8 +256,8 @@ class TestNetBase(TestCase):
             'layers': {'layer': {'type': 'variable'}},
             'graph': {'from': 'input', 'with': 'layer', 'to': 'output'},
         }
-        net = self.Base(model, None, None, 10, False, reuse)
-        variable = net.logits()
+        net = self.Net(model, None, None, 10, False, reuse)
+        variable = net.outputs()['output']
         self.assertEqual(variable.name, 'test/layer/var:0')
         return variable
 
@@ -229,8 +271,6 @@ class TestNetBase(TestCase):
             var2 = self._test_scope(True)
             self.assertEqual(var1, var2)
 
-
-class TestNet(TestCase):
     def test_lenet5(self):
         config = Config()
         config.yaml_update('models/lenet5.yaml')
