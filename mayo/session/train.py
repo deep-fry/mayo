@@ -64,8 +64,13 @@ class Train(Session):
 
     @memoize_property
     def _gradients(self):
-        grads_func = lambda net: self.optimizer.compute_gradients(net.loss())
-        tower_grads = self.net_map(grads_func)
+        def gradient(net):
+            regularization = tf.get_collection(
+                tf.GraphKeys.REGULARIZATION_LOSSES)
+            loss = tf.add_n([net.loss()] + regularization)
+            __import__('ipdb').set_trace()
+            return self.optimizer.compute_gradients(loss)
+        tower_grads = self.net_map(gradient)
         return self._average_gradients(tower_grads)
 
     def _setup_train_operation(self):
