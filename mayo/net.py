@@ -493,17 +493,21 @@ class Net(BaseNet):
         net_input = tf.reshape(pooled,
             shape=[int(pooled.shape[0]), int(pooled.shape[3])])
         # building the network
-        init = tf.truncated_normal_initializer(stddev=0.01)
+        import numpy as np
         output_dim = params.pop('num_outputs')
+        init = tf.truncated_normal_initializer(stddev=0.01)
+        init_b = tf.constant_initializer(np.ones(output_dim))
         scope = params.pop('scope')
         net_out = slim.fully_connected(net_input, num_outputs=output_dim,
             weights_initializer=init, activation_fn=None,
+            biases_initializer=init_b,
             scope= '{}_fc'.format(scope))
         omap = {"Sign": "Identity"}
         with tf.get_default_graph().gradient_override_map(omap):
             gating = tf.sign(net_out)
         gating = tf.clip_by_value(gating, 0, 1)
-        tf.add_to_collection('GATING_LOSS', tf.reduce_sum(gating))
+        # gating = (gating + 1) / 2
+        tf.add_to_collection('GATING_LOSSES', tf.reduce_sum(gating) * 1e-4)
         return gating
 
     def instantiate_gating_mult(self, tensors, params):

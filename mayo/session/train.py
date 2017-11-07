@@ -67,7 +67,11 @@ class Train(Session):
         def gradient(net):
             regularization = tf.get_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES)
-            loss = tf.add_n([net.loss()] + regularization)
+            gating_reg = tf.get_collection(
+                'GATING_LOSSES')
+            self.gating_loss = tf.add_n(gating_reg)
+            loss = tf.add_n([net.loss()] + regularization + gating_reg)
+            # loss = tf.add_n([net.loss()] + regularization)
             return self.optimizer.compute_gradients(loss)
         tower_grads = self.net_map(gradient)
         return self._average_gradients(tower_grads)
