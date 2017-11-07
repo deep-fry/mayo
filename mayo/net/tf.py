@@ -75,6 +75,10 @@ class Net(NetBase):
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
+    def instantiate_channel_gating(self, tensor, params):
+        # TODO channel gating to follow after merge into develop
+        raise NotImplementedError
+
     def instantiate_hadamard(self, tensor, params):
         import scipy
         # generate a hadmard matrix
