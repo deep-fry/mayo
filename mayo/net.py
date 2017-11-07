@@ -507,7 +507,7 @@ class Net(BaseNet):
             gating = tf.sign(net_out)
         gating = tf.clip_by_value(gating, 0, 1)
         # gating = (gating + 1) / 2
-        tf.add_to_collection('GATING_LOSSES', tf.reduce_sum(gating) * 1e-4)
+        tf.add_to_collection('GATING_LOSSES', tf.reduce_sum(gating) * 1e-5)
         return gating
 
     def instantiate_gating_mult(self, tensors, params):

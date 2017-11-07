@@ -4,4 +4,4 @@ rename:
     conv0: gate0/conv
     conv1: gate1/conv
     lenet5: lenet5_gate
-    global_step: null
+    imgs_seen: null
