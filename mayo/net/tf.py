@@ -1,5 +1,7 @@
+import math
 import collections
 
+import scipy
 import tensorflow as tf
 from tensorflow.contrib import slim
 
@@ -10,6 +12,8 @@ from mayo.net.util import ParameterTransformer, use_name_not_scope
 
 
 class _NetBase(NetBase):
+    """ Utility functions to create a TensorFlow network.  """
+
     def __init__(self, model, images, labels, num_classes, is_training, reuse):
         self.is_training = is_training
         self._transformer = ParameterTransformer(
@@ -135,26 +139,24 @@ class Net(_NetBase):
     def instantiate_depthwise_separable_convolution(self, tensor, params):
         scope = params.pop('scope')
         num_outputs = params.pop('num_outputs', None)
+        # depthwise layer
         stride = params.pop('stride')
         kernel = params.pop('kernel_size')
         depth_multiplier = params.pop('depth_multiplier', 1)
         depthwise_regularizer = params.pop('depthwise_regularizer')
-        if num_outputs is not None:
-            pointwise_regularizer = params.pop('pointwise_regularizer')
-        # depthwise layer
         depthwise = slim.separable_conv2d(
             tensor, num_outputs=None, kernel_size=kernel, stride=stride,
             weights_regularizer=depthwise_regularizer,
-            depth_multiplier=1, scope='{}_depthwise'.format(scope), **params)
+            depth_multiplier=1, scope=scope, **params)
         if num_outputs is None:
-            # if num_outputs is none, it is a depthwise by default
+            # if num_outputs is None, it is a depthwise by default
             return depthwise
         # pointwise layer
+        pointwise_regularizer = params.pop('pointwise_regularizer')
         num_outputs = max(int(num_outputs * depth_multiplier), 8)
         pointwise = slim.conv2d(
             depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
-            weights_regularizer=pointwise_regularizer,
-            scope='{}_pointwise'.format(scope), **params)
+            weights_regularizer=pointwise_regularizer, scope=scope, **params)
         return pointwise
 
     @staticmethod
@@ -204,27 +206,29 @@ class Net(_NetBase):
         raise NotImplementedError
 
     def instantiate_hadamard(self, tensor, params):
-        import scipy
-        # generate a hadmard matrix
+        # hadamard matrix
         channels = int(tensor.shape[3])
-        # spawn hadamard matrix from scipy
-        hadamard_matrix = scipy.linalg.hadamard(channels)
-        hadamard_matrix = tf.constant(hadamard_matrix, dtype=tf.float32)
-        # large channel scales lead to divergence, hence rescale
-        hadamard_matrix = hadamard_matrix / float(channels)
-        tensor_reshaped = tf.reshape(tensor, [-1, channels])
+        if 2 ** int(math.log(channels, 2)) != channels:
+            raise ValueError(
+                'Number of channels must be a power of 2 for hadamard layer.')
+        hadamard = scipy.linalg.hadamard(channels)
+        hadamard = tf.constant(hadamard, dtype=tf.float32)
+        hadamard = hadamard / float(channels)  # normalization
+        # flatten input tensor
+        flattened = tf.reshape(tensor, [-1, channels])
         if params.get('scales', True):
             init = tf.truncated_normal_initializer(mean=1, stddev=0.001)
             channel_scales = tf.get_variable(
                 name='channel_scale', shape=[channels], initializer=init)
-            tensor_reshaped = tensor_reshaped * channel_scales
-        transformed = tensor_reshaped @ hadamard_matrix
-        transformed = tf.reshape(transformed, shape=transformed.shape)
-        transformed = tf.concat(transformed, 3)
+            flattened = flattened * channel_scales
+        # transform with hadamard
+        transformed = flattened @ hadamard
+        reshaped = tf.reshape(transformed, shape=tensor.shape)
+        # activation
         activation_function = params.get('activation_fn', tf.nn.relu)
         if activation_function is not None:
-            transformed = activation_function(transformed)
-        return transformed
+            reshaped = activation_function(reshaped)
+        return reshaped
 
     def instantiate_concat(self, tensors, params):
         return tf.concat(tensors, **use_name_not_scope(params))
