@@ -1,14 +1,15 @@
-from mayo.net.base import NetBase
+import collections
 
 import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
 from mayo.util import memoize_method
-from mayo.net.util import ParameterTransformer
+from mayo.net.base import NetBase
+from mayo.net.util import ParameterTransformer, use_name_not_scope
 
 
-class Net(NetBase):
+class _NetBase(NetBase):
     def __init__(self, model, images, labels, num_classes, is_training, reuse):
         self.is_training = is_training
         self._transformer = ParameterTransformer(
@@ -35,6 +36,10 @@ class Net(NetBase):
     def logits(self):
         return self.outputs()['output']
 
+    @property
+    def overriders(self):
+        return self._transformer.overriders
+
     @memoize_method
     def loss(self):
         logits = self.logits()
@@ -43,7 +48,6 @@ class Net(NetBase):
             loss = tf.losses.softmax_cross_entropy(
                 logits=logits, onehot_labels=labels)
             loss = tf.reduce_mean(loss)
-            tf.add_to_collection('losses', loss)
         return loss
 
     def top(self, count=1):
@@ -69,14 +73,14 @@ class Net(NetBase):
         return acc
 
     def _params_to_text(self, params):
-        arguments = '    '
+        arguments = []
         for k, v in params.items():
             try:
                 v = '{}()'.format(v.__qualname__)
             except (KeyError, AttributeError):
                 pass
-            arguments += '\n    {}={}'.format(k, v)
-        return arguments
+            arguments.append('{}={}'.format(k, v))
+        return '    ' + '\n    '.join(arguments)
 
     def _instantiate_numeric_padding(self, tensors, params):
         pad = params.get('padding')
@@ -86,7 +90,10 @@ class Net(NetBase):
         params['padding'] = 'VALID'
         # 4D tensor NxHxWxC, pad H and W
         paddings = [[0, 0], [pad, pad], [pad, pad], [0, 0]]
-        return [tf.pad(t, paddings) for t in tensors]
+        if isinstance(tensors, collections.Sequence):
+            return [tf.pad(t, paddings) for t in tensors]
+        else:
+            return tf.pad(tensors, paddings)
 
     def _instantiate_layer(self, name, tensors, params, module_path):
         # transform parameters
@@ -100,6 +107,10 @@ class Net(NetBase):
             tensors = self._instantiate_numeric_padding(tensors, params)
             return super()._instantiate_layer(
                 name, tensors, params, module_path)
+
+
+class Net(_NetBase):
+    """ Create a TensorFlow graph from "config.model" model definition.  """
 
     def instantiate_convolution(self, tensor, params):
         return slim.conv2d(tensor, **params)
@@ -163,10 +174,10 @@ class Net(NetBase):
 
     def instantiate_local_response_normalization(self, tensor, params):
         return tf.nn.local_response_normalization(
-            tensor, **self._use_name_not_scope(params))
+            tensor, **use_name_not_scope(params))
 
     def instantiate_squeeze(self, tensor, params):
-        return tf.squeeze(tensor, **self._use_name_not_scope(params))
+        return tf.squeeze(tensor, **use_name_not_scope(params))
 
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
@@ -199,8 +210,4 @@ class Net(NetBase):
         return transformed
 
     def instantiate_concat(self, tensors, params):
-        return [tf.concat(tensors, **self._use_name_not_scope(params))]
-
-    @property
-    def overriders(self):
-        return self._transformer.overriders
+        return tf.concat(tensors, **use_name_not_scope(params))

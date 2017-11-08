@@ -13,7 +13,7 @@ from mayo.util import (
 from mayo.override import ChainOverrider
 
 
-def use_name_not_scope(self, params):
+def use_name_not_scope(params):
     params['name'] = params.pop('scope')
     return params
 
@@ -112,10 +112,10 @@ class ParameterTransformer(object):
         scope = slim.arg_scope([params['normalizer_fn']], **norm_params)
         scope_list.append(scope)
 
-    def _add_var_scope(self, name, module_path, scope_list):
+    def _add_var_scope(self, module_path, scope_list):
         if not module_path:
             return
-        path = '/'.join(module_path + (name, ))
+        path = '/'.join(module_path)
         scope = tf.variable_scope(path, reuse=self.reuse)
         scope_list.append(scope)
 
@@ -156,7 +156,7 @@ class ParameterTransformer(object):
                 scope_stack.enter_context(scope)
             yield
 
-    def _scope(self, name, params, module_path):
+    def _scope(self, params, module_path):
         # scopes
         scope_list = []
         # pin variables on cpu
@@ -165,7 +165,7 @@ class ParameterTransformer(object):
         # normalization arg_scope
         self._add_norm_scope(params, scope_list)
         # variable scope
-        self._add_var_scope(name, module_path, scope_list)
+        self._add_var_scope(module_path, scope_list)
         # overrider custom-getter variable scope
         self._add_overrider_scope(params, scope_list)
         # custom nested scope
@@ -180,5 +180,5 @@ class ParameterTransformer(object):
         # layer configs
         self._config_layer(name, params)
         # nested scopes
-        scope = self._scope(name, params, module_path)
+        scope = self._scope(params, module_path)
         return params, scope
