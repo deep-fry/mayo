@@ -54,7 +54,7 @@ model:
         fc8: {<<: *fc, num_outputs: num_classes, activation_fn: null}
         logits: {type: squeeze, axis: [1, 2]}
     graph:
-        from: images
+        from: input
         with: [
             conv1_1, conv1_2, pool1,
             conv2_1, conv2_2, pool2,
@@ -62,4 +62,4 @@ model:
             conv4_1, conv4_2, conv4_3, pool4,
             conv5_1, conv5_2, conv5_3, pool5,
             fc6, dropout6, fc7, dropout7, fc8, logits]
-        to: logits
+        to: output

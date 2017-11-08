@@ -90,10 +90,10 @@ model:
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.00004
-        logits:
-           {type: squeeze, axis: [1, 2]}
+        logits: {type: squeeze, axis: [1, 2]}
     graph:
-        from: images
-        with: [conv0, conv1, conv2, pool2, conv3, conv4, pool4, conv5, conv6,
-        pool6, dropout, fc, logits]
-        to: logits
+        from: input
+        with: [
+            conv0, conv1, conv2, pool2, conv3, conv4, pool4, conv5, conv6,
+            pool6, dropout, fc, logits]
+        to: output

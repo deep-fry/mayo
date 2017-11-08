@@ -56,6 +56,6 @@ model:
         fc1: &fc {<<: *init, type: fully_connected, num_outputs: 500}
         logits: {<<: *fc, activation_fn: null, num_outputs: num_classes}
     graph:
-        from: images
+        from: input
         with: [gate0, pool0, gate1, pool1, flatten, dropout, fc1, logits]
-        to: logits
+        to: output

@@ -185,11 +185,11 @@ model:
             normalizer_fn: null
         squeeze: {type: squeeze, axis: [1, 2]}
     graph:
-        from: images
+        from: input
         with:
             [conv1, conv2a, conv2b, pool3a, conv3b, conv4, pool5,
              mixed5b, mixed5c, mixed5d,
              mixed6a, mixed6b, mixed6c, mixed6d, mixed6e,
              mixed7a, mixed7b, mixed7c,
              pool, dropout, fc, squeeze]
-        to: logits
+        to: output
