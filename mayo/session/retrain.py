@@ -29,6 +29,9 @@ class Overrider_info(object):
                     scale_min_dict[o.name] = meta.range['min_scale']
                     update_dict[o.name] = meta.scale_update_factor
                     if meta.special == 'continue':
+                        if not hasattr(o, meta.target):
+                            raise ValueError('missing {} in checkpoint!'
+                                .format(meta.target))
                         th = session.run(getattr(o, meta.target))
                         th_dict[o.name] = th
                         th_start_dict[o.name] = th
@@ -215,14 +218,16 @@ class RetrainBase(Train):
         if self.config.retrain.get('train_acc_base'):
             # if acc is hand coded in yaml
             self.acc_base = self.config.retrain.train_acc_base
-            log.debug('profiled baselines, acc is {}'.format(
+            log.info('loaded profiled acc baseline, acc is {}'.format(
                 self.acc_base
             ))
+            if self.config.retrain.get('loss_base'):
+                self.loss_base = self.config.retrain.loss_base
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
-        # while epoch < 0.1:
-        while epoch < 1.0:
+        while epoch < 0.1:
+        # while epoch < 1.0:
             _, loss, acc, epoch = self.run(
                 self.empty_eval_run())
             self.loss_total += loss
@@ -238,6 +243,13 @@ class RetrainBase(Train):
             self.acc_base,
         ))
         self._reset_stats()
+        import yaml
+        name = self.config.model.name
+        stream = open('trainers/{}_retrain_base.yaml'.format(name), 'w')
+        data = {'retrain':{'train_acc_base':float(self.acc_base),
+            'loss_base': float(self.loss_base)}}
+        yaml.dump(data, stream, default_flow_style=False)
+        return
 
     def _metric_clac(self, o):
         metric_value = num_elements = self.run(o.after).size
