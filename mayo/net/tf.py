@@ -237,6 +237,8 @@ class Net(_NetBase):
             regularization = regu_cls(**regu_params)(gate)
             tf.add_to_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
+            tf.add_to_collection('GATING_TOTAL', float(int(gate.shape[0]) * int(gate.shape[1])))
+            tf.add_to_collection('GATING_VALID', tf.reduce_sum(gate))
         # threshold
         omap = {'Sign': 'Identity'}
         with tf.get_default_graph().gradient_override_map(omap):
