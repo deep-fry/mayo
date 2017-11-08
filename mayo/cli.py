@@ -101,15 +101,15 @@ Arguments:
         usage_meta['commands'] = '\n'.join(descriptions)
         return self.doc() + self._USAGE.format(**usage_meta)
 
-    def _validate_config(self, keys, action, exit=True):
+    def _validate_config(self, keys, action, dry=False):
         for k in keys:
             if k in self.config:
                 continue
-            printer = log.error_exit if exit else log.error
-            printer(
+            if dry:
+                return False
+            log.error_exit(
                 'Please ensure config content {!r} is imported before '
                 'executing {!r}.'.format(k, action))
-            return False
         return True
 
     _model_keys = [
@@ -272,8 +272,8 @@ Arguments:
 
     def cli_info(self):
         """Prints parameter and layer info of the model.  """
-        keys = self._model_keys
-        if self._validate_config(keys, 'train', exit=False):
+        keys = self._train_keys
+        if self._validate_config(keys, 'train', dry=True):
             session = self._get_session('train')
         else:
             session = self._get_session('validate')
