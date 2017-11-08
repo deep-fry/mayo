@@ -79,16 +79,3 @@ class NetBase(object):
         func, params = object_from_params(params, self, 'instantiate_')
         # instantiation
         return func(tensors, params)
-
-    def info(self):
-        var_info = Table(['variable', 'shape'])
-        var_info.add_rows((v, v.shape) for v in tf.trainable_variables())
-        var_info.add_column(
-            'count', lambda row: var_info[row, 'shape'].num_elements())
-        var_info.set_footer(
-            ['', '    total:', sum(var_info.get_column('count'))])
-        layer_info = Table(['layer', 'shape'])
-        for name, tensors in self.layers.items():
-            for tensor in tensors:
-                layer_info.add_row((name, tensor.shape))
-        return {'variables': var_info, 'layers': layer_info}

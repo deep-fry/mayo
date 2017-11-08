@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import memoize_method
+from mayo.util import memoize_method, Table, ensure_list
 from mayo.net.base import NetBase
 from mayo.net.util import ParameterTransformer, use_name_not_scope
 
@@ -40,6 +40,9 @@ class _NetBase(NetBase):
     def overriders(self):
         return self._transformer.overriders
 
+    def layers(self):
+        return {n.name: self._tensors[n] for n in self._graph.layer_nodes()}
+
     @memoize_method
     def loss(self):
         logits = self.logits()
@@ -71,6 +74,20 @@ class _NetBase(NetBase):
         acc /= top.shape.num_elements()
         self._tensors[name] = acc
         return acc
+
+    def info(self):
+        var_info = Table(['variable', 'shape'])
+        var_info.add_rows((v, v.shape) for v in tf.trainable_variables())
+        var_info.add_column(
+            'count', lambda row: var_info[row, 'shape'].num_elements())
+        var_info.set_footer(
+            ['', '    total:', sum(var_info.get_column('count'))])
+        layer_info = Table(['layer', 'shape'])
+        for name, tensors in self.layers().items():
+            tensors = ensure_list(tensors)
+            for tensor in tensors:
+                layer_info.add_row((name, tensor.shape))
+        return {'variables': var_info, 'layers': layer_info}
 
     def _params_to_text(self, params):
         arguments = []
