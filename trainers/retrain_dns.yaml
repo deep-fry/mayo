@@ -1,6 +1,6 @@
 retrain:
-    iter_max_epoch: 15
-    tolerance: 0.02
+    iter_max_epoch: 10
+    tolerance: 0.0
     overriders:
         # - type: mayo.override.FixedPointQuantizer
         #   target: width
@@ -8,5 +8,6 @@ retrain:
         #   scale_update_factor: 0.5
         - type: mayo.override.DynamicNetworkSurgeryPruner
           target: alpha
-          range: {from: -1.0, to: 10.0, scale: 0.1, min_scale: 0.05}
+          range: {from: -1.0, to: 10.0, scale: 0.4, min_scale: 0.08}
           scale_update_factor: 0.5
+        - special: continue

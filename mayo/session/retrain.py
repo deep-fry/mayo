@@ -7,7 +7,7 @@ from mayo.session.train import Train
 
 
 class Overrider_info(object):
-    def __init__(self, overriders_info, overriders):
+    def __init__(self, overriders_info, overriders, session):
         self.max_ths = {}
         self.min_scales = {}
         self.ths = {}
@@ -28,10 +28,17 @@ class Overrider_info(object):
                     scale_dict[o.name] = meta.range['scale']
                     scale_min_dict[o.name] = meta.range['min_scale']
                     update_dict[o.name] = meta.scale_update_factor
-                    th_dict[o.name] = meta.range['from']
-                    th_start_dict[o.name] = meta.range['from']
+                    if meta.special == 'continue':
+                        th = session.run(getattr(o, meta.target))
+                        th_dict[o.name] = th
+                        th_start_dict[o.name] = th
+                        log.info('{} is continuing on {}'.format(o.name, th))
+                    else:
+                        th_dict[o.name] = meta.range['from']
+                        th_start_dict[o.name] = meta.range['from']
                     th_max_dict[o.name] = meta.range['to']
                     cls_name = o.__class__.__name__
+                    import pdb; pdb.set_trace()
             if scale_dict == {}:
                 raise ValueError('{} is not found in overrider definitions,'
                     'but has specified as a target'.format(meta.type))
@@ -94,7 +101,8 @@ class RetrainBase(Train):
     def _init_scales(self):
         # define initial scale
         overriders_info = self.config.retrain.overriders
-        self.info = Overrider_info(overriders_info, self.nets[0].overriders)
+        self.info = Overrider_info(overriders_info, self.nets[0].overriders,
+            self.tf_session)
         return
 
     def _init_retrain(self):
