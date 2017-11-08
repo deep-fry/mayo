@@ -20,13 +20,13 @@ class EvaluateBase(Session):
         # setup metrics
         metrics_func = lambda net: (net.top(1), net.top(5))
         top1s, top5s = zip(*self.net_map(metrics_func))
-        self._features_perct = 0.
         with self.as_default():
             self._top1_op = tf.concat(top1s, axis=0)
             self._top5_op = tf.concat(top5s, axis=0)
-            total = tf.add_n(tf.get_collection('GATING_TOTAL'))
-            valid = tf.add_n(tf.get_collection('GATING_VALID'))
-            self._features_perct = valid / total
+            if tf.get_collection('GATING_TOTAL'):
+                total = tf.add_n(tf.get_collection('GATING_TOTAL'))
+                valid = tf.add_n(tf.get_collection('GATING_VALID'))
+                self._features_perct = valid / total
 
     def _update_progress(self, step, top1, top5, num_iterations):
         interval = self.change.delta('step.duration', time.time())

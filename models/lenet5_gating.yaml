@@ -23,8 +23,10 @@ model:
             padding: valid
             num_outputs: 20
             gates_regularizer:
-                type: tensorflow.contrib.layers.l1_regularizer
-                scale: 0.0005
+                # type: tensorflow.contrib.layers.l1_regularizer
+                scale: 0.001
+                type: custom_regularizer
+                threshold: 1.0
         pool0: &pool
             type: max_pool
             kernel_size: 2

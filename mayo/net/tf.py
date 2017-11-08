@@ -233,17 +233,38 @@ class Net(_NetBase):
             # minimize the softmax cross entropy between gates and labels.
             # Each label is the result of:
             # the activation magnitude of each output channel > some threshold
-            regu_cls, regu_params = object_from_params(gates_regularizer)
-            regularization = regu_cls(**regu_params)(gate)
-            tf.add_to_collection(
-                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
-        tf.add_to_collection('GATING_TOTAL', float(int(gate.shape[0]) * int(gate.shape[3])))
-        tf.add_to_collection('GATING_VALID', tf.reduce_sum(gate))
+            if 'l1' in gates_regularizer.type:
+                regu_cls, regu_params = object_from_params(gates_regularizer)
+                regularization = regu_cls(**regu_params)(gate)
+                tf.add_to_collection(
+                    tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
+            elif 'custom' in gates_regularizer.type:
+                th = gates_regularizer['threshold']
+                # output pool
+                num, out_height, out_width, out_channels = output.shape
+                pool_params = {
+                    'padding': 'VALID',
+                    'kernel_size': [out_height, out_width],
+                    'scope': gate_scope
+                }
+                out_pooled = self.instantiate_average_pool(output, pool_params)
+                gate_2d = tf.reshape(gate, shape=[num, out_channels])
+                # threholding
+                out_pooled_2d = tf.reshape(out_pooled,
+                    shape=[num, out_channels]) - th
+                # use a traditional mean sqaured error for now
+                tf.losses.mean_squared_error(
+                    labels=out_pooled_2d, predictions=gate_2d,
+                    weights=gates_regularizer.scale,
+                    loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         # threshold
         omap = {'Sign': 'Identity'}
         with tf.get_default_graph().gradient_override_map(omap):
             gate = tf.sign(gate)
             gate = tf.clip_by_value(gate, 0, 1)
+        tf.add_to_collection('GATING_TOTAL',
+            float(int(gate.shape[0]) * int(gate.shape[3])))
+        tf.add_to_collection('GATING_VALID', tf.reduce_sum(gate))
         # gating
         return output * gate
 

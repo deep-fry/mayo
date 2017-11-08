@@ -226,8 +226,8 @@ class RetrainBase(Train):
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
-        while epoch < 0.1:
-        # while epoch < 1.0:
+        # while epoch < 0.1:
+        while epoch < 1.0:
             _, loss, acc, epoch = self.run(
                 self.empty_eval_run())
             self.loss_total += loss

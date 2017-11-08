@@ -13,6 +13,7 @@ from mayo.override.quantize import (
 from mayo.override.prune import (
     MeanStdPruner,
     DynamicNetworkSurgeryPruner,
+    ChannelPruner
 )
 
 
@@ -32,4 +33,5 @@ __all__ = [
     MeanStdPruner,
     DynamicNetworkSurgeryPruner, DNSPruner,
     Recentralizer,
+    ChannelPruner
 ]
