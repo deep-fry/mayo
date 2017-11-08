@@ -1,4 +1,5 @@
 import copy
+import pprint
 import itertools
 import collections
 import networkx as nx
@@ -184,16 +185,22 @@ class Graph(object):
                     input_names, output_names,
                     layer_name, layer_params, submodule_path)
         # add interface IO
+        from_nodes = []
         input_names = params.get('inputs', ['input'])
         for from_name, input_name in zip(from_names, input_names):
             from_node = TensorNode(from_name, module_path)
+            from_nodes.append(from_node)
             input_node = TensorNode(input_name, submodule_path)
             self.add_edge(from_node, input_node)
+        to_nodes = []
         output_names = params.get('outputs', ['output'])
         for output_name, to_name in zip(output_names, to_names):
             output_node = TensorNode(output_name, submodule_path)
             to_node = TensorNode(to_name, module_path)
+            to_nodes.append(to_node)
             self.add_edge(output_node, to_node)
+        # ensure connection
+        self._ensure_connection(from_nodes, to_nodes)
 
     def _add_layer(
             self, from_names, to_names,
@@ -250,6 +257,19 @@ class Graph(object):
             self.add_edge(preds[0], succs[0])
         return changed
 
+    def _ensure_connection(self, from_nodes, to_nodes):
+        iterator = itertools.product(
+            ensure_list(from_nodes), ensure_list(to_nodes))
+        for i, o in iterator:
+            if not any(nx.all_simple_paths(self._graph, i, o)):
+                undirected = self._graph.to_undirected()
+                subgraphs = pprint.pformat(list(
+                    nx.connected_components(undirected)))
+                raise GraphIOError(
+                    'We expect the net to have a path from the inputs '
+                    'to the outputs, a path does not exist between {} and {}. '
+                    'Disjoint subgraph nodes:\n{}'.format(i, o, subgraphs))
+
     def _validate(self):
         # graph is acyclic
         cycles = nx.simple_cycles(self._graph)
@@ -260,11 +280,3 @@ class Graph(object):
         else:
             raise GraphCyclicError(
                 'Graph is not acyclic, contains a cycle {}'.format(cycle))
-        # graph is connected
-        io_iterator = itertools.product(
-            self.input_nodes(), self.output_nodes())
-        for i, o in io_iterator:
-            if not any(nx.all_simple_paths(self._graph, i, o)):
-                raise GraphIOError(
-                    'We expect the net to have a path from the inputs '
-                    'to the outputs.')
