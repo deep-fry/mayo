@@ -20,6 +20,7 @@ class EvaluateBase(Session):
         # setup metrics
         metrics_func = lambda net: (net.top(1), net.top(5))
         top1s, top5s = zip(*self.net_map(metrics_func))
+        self._features_perct = 0.
         with self.as_default():
             self._top1_op = tf.concat(top1s, axis=0)
             self._top5_op = tf.concat(top5s, axis=0)
@@ -51,12 +52,12 @@ class EvaluateBase(Session):
         # evaluation
         log.info('Starting evaluation...')
         top1s, top5s, step, total = 0.0, 0.0, 0, 0
-        if tf.get_collection('GATING_TOTAL') == []:
+        if hasattr(self, '_features_perct'):
             feature_percts = 0.0
         try:
             while step < num_iterations:
                 top1, top5 = self.run([self._top1_op, self._top5_op])
-                if tf.get_collection('GATING_TOTAL') == []:
+                if hasattr(self, '_features_perct'):
                     features_perct = self.run(self._features_perct)
                     feature_percts += features_perct
                     avg_feature_perct = feature_percts / float(num_iterations)
@@ -81,7 +82,7 @@ class EvaluateBase(Session):
             log.info('Evaluation complete.')
             log.info('    top1: {}, top5: {} [{} images]'.format(
                 top1_acc, top5_acc, total))
-            if tf.get_collection('GATING_TOTAL') == []:
+            if hasattr(self, '_features_perct'):
                 log.info('{} Percent of features are active.'.format(
                     avg_feature_perct))
             return top1_acc, top5_acc
