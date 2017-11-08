@@ -6,7 +6,7 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import memoize_method, Table, ensure_list
+from mayo.util import memoize_method, Table, ensure_list, object_from_params
 from mayo.net.base import NetBase
 from mayo.net.util import ParameterTransformer, use_name_not_scope
 
@@ -201,50 +201,49 @@ class Net(_NetBase):
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
-    def instantiate_channel_gating(self, tensor, params):
+    def instantiate_gated_convolution(self, tensor, params):
         num, height, width, channels = tensor.shape
+        gates_regularizer = params.pop('gates_regularizer', None)
+        # convolution
+        output = self.instantiate_convolution(tensor, params)
+        # gating network
+        gate_scope = '{}/gate'.format(params['scope'])
         # pool
         pool_params = {
             'padding': 'VALID',
             'kernel_size': [height, width],
-            'scope': params['scope'],
+            'scope': gate_scope,
         }
-        tensor = self.instantiate_average_pool(tensor, pool_params)
-        squeeze_params = {
-            'squeeze': [1, 2],
-            'scope': params['scope'],
-        }
-        tensor = self.instantiate_squeeze(tensor, squeeze_params)
-        # building the network
+        gate = self.instantiate_average_pool(tensor, pool_params)
+        # fc
         num_outputs = params['num_outputs']
         fc_params = {
+            'kernel_size': 1,
             'num_outputs': num_outputs,
             'biases_initializer': tf.ones_initializer(),
             'weights_initializer':
                 tf.truncated_normal_initializer(stddev=0.01),
             'activation_fn': None,
-            'scope': params['scope']
+            'scope': gate_scope,
         }
-        tensor = self.instantiate_fully_connected(tensor, fc_params)
-        omap = {"Sign": "Identity"}
+        gate = self.instantiate_convolution(gate, fc_params)
+        # regularization
+        if gates_regularizer is not None:
+            # TODO Instead of minimizing L1 regularization loss, we could
+            # minimize the softmax cross entropy between gates and labels.
+            # Each label is the result of:
+            # the activation magnitude of each output channel > some threshold
+            regu_cls, regu_params = object_from_params(gates_regularizer)
+            regularization = regu_cls(**regu_params)(gate)
+            tf.add_to_collection(
+                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
+        # threshold
+        omap = {'Sign': 'Identity'}
         with tf.get_default_graph().gradient_override_map(omap):
-            tensor = tf.sign(tensor)
-        tensor = tf.clip_by_value(tensor, 0, 1)
-        # TODO FIXME explain this
-        valid_gating = tf.reduce_sum(tensor)
-        total_gating = float(int(tensor.shape[0]) * int(tensor.shape[1]))
-        tf.add_to_collection('GATING_TOTAL', total_gating)
-        tf.add_to_collection('GATING_VALID', valid_gating)
-        return tensor
-
-    def instantiate_gating_mult(self, tensors, params):
-        # FIXME gating mult is only used in channel gating,
-        # these two should merge
-        tensor, gating = tensors
-        num, channels = gating.shape
-        with tf.name_scope(params['scope']):
-            gating = tf.reshape(gating, [num, 1, 1, channels])
-            return tf.multiply(tensor, gating)
+            gate = tf.sign(gate)
+            gate = tf.clip_by_value(gate, 0, 1)
+        # gating
+        return output * gate
 
     def instantiate_hadamard(self, tensor, params):
         # hadamard matrix

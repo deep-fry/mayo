@@ -1,6 +1,4 @@
 ---
-train:
-  gate_alpha: 0.00001
 dataset:
     background_class: {use: false}
     preprocess:
@@ -11,54 +9,34 @@ dataset:
         validate: null
         final_cpu: {type: linear_map, scale: 2.0, shift: -1.0}
 model:
-    name: lenet5_gate
+    name: lenet5
     layers:
         _init: &init
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
-        conv0: &conv
+            trainable: false
+        conv0: &gated_conv
             <<: *init
-            type: convolution
+            type: gated_convolution
             kernel_size: 5
             padding: valid
-            num_outputs: 16
-        had0: &had
-            type: hadamard
-            num_outputs: 32
-            scales: False
+            num_outputs: 20
+            gates_regularizer:
+                type: tensorflow.contrib.layers.l1_regularizer
+                scale: 0.0005
         pool0: &pool
             type: max_pool
             kernel_size: 2
             stride: 2
             padding: valid
-        gate: &gated_conv
-            type: module
-            kwargs: {num_outputs: null}
-            layers:
-                conv:
-                    <<: *conv
-                    num_outputs: ^num_outputs
-                    trainable: False
-                gating:
-                    type: channel_gating
-                    num_outputs: ^num_outputs
-                mult:
-                    type: gating_mult
-            graph:
-                - {from: input, with: conv, to: conv_out}
-                - {from: input, with: gating, to: gate_out}
-                - {from: [conv_out, gate_out], with: mult, to: output}
-
-        gate0: {<<: *gated_conv, num_outputs: 20}
-        conv1: {<<: *conv, num_outputs: 20}
-        gate1: {<<: *gated_conv, num_outputs: 50}
         pool1: *pool
-        flatten: {type: flatten}
-        dropout: {type: dropout, keep_prob: 0.5}
-        fc1: &fc {<<: *init, type: fully_connected, num_outputs: 500, trainable: False}
-        logits: {<<: *fc, activation_fn: null, num_outputs: num_classes, trainable: False}
+        conv1: {<<: *gated_conv, num_outputs: 50}
+        flatten1: {type: flatten}
+        dropout1: {type: dropout, keep_prob: 0.5}
+        fc1: &fc {<<: *init, type: fully_connected, num_outputs: 500}
+        logits: {<<: *fc, activation_fn: null, num_outputs: num_classes}
     graph:
-        from: images
-        with: [gate0, pool0, gate1, pool1, flatten, dropout, fc1, logits]
-        to: logits
+        from: input
+        with: [conv0, pool0, conv1, pool1, flatten1, dropout1, fc1, logits]
+        to: output
