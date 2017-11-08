@@ -38,7 +38,6 @@ class Overrider_info(object):
                         th_start_dict[o.name] = meta.range['from']
                     th_max_dict[o.name] = meta.range['to']
                     cls_name = o.__class__.__name__
-                    import pdb; pdb.set_trace()
             if scale_dict == {}:
                 raise ValueError('{} is not found in overrider definitions,'
                     'but has specified as a target'.format(meta.type))
