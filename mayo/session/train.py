@@ -67,11 +67,12 @@ class Train(Session):
         def gradient(net):
             regularization = tf.get_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES)
-            gating_reg = tf.get_collection(
-                'GATING_LOSSES')
-            self.gating_loss = tf.add_n(gating_reg)
-            loss = tf.add_n([net.loss()] + regularization + gating_reg)
-            # loss = tf.add_n([net.loss()] + regularization)
+            loss = tf.add_n([net.loss()] + regularization)
+            if 'gate_alpha' in self.config.train:
+                total = tf.add_n(tf.get_collection('GATING_TOTAL'))
+                valid = tf.add_n(tf.get_collection('GATING_TOTAL'))
+                gating_loss = valid / total * self.config.train.gate_alpha
+                loss += gating_loss
             return self.optimizer.compute_gradients(loss)
         tower_grads = self.net_map(gradient)
         return self._average_gradients(tower_grads)

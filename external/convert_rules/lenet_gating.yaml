@@ -5,3 +5,4 @@ rename:
     conv1: gate1/conv
     lenet5: lenet5_gate
     imgs_seen: null
+    global_step: null

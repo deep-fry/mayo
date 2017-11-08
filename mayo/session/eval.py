@@ -23,6 +23,10 @@ class EvaluateBase(Session):
         with self.as_default():
             self._top1_op = tf.concat(top1s, axis=0)
             self._top5_op = tf.concat(top5s, axis=0)
+            if 'gate_alpha' in self.config.train:
+                total = tf.add_n(tf.get_collection('GATING_TOTAL'))
+                valid = tf.add_n(tf.get_collection('GATING_VALID'))
+                self._features_perct = valid / total
 
     def _update_progress(self, step, top1, top5, num_iterations):
         interval = self.change.delta('step.duration', time.time())
@@ -48,9 +52,15 @@ class EvaluateBase(Session):
         # evaluation
         log.info('Starting evaluation...')
         top1s, top5s, step, total = 0.0, 0.0, 0, 0
+        if 'gate_alpha' in self.config.train:
+            feature_percts = 0.0
         try:
             while step < num_iterations:
                 top1, top5 = self.run([self._top1_op, self._top5_op])
+                if 'gate_alpha' in self.config.train:
+                    features_perct = self.run(self._features_perct)
+                    feature_percts += features_perct
+                    avg_feature_perct = feature_percts / float(num_iterations)
                 if step == num_iterations - 1:
                     # final iteration
                     top1 = top1[:num_final_examples]
@@ -72,6 +82,9 @@ class EvaluateBase(Session):
             log.info('Evaluation complete.')
             log.info('    top1: {}, top5: {} [{} images]'.format(
                 top1_acc, top5_acc, total))
+            if 'gate_alpha' in self.config.train:
+                log.info('{} Percent of features are active.'.format(
+                    avg_feature_perct))
             return top1_acc, top5_acc
 
     def eval_all(self):

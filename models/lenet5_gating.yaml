@@ -1,4 +1,6 @@
 ---
+train:
+  gate_alpha: 0.00001
 dataset:
     background_class: {use: false}
     preprocess:
