@@ -50,7 +50,7 @@ model:
                     num_outputs: ^num_outputs
                     use_scales: True
             graph:
-                - {from: input, with: [depthwise, hadamard], to: output}}
+                - {from: input, with: [depthwise, hadamard], to: output}
         _dsconv: &dsconv
             <<: *conv
             type: depthwise_separable_convolution
@@ -66,7 +66,6 @@ model:
         conv2: {<<: *dhconv, stride: 2, num_outputs: 128}
         conv3: {<<: *dhconv, stride: 1, num_outputs: 128}
         conv4: {<<: *dsconv, stride: 2, num_outputs: 256}
-        conv5: {<<: *dhconv, stride: 1, num_outputs: 256}
         conv5: {<<: *dhconv, stride: 1, num_outputs: 256}
         conv6: {<<: *dsconv, stride: 2, num_outputs: 512}
         conv7: {<<: *dhconv, stride: 1, num_outputs: 512}
@@ -87,8 +86,8 @@ model:
             weights_regularizer: *regularizer
         logits: {type: squeeze, axis: [1, 2]}
     graph:
-        from: images
+        from: input
         with: [
             conv0, conv1, conv2, conv3, conv4, conv5, conv6, conv7, conv8,
             conv9, conv10, conv11, conv12, conv13, pool, dropout, fc, logits]
-        to: logits
+        to: output

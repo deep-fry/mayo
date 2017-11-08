@@ -68,9 +68,9 @@ model:
             weights_regularizer: null
             activation_fn: null
     graph:
-        from: images
+        from: input
         with: [
             conv1, pool1, norm1,
             conv2, norm2, pool2, flatten2,
             fc3, dropout3, fc4, logits]
-        to: logits
+        to: output

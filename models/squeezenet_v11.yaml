@@ -71,11 +71,11 @@ model:
         pool10: {type: average_pool, kernel_size: 13, stride: 1}
         logits: {type: squeeze, axis: [1, 2]}
     graph:
-        from: images
+        from: input
         with:
             [conv1, pool1,
              fire2, fire3, pool3,
              fire4, fire5, pool5,
              fire6, fire7, fire8, fire9, dropout9,
              conv10, pool10, logits]
-        to: logits
+        to: output

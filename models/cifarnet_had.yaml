@@ -42,18 +42,16 @@ model:
                         scale: 0.00004
                 hadamard:
                     type: hadamard
-                    num_outputs: ^num_outputs
-                    use_scales: False
-            graph:
-                - {from: input, with: [depthwise, hadamard], to: output}
+                    use_scales: false
+            graph: {from: input, with: [depthwise, hadamard], to: output}
         _dsconv: &dsconv
             <<: *conv
             type: depthwise_separable_convolution
             depth_multiplier: 1
             depthwise_regularizer: null
             pointwise_regularizer:
-                        type: tensorflow.contrib.layers.l2_regularizer
-                        scale: 0.00004
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
         _pool: &pool
             type: max_pool
             kernel_size: 3
@@ -90,10 +88,10 @@ model:
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.00004
-        logits:
-           {type: squeeze, axis: [1, 2]}
+        logits: {type: squeeze, axis: [1, 2]}
     graph:
-        from: images
-        with: [conv0, conv1, conv2, pool2, conv3, conv4, pool4, conv5, conv6,
-        pool6, dropout, fc, logits]
-        to: logits
+        from: input
+        with: [
+            conv0, conv1, conv2, pool2, conv3, conv4, pool4, conv5, conv6,
+            pool6, dropout, fc, logits]
+        to: output

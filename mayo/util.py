@@ -325,7 +325,7 @@ def flatten(items, skip_none=False):
 
 
 def ensure_list(item_or_list):
-    if isinstance(item_or_list, (str, collections.Mapping)):
+    if isinstance(item_or_list, (str, collections.Mapping, tf.Tensor)):
         return [item_or_list]
     if isinstance(item_or_list, list):
         return item_or_list
