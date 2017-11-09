@@ -23,6 +23,8 @@ class TFNet(TFNetBase):
         kernel = params.pop('kernel_size')
         depth_multiplier = params.pop('depth_multiplier', 1)
         depthwise_regularizer = params.pop('depthwise_regularizer')
+        # pop it out, so later **params is correct
+        pointwise_regularizer = params.pop('pointwise_regularizer', None)
         depthwise = slim.separable_conv2d(
             tensor, num_outputs=None, kernel_size=kernel, stride=stride,
             weights_regularizer=depthwise_regularizer,
@@ -31,7 +33,6 @@ class TFNet(TFNetBase):
             # if num_outputs is None, it is a depthwise by default
             return depthwise
         # pointwise layer
-        pointwise_regularizer = params.pop('pointwise_regularizer')
         num_outputs = max(int(num_outputs * depth_multiplier), 8)
         pointwise = slim.conv2d(
             depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
