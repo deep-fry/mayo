@@ -44,6 +44,48 @@ class PrunerBase(OverriderBase):
         return footer
 
 
+class RandomChannelPruner(OverriderBase):
+    def __init__(self, ratio=None, should_update=True):
+        super().__init__(should_update)
+        self.ratio = ratio
+
+    def _apply(self, session):
+        return self._apply_value(self.before, session)
+
+    def _update(self, session):
+        return
+
+    def _apply_value(self, var, session):
+        n, h, w, c = var.shape
+        n = int(n)
+        c = int(c)
+        # threshold
+        omap = {'Sign': 'Identity'}
+
+        random_number = tf.random_uniform(shape=[n, 1, 1, c],
+            minval=self.ratio-1, maxval=self.ratio)
+        with tf.get_default_graph().gradient_override_map(omap):
+            self.gate = tf.sign(random_number)
+            self.gate = tf.clip_by_value(self.gate, 0, 1)
+        # gates out feature maps with low vairance and replace the whole feature
+        # map with its mean
+        tf.add_to_collection('mayo.gates', self.gate)
+        return self.gate * var
+
+    def _info(self, session):
+        gate = util.cast(session.run(self.gate), int)
+        density = Percent(util.sum(gate) / util.count(gate))
+        return self._info_tuple(
+            mask=self.gate.name, density=density, count_=gate.size)
+
+    @classmethod
+    def finalize_info(cls, table):
+        densities = table.get_column('density')
+        count = table.get_column('count_')
+        avg_density = sum(d * c for d, c in zip(densities, count)) / sum(count)
+        footer = [None, '    overall: ', Percent(avg_density), None]
+        table.set_footer(footer)
+
 class ChannelPruner(OverriderBase):
     alpha = Parameter('alpha', 1, [], tf.float32)
     threshold = Parameter('threshold', 1, [], tf.float32)
@@ -74,9 +116,7 @@ class ChannelPruner(OverriderBase):
             self.gate = tf.clip_by_value(self.gate, 0, 1)
         # gates out feature maps with low vairance and replace the whole feature
         # map with its mean
-        tf.add_to_collection('GATING_TOTAL',
-            float(int(self.gate.shape[0]) * int(self.gate.shape[3])))
-        tf.add_to_collection('GATING_VALID', tf.reduce_sum(self.gate))
+        tf.add_to_collection('mayo.gates', self.gate)
         return mean * (1 - self.gate) + self.gate * var
         # return self.gate * var
 
