@@ -6,7 +6,7 @@ from contextlib import contextmanager
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.net.tf import Net
+from mayo.net import TFNet
 from mayo.util import memoize_method, memoize_property, Change, flatten, Table
 from mayo.override import ChainOverrider
 from mayo.preprocess import Preprocess
@@ -218,7 +218,7 @@ class Session(object):
             for i, (images, labels) in enumerate(self._preprocess()):
                 log.debug('Instantiating graph for GPU #{}...'.format(i))
                 with self._gpu_context(i):
-                    net = Net(
+                    net = TFNet(
                         self.config.model, images, labels, num_classes,
                         self.mode == 'train', bool(nets))
                 nets.append(net)

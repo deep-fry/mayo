@@ -1,5 +1,3 @@
-import collections
-
 import tensorflow as tf
 
 from mayo.log import log
@@ -259,22 +257,25 @@ class Preprocess(object):
         return image, label + offset
 
     def preprocess(self):
+        # file names
         files = self.config.data_files(self.mode)
         num_gpus = self.num_gpus
         batch_size = self.batch_size_per_gpu * num_gpus
-        dataset = tf.contrib.data.Dataset.from_tensor_slices(files)
+        dataset = tf.data.Dataset.from_tensor_slices(files)
         if self.mode == 'train':
             # shuffle .tfrecord files
             dataset = dataset.shuffle(buffer_size=len(files))
-        dataset = dataset.flat_map(tf.contrib.data.TFRecordDataset)
+        # tfrecord files to images
+        dataset = dataset.flat_map(tf.data.TFRecordDataset)
         dataset = dataset.repeat()
         dataset = dataset.map(
-            self._preprocess, num_threads=self.num_threads,
-            output_buffer_size=self.num_threads * batch_size)
+            self._preprocess, num_parallel_calls=self.num_threads)
+        dataset = dataset.prefetch(self.num_threads * batch_size)
         if self.mode == 'train':
             buffer_size = min(1024, 10 * batch_size)
             dataset = dataset.shuffle(buffer_size=buffer_size)
         dataset = dataset.batch(batch_size)
+        # iterator
         iterator = dataset.make_one_shot_iterator()
         images, labels = iterator.get_next()
         # ensuring the shape of images and labels to be constants
@@ -283,10 +284,11 @@ class Preprocess(object):
         labels = tf.reshape(labels, batch_shape)
         batch_images_labels = list(zip(
             tf.split(images, num_gpus), tf.split(labels, num_gpus)))
-        image_preprocess = _ImagePreprocess(
-            self.image_shape, self.moment, None)
+        # final preprocessing on gpu
         gpu_actions = self._actions('final_gpu')
         if gpu_actions:
+            image_preprocess = _ImagePreprocess(
+                self.image_shape, self.moment, None)
             for gid, (images, labels) in enumerate(batch_images_labels):
                 with tf.device('/gpu:{}'.format(gid)):
                     images = image_preprocess.preprocess(
