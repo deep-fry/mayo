@@ -61,6 +61,8 @@ class ChannelPruner(OverriderBase):
 
     def _apply_value(self, var, session):
         n, h, w, c = var.shape
+        n = int(n)
+        c = int(c)
         mean, variance = tf.nn.moments(var, axes=[1, 2])
         # import pdb; pdb.set_trace()
         variance = tf.reshape(variance, shape=[n, 1, 1, c])

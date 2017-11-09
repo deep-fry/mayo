@@ -242,6 +242,8 @@ class Net(_NetBase):
                 th = gates_regularizer['threshold']
                 # output pool
                 num, out_height, out_width, out_channels = output.shape
+                num = int(num)
+                out_channels = int(out_channels)
                 pool_params = {
                     'padding': 'VALID',
                     'kernel_size': [out_height, out_width],
