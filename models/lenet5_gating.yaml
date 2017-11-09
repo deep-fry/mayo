@@ -15,16 +15,17 @@ model:
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
-            trainable: false
         conv0: &gated_conv
             <<: *init
             type: gated_convolution
             kernel_size: 5
             padding: valid
             num_outputs: 20
-            # gates_regularizer:
-            #     type: tensorflow.contrib.layers.l1_regularizer
-            #     scale: 0.001
+            policy:
+                type: softmax_cross_entropy
+                density: 0.2
+                # type: tensorflow.contrib.layers.l1_regularizer
+                # scale: 0.001
         pool0: &pool
             type: max_pool
             kernel_size: 2

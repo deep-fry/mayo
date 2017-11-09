@@ -203,7 +203,7 @@ class Net(_NetBase):
 
     def instantiate_gated_convolution(self, tensor, params):
         num, height, width, channels = tensor.shape
-        gates_regularizer = params.pop('gates_regularizer', None)
+        policy = params.pop('policy')
         # convolution
         output = self.instantiate_convolution(tensor, params)
         # gating network
@@ -214,7 +214,8 @@ class Net(_NetBase):
             'kernel_size': [height, width],
             'scope': gate_scope,
         }
-        gate = self.instantiate_average_pool(tensor, pool_params)
+        # max pool is hardware-friendlier
+        gate = self.instantiate_max_pool(tensor, pool_params)
         # fc
         num_outputs = params['num_outputs']
         fc_params = {
@@ -228,18 +229,7 @@ class Net(_NetBase):
         }
         gate = self.instantiate_convolution(gate, fc_params)
         # policies
-        if gates_regularizer is not None:
-            # regularizer policy
-            regu_cls, regu_params = object_from_params(gates_regularizer)
-            regularization = regu_cls(**regu_params)(gate)
-            tf.add_to_collection(
-                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
-            # threshold
-            omap = {'Sign': 'Identity'}
-            with tf.get_default_graph().gradient_override_map(omap):
-                gate = tf.sign(gate)
-                gate = tf.clip_by_value(gate, 0, 1)
-        else:
+        if policy.type == 'softmax_cross_entropy':
             # predictor policy
             # output pool
             _, out_height, out_width, out_channels = output.shape
@@ -248,16 +238,17 @@ class Net(_NetBase):
                 'kernel_size': [out_height, out_width],
                 'scope': gate_scope,
             }
-            # TODO not really sensible to use averge pool as the
-            # threshold criteria
-            avg_output = self.instantiate_average_pool(output, pool_params)
+            # TODO is it really sensible to use averge pool as the
+            # threshold criteria?
+            avg_output = self.instantiate_max_pool(output, pool_params)
             # not training the output as we train the predictor `gate`
             avg_output = tf.stop_gradient(avg_output)
             # loss
             tf.losses.softmax_cross_entropy(
-                avg_output, gate,
+                avg_output, gate, weights=0.00001,
                 loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-            k = math.ceil(int(out_channels) * 0.5)
+            # thresholding
+            k = math.ceil(int(out_channels) * policy.density)
             gate_top_k, _ = tf.nn.top_k(gate, k=k, sorted=True)
             gate_threshold = tf.reduce_min(gate_top_k, axis=[1, 2, 3])
             # gate_max.shape [batch_size]
@@ -265,7 +256,19 @@ class Net(_NetBase):
                 gate_threshold = tf.expand_dims(gate_threshold, -1)
             # gate_max.shape [batch_size, 1, 1, 1]
             gate = tf.cast(gate > gate_threshold, tf.float32)
+            # training happens in softmax_cross_entropy
             gate = tf.stop_gradient(gate)
+        else:
+            # regularizer policy
+            regu_cls, regu_params = object_from_params(policy)
+            regularization = regu_cls(**regu_params)(gate)
+            tf.add_to_collection(
+                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
+            # threshold
+            omap = {'Sign': 'Identity'}
+            with tf.get_default_graph().gradient_override_map(omap):
+                gate = tf.sign(gate)
+                gate = tf.clip_by_value(gate, 0, 1)
         tf.add_to_collection('mayo.gates', gate)
         # gating
         return output * gate
