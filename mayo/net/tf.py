@@ -80,6 +80,42 @@ class TFNet(TFNetBase):
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
+    def instantiate_local_gating(self, tensor, params):
+        num, height, width, channels = tensor.shape
+        policy = params.pop('policy')
+        gate_scope = '{}/gate'.format(params['scope'])
+        pool_params = {
+            'padding': 'VALID',
+            'kernel_size': [height, width],
+            'scope': gate_scope,
+        }
+        # max pool is hardware-friendlier
+        gate = self.instantiate_max_pool(tensor, pool_params)
+        # fc
+        fc_params = {
+            'kernel_size': 1,
+            'num_outputs': channels,
+            'biases_initializer': tf.ones_initializer(),
+            'weights_initializer':
+                tf.truncated_normal_initializer(stddev=0.01),
+            'activation_fn': None,
+            'scope': gate_scope,
+        }
+        gate = self.instantiate_convolution(gate, fc_params)
+        # regularizer policy
+        regu_cls, regu_params = object_from_params(policy)
+        regularization = regu_cls(**regu_params)(gate)
+        tf.add_to_collection(
+            tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
+        # threshold
+        omap = {'Sign': 'Identity'}
+        with tf.get_default_graph().gradient_override_map(omap):
+            gate = tf.sign(gate)
+            gate = tf.clip_by_value(gate, 0, 1)
+        tf.add_to_collection('mayo.gates', gate)
+        # gating
+        return tensor* gate
+
     def instantiate_gated_convolution(self, tensor, params):
         num, height, width, channels = tensor.shape
         policy = params.pop('policy')
