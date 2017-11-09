@@ -227,46 +227,46 @@ class Net(_NetBase):
             'scope': gate_scope,
         }
         gate = self.instantiate_convolution(gate, fc_params)
-        # regularization
+        # policies
         if gates_regularizer is not None:
-            # TODO Instead of minimizing L1 regularization loss, we could
-            # minimize the softmax cross entropy between gates and labels.
-            # Each label is the result of:
-            # the activation magnitude of each output channel > some threshold
-            if 'l1' in gates_regularizer.type:
-                regu_cls, regu_params = object_from_params(gates_regularizer)
-                regularization = regu_cls(**regu_params)(gate)
-                tf.add_to_collection(
-                    tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
-            elif 'custom' in gates_regularizer.type:
-                th = gates_regularizer['threshold']
-                # output pool
-                num, out_height, out_width, out_channels = output.shape
-                num = int(num)
-                out_channels = int(out_channels)
-                pool_params = {
-                    'padding': 'VALID',
-                    'kernel_size': [out_height, out_width],
-                    'scope': gate_scope
-                }
-                out_pooled = self.instantiate_average_pool(output, pool_params)
-                gate_2d = tf.reshape(gate, shape=[num, out_channels])
-                # threholding
-                out_pooled_2d = tf.reshape(out_pooled,
-                    shape=[num, out_channels]) - th
-                # use a traditional mean sqaured error for now
-                tf.losses.mean_squared_error(
-                    labels=out_pooled_2d, predictions=gate_2d,
-                    weights=gates_regularizer.scale,
-                    loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-        # threshold
-        omap = {'Sign': 'Identity'}
-        with tf.get_default_graph().gradient_override_map(omap):
-            gate = tf.sign(gate)
-            gate = tf.clip_by_value(gate, 0, 1)
-        tf.add_to_collection('GATING_TOTAL',
-            float(int(gate.shape[0]) * int(gate.shape[3])))
-        tf.add_to_collection('GATING_VALID', tf.reduce_sum(gate))
+            # regularizer policy
+            regu_cls, regu_params = object_from_params(gates_regularizer)
+            regularization = regu_cls(**regu_params)(gate)
+            tf.add_to_collection(
+                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
+            # threshold
+            omap = {'Sign': 'Identity'}
+            with tf.get_default_graph().gradient_override_map(omap):
+                gate = tf.sign(gate)
+                gate = tf.clip_by_value(gate, 0, 1)
+        else:
+            # predictor policy
+            # output pool
+            _, out_height, out_width, out_channels = output.shape
+            pool_params = {
+                'padding': 'VALID',
+                'kernel_size': [out_height, out_width],
+                'scope': gate_scope,
+            }
+            # TODO not really sensible to use averge pool as the
+            # threshold criteria
+            avg_output = self.instantiate_average_pool(output, pool_params)
+            # not training the output as we train the predictor `gate`
+            avg_output = tf.stop_gradient(avg_output)
+            # loss
+            tf.losses.softmax_cross_entropy(
+                avg_output, gate,
+                loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+            k = math.ceil(int(out_channels) * 0.5)
+            gate_top_k, _ = tf.nn.top_k(gate, k=k, sorted=True)
+            gate_threshold = tf.reduce_min(gate_top_k, axis=[1, 2, 3])
+            # gate_max.shape [batch_size]
+            for _ in range(3):
+                gate_threshold = tf.expand_dims(gate_threshold, -1)
+            # gate_max.shape [batch_size, 1, 1, 1]
+            gate = tf.cast(gate > gate_threshold, tf.float32)
+            gate = tf.stop_gradient(gate)
+        tf.add_to_collection('mayo.gates', gate)
         # gating
         return output * gate
 

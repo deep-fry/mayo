@@ -1,8 +1,7 @@
 import collections
 
-import tensorflow as tf
 
-from mayo.util import object_from_params, Table
+from mayo.util import object_from_params
 from mayo.net.graph import Graph, LayerNode, SplitNode, JoinNode
 
 
