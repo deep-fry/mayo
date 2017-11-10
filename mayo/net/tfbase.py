@@ -43,7 +43,11 @@ class TFNetBase(NetBase):
         return self._transformer.overriders
 
     def layers(self):
-        return {n.name: self._tensors[n] for n in self._graph.layer_nodes()}
+        layers = {}
+        for n in self._graph.layer_nodes():
+            name = '{}/{}'.format('/'.join(n.module), n.name)
+            layers[name] = self._tensors[n]
+        return layers
 
     @memoize_method
     def loss(self):
@@ -119,10 +123,13 @@ class TFNetBase(NetBase):
         params, scope = self._transformer.transform(name, params, module_path)
         with scope:
             layer_type = params['type']
-            layer_key = tf.get_variable_scope().name
+            layer_key = '{}/{}'.format(
+                tf.get_variable_scope().name, params['scope'])
+            layer_args = self._params_to_text(params)
             log.debug(
                 'Instantiating {!r} of type {!r} with arguments:\n{}'
-                .format(layer_key, layer_type, self._params_to_text(params)))
+                .format(layer_key, layer_type, layer_args))
             tensors = self._instantiate_numeric_padding(tensors, params)
-            return super()._instantiate_layer(
+            layer = super()._instantiate_layer(
                 name, tensors, params, module_path)
+        return layer
