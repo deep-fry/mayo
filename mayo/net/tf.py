@@ -27,16 +27,17 @@ class TFNet(TFNetBase):
         pointwise_regularizer = params.pop('pointwise_regularizer', None)
         depthwise = slim.separable_conv2d(
             tensor, num_outputs=None, kernel_size=kernel, stride=stride,
-            weights_regularizer=depthwise_regularizer,
-            depth_multiplier=1, scope=scope, **params)
+            weights_regularizer=depthwise_regularizer, depth_multiplier=1,
+            scope='{}/depthwise'.format(scope), **params)
         if num_outputs is None:
-            # if num_outputs is None, it is a depthwise by default
+            # skip pointwise if `num_outputs` is not specified
             return depthwise
         # pointwise layer
         num_outputs = max(int(num_outputs * depth_multiplier), 8)
         pointwise = slim.conv2d(
             depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
-            weights_regularizer=pointwise_regularizer, scope=scope, **params)
+            weights_regularizer=pointwise_regularizer,
+            scope='{}/pointwise'.format(scope), **params)
         return pointwise
 
     @staticmethod
@@ -115,7 +116,7 @@ class TFNet(TFNetBase):
             gate = tf.clip_by_value(gate, 0, 1)
         tf.add_to_collection('mayo.gates', gate)
         # gating
-        return tensor* gate
+        return tensor * gate
 
     def instantiate_gated_convolution(self, tensor, params):
         num, height, width, channels = tensor.shape
