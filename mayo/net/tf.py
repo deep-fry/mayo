@@ -1,6 +1,5 @@
 import math
 
-import scipy
 import tensorflow as tf
 from tensorflow.contrib import slim
 
@@ -191,29 +190,24 @@ class TFNet(TFNetBase):
         return output * gate
 
     def instantiate_hadamard(self, tensor, params):
-        # hadamard matrix
-        channels = int(tensor.shape[3])
+        def fwht(value):
+            if value.shape[-1] == 1:
+                return value
+            lower, upper = tf.split(value, 2, axis=-1)
+            lower, upper = lower + upper, lower - upper
+            return tf.concat((fwht(lower), fwht(upper)), axis=-1)
+        # check depth is 2^n
+        channels = int(tensor.shape[-1])
         if 2 ** int(math.log(channels, 2)) != channels:
             raise ValueError(
                 'Number of channels must be a power of 2 for hadamard layer.')
-        hadamard = scipy.linalg.hadamard(channels)
-        hadamard = tf.constant(hadamard, dtype=tf.float32)
-        hadamard = hadamard / float(channels)  # normalization
-        # flatten input tensor
-        flattened = tf.reshape(tensor, [-1, channels])
-        if params.get('scales', True):
-            init = tf.truncated_normal_initializer(mean=1, stddev=0.001)
-            channel_scales = tf.get_variable(
-                name='channel_scale', shape=[channels], initializer=init)
-            flattened = flattened * channel_scales
-        # transform with hadamard
-        transformed = flattened @ hadamard
-        reshaped = tf.reshape(transformed, shape=tensor.shape)
+        # hadamard transform
+        tensor = fwht(tensor)
         # activation
         activation_function = params.get('activation_fn', tf.nn.relu)
         if activation_function is not None:
-            reshaped = activation_function(reshaped)
-        return reshaped
+            tensor = activation_function(tensor)
+        return tensor
 
     def instantiate_concat(self, tensors, params):
         return tf.concat(tensors, **use_name_not_scope(params))
