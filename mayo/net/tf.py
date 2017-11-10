@@ -201,6 +201,17 @@ class TFNet(TFNetBase):
         if 2 ** int(math.log(channels, 2)) != channels:
             raise ValueError(
                 'Number of channels must be a power of 2 for hadamard layer.')
+        # scale channels
+        scale = 1.0 / math.sqrt(channels)
+        if params.get('variable_scales', False):
+            # ensures correct broadcasting behaviour
+            shape = (1, 1, 1, channels)
+            init = tf.truncated_normal_initializer(mean=scale, stddev=0.001)
+            channel_scales = tf.get_variable(
+                name='channel_scale', shape=shape, initializer=init)
+            tensor *= channel_scales
+        else:
+            tensor *= scale
         # hadamard transform
         tensor = fwht(tensor)
         # activation

@@ -43,7 +43,7 @@ model:
                     stride: ^stride
                     depthwise_regularizer: null
                     pointwise_regularizer: *regularizer
-                hadamard: {type: hadamard, use_scales: true}
+                hadamard: {type: hadamard, variable_scales: true}
             graph: {from: input, with: [dsconv, hadamard], to: output}
         conv0:
             <<: *conv
