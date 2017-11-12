@@ -113,6 +113,7 @@ class Train(Session):
         loss_mean, loss_std = self.change.moving_metrics(
             'loss', loss, over=metric_count)
         loss_std = '±{}'.format(Percent(loss_std / loss_mean))
+        loss_reg = self._reg_loss()
         acc_mean = self.change.moving_metrics(
             'accuracy', accuracy, std=False, over=metric_count)
         info = info.format(
@@ -126,7 +127,20 @@ class Train(Session):
             imgs_per_sec = self.change.moving_metrics(
                 'imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
             info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
+            if loss_reg:
+                info += ' | reg loss: {}'.format(loss_reg)
         log.info(info, update=True)
+
+    def _reg_loss(self):
+        CHECK_REG = self.config.system.log.check_reg
+        if not CHECK_REG:
+            return False
+        with self.as_default():
+            reg_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
+            reg_loss = tf.add_n(reg_loss)
+            if reg_loss == []:
+                return False
+            return self.run(reg_loss)
 
     @memoize_property
     def _summary_writer(self):
