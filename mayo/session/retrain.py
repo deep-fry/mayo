@@ -1,6 +1,7 @@
 import math
 import numpy as np
 import tensorflow as tf
+import yaml
 
 from mayo.log import log
 from mayo.session.train import Train
@@ -133,6 +134,7 @@ class RetrainBase(Train):
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
 
+        # if epoch > 0.1:
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self._avg_stats()
             if self.acc_avg >= self.acc_base:
@@ -171,9 +173,18 @@ class RetrainBase(Train):
             name = self.config.system.checkpoint.load
             self.best_ckpt = name
             self.cont = {}
-            for o in self.nets[0].overriders:
-                name = o.name
-                self.cont[name] = True
+            if self.config.retrain.get('cont_list'):
+                # if yaml exists, load it and compute self.cont
+                doct_cont = self.config.retrain.cont_list
+                for o in self.nets[0].overriders:
+                    if doct_cont.get(o.name):
+                        self.cont[o.name] = True
+                    else:
+                        self.cont[o.name] = False
+            else:
+                for o in self.nets[0].overriders:
+                    name = o.name
+                    self.cont[name] = True
         d = {}
         thresholds = {}
         scales = {}
@@ -243,12 +254,11 @@ class RetrainBase(Train):
             self.acc_base,
         ))
         self._reset_stats()
-        import yaml
         name = self.config.model.name
-        stream = open('trainers/{}_retrain_base.yaml'.format(name), 'w')
-        data = {'retrain':{'train_acc_base':float(self.acc_base),
+        self.stream = open('trainers/{}_retrain_base.yaml'.format(name), 'w')
+        self.dump_data = {'retrain':{'train_acc_base':float(self.acc_base),
             'loss_base': float(self.loss_base)}}
-        yaml.dump(data, stream, default_flow_style=False)
+        yaml.dump(self.dump_data, self.stream, default_flow_style=False)
         return
 
     def _metric_clac(self, o):
@@ -455,6 +465,9 @@ class LayerwiseRetrain(RetrainBase):
                 log.info('switching layer, working on {}'.format(
                     self.target_layer))
                 log.info('priority_list: {}'.format(self.priority_list))
+                # refresh the yaml
+                self.dump_data['retrain']['cont_list'] = self.cont
+                yaml.dump(self.dump_data, self.stream, default_flow_style=False)
             return True
 
     def _decrease_scale(self):
