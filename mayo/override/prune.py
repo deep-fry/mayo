@@ -61,7 +61,6 @@ class RandomChannelPruner(OverriderBase):
         c = int(c)
         # threshold
         omap = {'Sign': 'Identity'}
-
         random_number = tf.random_uniform(shape=[n, 1, 1, c],
             minval=self.ratio-1, maxval=self.ratio)
         with tf.get_default_graph().gradient_override_map(omap):
@@ -86,39 +85,45 @@ class RandomChannelPruner(OverriderBase):
         footer = [None, '    overall: ', Percent(avg_density), None]
         table.set_footer(footer)
 
+
 class ChannelPruner(OverriderBase):
-    alpha = Parameter('alpha', 1, [], tf.float32)
     threshold = Parameter('threshold', 1, [], tf.float32)
 
     def __init__(self, alpha=None, threshold=None, should_update=True):
         super().__init__(should_update)
-        self.alpha = alpha
         self.threshold = threshold
 
     def _apply(self, session):
         return self._apply_value(self.before, session)
 
     def _update(self, session):
-        session.run(tf.assign(self.threshold, self.threshold + self.alpha))
+        return
 
     def _apply_value(self, var, session):
         n, h, w, c = var.shape
+        pool_params = {
+            'padding': 'VALID',
+            'ksize': [1, h, w, 1],
+            'strides': [1, 1, 1, 1]
+        }
+        pooled = tf.nn.avg_pool(var, **pool_params)
+
         n = int(n)
         c = int(c)
         mean, variance = tf.nn.moments(var, axes=[1, 2])
-        # import pdb; pdb.set_trace()
         variance = tf.reshape(variance, shape=[n, 1, 1, c])
-        mean= tf.reshape(mean, shape=[n, 1, 1, c])
+        mean = tf.reshape(mean, shape=[n, 1, 1, c])
         # threshold
-        omap = {'Sign': 'Identity'}
-        with tf.get_default_graph().gradient_override_map(omap):
-            self.gate = tf.sign(variance - self.threshold)
-            self.gate = tf.clip_by_value(self.gate, 0, 1)
+        # omap = {'Sign': 'Identity'}
+        # with tf.get_default_graph().gradient_override_map(omap):
+        #     self.gate = tf.sign(mean - self.threshold)
+        #     self.gate = tf.clip_by_value(self.gate, 0, 1)
         # gates out feature maps with low vairance and replace the whole feature
         # map with its mean
+        self.gate = util.cast(tf.abs(pooled) > self.threshold, float)
         tf.add_to_collection('mayo.gates', self.gate)
-        return mean * (1 - self.gate) + self.gate * var
-        # return self.gate * var
+        # return mean * (1 - self.gate) + self.gate * var
+        return tf.nn.relu6(self.gate * var)
 
     def _info(self, session):
         gate = util.cast(session.run(self.gate), int)

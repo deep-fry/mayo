@@ -501,3 +501,11 @@ class LayerwiseRetrain(RetrainBase):
         else:
             if acc > self.acc_base:
                 self.log[self.target_layer] = (value, loss, acc)
+
+
+class LayerwiseEmptyRetrain(LayerwiseRetrain):
+    def once(self):
+        # this is overriding once to an empty run
+        tasks = [self.loss, self.accuracy, self.num_epochs]
+        loss, acc, num_epochs = self.run(tasks)
+        return loss, acc, num_epochs

@@ -21,6 +21,7 @@ model:
             kernel_size: 5
             padding: valid
             num_outputs: 20
+            activation_fn: null
         pool0: &pool
             type: max_pool
             kernel_size: 2

@@ -81,9 +81,24 @@ class TFNet(TFNetBase):
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
+    def input_gating_fc(self, tenosr, params):
+        # gate_scope = '{}/gate'.format(params['scope'])
+        # fc_params = {
+        #     'kernel_size': 1,
+        #     'num_outputs': 70,
+        #     'biases_initializer': tf.ones_initializer(),
+        #     'weights_initializer':
+        #         tf.truncated_normal_initializer(stddev=0.01),
+        #     'activation_fn': None,
+        #     'scope': gate_scope,
+        # }
+        # gate = self.instantiate_convolution(gate, fc_params)
+        return
+
     def instantiate_local_gating(self, tensor, params):
         num, height, width, channels = tensor.shape
         policy = params.pop('policy')
+
         gate_scope = '{}/gate'.format(params['scope'])
         pool_params = {
             'padding': 'VALID',
@@ -91,28 +106,33 @@ class TFNet(TFNetBase):
             'scope': gate_scope,
         }
         # max pool is hardware-friendlier
-        gate = self.instantiate_max_pool(tensor, pool_params)
-        # fc
-        fc_params = {
-            'kernel_size': 1,
-            'num_outputs': channels,
-            'biases_initializer': tf.ones_initializer(),
-            'weights_initializer':
-                tf.truncated_normal_initializer(stddev=0.01),
-            'activation_fn': None,
-            'scope': gate_scope,
-        }
-        gate = self.instantiate_convolution(gate, fc_params)
-        # regularizer policy
-        regu_cls, regu_params = object_from_params(policy)
-        regularization = regu_cls(**regu_params)(gate)
-        tf.add_to_collection(
-            tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
-        # threshold
-        omap = {'Sign': 'Identity'}
-        with tf.get_default_graph().gradient_override_map(omap):
-            gate = tf.sign(gate)
-            gate = tf.clip_by_value(gate, 0, 1)
+        # gate = self.instantiate_max_pool(tensor, pool_params)
+        gate = self.instantiate_average_pool(tensor, pool_params)
+        if policy.type == 'threshold_based':
+            alpha = policy.alpha
+            gate = tf.cast(tf.abs(gate) > alpha, tf.float32)
+        else:
+            # fc
+            fc_params = {
+                'kernel_size': 1,
+                'num_outputs': channels,
+                'biases_initializer': tf.ones_initializer(),
+                'weights_initializer':
+                    tf.truncated_normal_initializer(stddev=0.01),
+                'activation_fn': None,
+                'scope': gate_scope,
+            }
+            gate = self.instantiate_convolution(gate, fc_params)
+            # regularizer policy
+            regu_cls, regu_params = object_from_params(policy)
+            regularization = regu_cls(**regu_params)(gate)
+            tf.add_to_collection(
+                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
+            # threshold
+            omap = {'Sign': 'Identity'}
+            with tf.get_default_graph().gradient_override_map(omap):
+                gate = tf.sign(gate)
+                gate = tf.clip_by_value(gate, 0, 1)
         tf.add_to_collection('mayo.gates', gate)
         # gating
         return tensor * gate
@@ -131,7 +151,8 @@ class TFNet(TFNetBase):
             'scope': gate_scope,
         }
         # max pool is hardware-friendlier
-        gate = self.instantiate_max_pool(tensor, pool_params)
+        gate = self.instantiate_max_pool(tensor, pool_params) - \
+            self.instantiate_average_pool(tensor, pool_params)
         # fc
         num_outputs = params['num_outputs']
         fc_params = {
@@ -177,14 +198,14 @@ class TFNet(TFNetBase):
         else:
             # regularizer policy
             regu_cls, regu_params = object_from_params(policy)
-            regularization = regu_cls(**regu_params)(gate)
-            tf.add_to_collection(
-                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
             # threshold
             omap = {'Sign': 'Identity'}
             with tf.get_default_graph().gradient_override_map(omap):
                 gate = tf.sign(gate)
                 gate = tf.clip_by_value(gate, 0, 1)
+            regularization = regu_cls(**regu_params)(gate)
+            tf.add_to_collection(
+                tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
         tf.add_to_collection('mayo.gates', gate)
         # gating
         return output * gate
