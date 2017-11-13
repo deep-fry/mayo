@@ -1,4 +1,3 @@
-import time
 import math
 
 import tensorflow as tf
@@ -17,7 +16,7 @@ class Train(Session):
             self._setup_train_operation()
             self._setup_summaries()
             self._init()
-        self._cp_epoch = ''
+        self._checkpoint_epoch = ''
 
     @memoize_property
     def learning_rate(self):
@@ -95,52 +94,36 @@ class Train(Session):
             tf.summary.scalar('loss', self.loss)]
         self._summary_op = tf.summary.merge(summaries)
 
+    def _loss_formatter(self, loss):
+        loss_mean, loss_std = self.change.moving_metrics('loss', loss)
+        loss_std = '±{}'.format(Percent(loss_std / loss_mean))
+        return '{:10f}{:5}'.format(loss_mean, loss_std)
+
     def _init(self):
         self.load_checkpoint(self.config.system.checkpoint.load)
+
         # final debug outputs
         if not log.is_enabled('debug'):
             return
         lr = self.run(self.learning_rate)
         log.debug('Current learning rate is {}.'.format(lr))
 
-    def _update_progress(self, epoch, loss, accuracy, cp_epoch):
-        metric_count = self.config.system.log.metrics_history_count
-        if not isinstance(cp_epoch, str):
-            cp_epoch = '{:.2f}'.format(cp_epoch)
-        info = 'epoch: {:.2f} | loss: {:10f}{:5} | acc: {}'
-        if cp_epoch:
-            info += ' | ckpt: {}'
-        loss_mean, loss_std = self.change.moving_metrics(
-            'loss', loss, over=metric_count)
-        loss_std = '±{}'.format(Percent(loss_std / loss_mean))
-        loss_reg = self._reg_loss()
-        acc_mean = self.change.moving_metrics(
-            'accuracy', accuracy, std=False, over=metric_count)
-        info = info.format(
-            epoch, loss_mean, loss_std, Percent(acc_mean), cp_epoch)
-        # performance
-        interval = self.change.delta('step.duration', time.time())
-        if interval != 0:
-            imgs = epoch * self.config.dataset.num_examples_per_epoch.train
-            imgs_per_step = self.change.delta('step.images', imgs)
-            imgs_per_sec = imgs_per_step / float(interval)
-            imgs_per_sec = self.change.moving_metrics(
-                'imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
-            info += ' | tp: {:4.0f}/s'.format(imgs_per_sec)
-            if loss_reg:
-                info += ' | reg loss: {}'.format(loss_reg)
-        log.info(info, update=True)
+        # register progress update statistics
+        self.register_update(
+            'epoch', self.num_epochs, lambda epoch: '{:.2f}'.format(epoch))
+        accuracy_formatter = lambda acc: Percent(
+            self.change.moving_metrics('accuracy', acc, std=False))
+        self.register_update('loss', self.loss, self._loss_formatter)
+        self.register_update('accuarcy', self.accuracy, accuracy_formatter)
 
-    def _reg_loss(self):
-        CHECK_REG = self.config.system.log.check_reg
-        if not CHECK_REG:
-            return False
+    def _regularization_loss(self):
+        if not self.config.system.log.get('check_reg', False):
+            return
         with self.as_default():
             reg_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-            reg_loss = tf.add_n(reg_loss)
-            if reg_loss == []:
-                return False
-            return self.run(reg_loss)
+            if not reg_loss:
+                return
+            self.register_update('reg loss', tf.add_n(reg_loss))
 
     @memoize_property
     def _summary_writer(self):
@@ -158,9 +141,11 @@ class Train(Session):
         self.change.reset('checkpoint.epoch')
 
     def once(self):
-        tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
-        noop, loss, acc, num_epochs = self.run(tasks)
-        return loss, acc, num_epochs
+        tasks = [self._train_op, self.loss, self.num_epochs]
+        noop, loss, num_epochs = self.run(tasks)
+        if math.isnan(loss):
+            raise ValueError('Model diverged with a nan-valued loss.')
+        return num_epochs
 
     def _overriders_call(self, func_name):
         # it is sufficient to use the first net, as overriders
@@ -182,23 +167,21 @@ class Train(Session):
 
     def _iteration(self):
         system = self.config.system
-        loss, acc, epoch = self.once()
-        if math.isnan(loss):
-            raise ValueError('Model diverged with a nan-valued loss.')
-        self._update_progress(epoch, loss, acc, self._cp_epoch)
+        epoch = self.once()
         summary_interval = system.summary.get('save.interval', 0)
         if self.change.every('summary.epoch', epoch, summary_interval):
             self._save_summary(epoch)
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
-            self._update_progress(epoch, loss, acc, 'saving')
+            log.info(
+                'Saving checkpoint at epoch {}...'.format(epoch), update=True)
             with log.demote():
                 self.save_checkpoint(floor_epoch)
-            self._cp_epoch = floor_epoch
+            self._checkpoint_epoch = floor_epoch
         if system.max_epochs and floor_epoch >= system.max_epochs:
             log.info('Maximum epoch count reached.')
-            if self._cp_epoch and floor_epoch > self._cp_epoch:
+            if self._checkpoint_epoch and floor_epoch > self._checkpoing_epoch:
                 log.info('Saving final checkpoint...')
                 self.save_checkpoint(floor_epoch)
             return False

@@ -28,9 +28,10 @@ def memoize_property(func):
 
 
 class Change(object):
-    def __init__(self):
+    def __init__(self, metric_count=100):
         super().__init__()
         self._persistence = {}
+        self._metric_count = metric_count
 
     def delta(self, name, value):
         name += '.delta'
@@ -48,9 +49,10 @@ class Change(object):
         self._persistence[name] = value
         return True
 
-    def moving_metrics(self, name, value, std=True, over=100):
+    def moving_metrics(self, name, value, std=True, over=None):
         name += '.moving'
         history = self._persistence.setdefault(name, [])
+        over = over or self._metric_count
         while len(history) >= over:
             history.pop(0)
         history.append(value)
