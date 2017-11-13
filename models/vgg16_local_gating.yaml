@@ -1,0 +1,83 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 224
+            width: 224
+            channels: 3
+        validate: null
+        final_cpu:
+            - {type: subtract_channel_means}
+            - {type: linear_map, scale: 255.0}
+model:
+    name: vgg16
+    layers:
+        _conv: &conv
+            type: convolution
+            kernel_size: [3, 3]
+            stride: 1
+            padding: same
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            biases_initializer:
+                type: tensorflow.constant_initializer
+                value: 0.1
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
+        _gate: &gate
+            type: local_gating
+            policy:
+                type: threshold_based
+                alpha: 0.35
+        _fc: &fc {<<: *conv, kernel_size: [1, 1], padding: valid}
+        conv1_1: {<<: *conv, num_outputs: 64}
+        gate1_1: *gate
+        conv1_2: {<<: *conv, num_outputs: 64}
+        gate1_2: *gate
+        pool1: &pool
+            {type: max_pool, kernel_size: [2, 2], padding: valid, stride: 2}
+        conv2_1: {<<: *conv, num_outputs: 128}
+        gate2_1: *gate
+        conv2_2: {<<: *conv, num_outputs: 128}
+        gate2_2: *gate
+        pool2: *pool
+        conv3_1: {<<: *conv, num_outputs: 256}
+        gate3_1: *gate
+        conv3_2: {<<: *conv, num_outputs: 256}
+        gate3_2: *gate
+        conv3_3: {<<: *conv, num_outputs: 256}
+        gate3_3: *gate
+        pool3: *pool
+        conv4_1: {<<: *conv, num_outputs: 512}
+        gate4_1: *gate
+        conv4_2: {<<: *conv, num_outputs: 512}
+        gate4_2: *gate
+        conv4_3: {<<: *conv, num_outputs: 512}
+        gate4_3: *gate
+        pool4: *pool
+        conv5_1: {<<: *conv, num_outputs: 512}
+        gate5_1: *gate
+        conv5_2: {<<: *conv, num_outputs: 512}
+        gate5_2: *gate
+        conv5_3: {<<: *conv, num_outputs: 512}
+        gate5_3: *gate
+        pool5: *pool
+        fc6: {<<: *fc, kernel_size: [7, 7], num_outputs: 4096}
+        dropout6: &dropout {type: dropout, keep_prob: 0.5}
+        fc7: {<<: *fc, num_outputs: 4096}
+        dropout7: *dropout
+        fc8: {<<: *fc, num_outputs: num_classes, activation_fn: null}
+        logits: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: input
+        with: [
+            conv1_1, gate1_1, conv1_2, gate1_2, pool1,
+            conv2_1, gate2_1, conv2_2, gate2_2, pool2,
+            conv3_1, gate3_1, conv3_2, gate3_2, conv3_3, gate3_3, pool3,
+            conv4_1, gate4_1, conv4_2, gate4_2, conv4_3, gate4_3, pool4,
+            conv5_1, gate5_1, conv5_2, gate5_2, conv5_3, gate5_3, pool5,
+            fc6, dropout6, fc7, dropout7, fc8, logits]
+        to: output

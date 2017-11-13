@@ -100,8 +100,8 @@ model:
     graph:
         from: input
         with:
-            [conv1, pool1, gate1,
-             fire2, gate2, fire3, gate3, fire4, pool4, gate4,
-             fire5, gate5, fire6, gate6, fire7, gate7, fire8, pool8, gate8,
-             fire9, gate9, dropout9, conv10, pool10, gate10, logits]
+            [conv1, gate1, pool1
+             fire2, gate2, fire3, gate3, fire4, gate4, pool4,
+             fire5, gate5, fire6, gate6, fire7, gate7, fire8, gate8, pool8,
+             fire9, gate9, dropout9, conv10, gate10, pool10, logits]
         to: output

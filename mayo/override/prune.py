@@ -100,7 +100,7 @@ class ChannelPruner(OverriderBase):
         return
 
     def _apply_value(self, var, session):
-        var = tf.nn.relu6(var)
+        var = tf.nn.relu(var)
         n, h, w, c = var.shape
         pool_params = {
             'padding': 'VALID',
