@@ -1,8 +1,8 @@
 ---
 model.layers:
-    conv1: &overrider
+    conv0: &overrider
         activation_overrider:
             type: mayo.override.ChannelPruner
             threshold: 0.01
             should_update: true
-    conv2: {<<: *overrider}
+    conv1: {<<: *overrider}
