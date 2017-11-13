@@ -234,6 +234,10 @@ class RetrainBase(Train):
             ))
             if self.config.retrain.get('loss_base'):
                 self.loss_base = self.config.retrain.loss_base
+            name = self.config.model.name
+            self.stream = open('trainers/{}_retrain_base.yaml'.format(name), 'w')
+            self.dump_data = {'retrain':{'train_acc_base':float(self.acc_base),
+            'loss_base': float(self.loss_base)}}
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
@@ -506,6 +510,7 @@ class LayerwiseRetrain(RetrainBase):
 class LayerwiseEmptyRetrain(LayerwiseRetrain):
     def once(self):
         # this is overriding once to an empty run
-        tasks = [self.loss, self.accuracy, self.num_epochs]
-        loss, acc, num_epochs = self.run(tasks)
+        op_imgs_seen = tf.assign_add(self.imgs_seen, self.batch_size)
+        tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
+        loss, acc, num_epochs, _ = self.run(tasks)
         return loss, acc, num_epochs
