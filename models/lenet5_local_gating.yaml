@@ -30,7 +30,7 @@ model:
             type: local_gating
             policy:
                 type: threshold_based
-                alpha: 0.06
+                alpha: 0.01
         conv1: {<<: *conv, num_outputs: 50}
         gate1: {<<: *gate}
         pool1: *pool

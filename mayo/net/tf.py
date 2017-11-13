@@ -81,20 +81,6 @@ class TFNet(TFNetBase):
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
-    def input_gating_fc(self, tenosr, params):
-        # gate_scope = '{}/gate'.format(params['scope'])
-        # fc_params = {
-        #     'kernel_size': 1,
-        #     'num_outputs': 70,
-        #     'biases_initializer': tf.ones_initializer(),
-        #     'weights_initializer':
-        #         tf.truncated_normal_initializer(stddev=0.01),
-        #     'activation_fn': None,
-        #     'scope': gate_scope,
-        # }
-        # gate = self.instantiate_convolution(gate, fc_params)
-        return
-
     def instantiate_local_gating(self, tensor, params):
         num, height, width, channels = tensor.shape
         policy = params.pop('policy')

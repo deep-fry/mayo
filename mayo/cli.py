@@ -255,6 +255,10 @@ Arguments:
         """Performs retraining.  """
         return self._get_session('retrain-global').retrain()
 
+    def cli_retrain_empty_layer(self):
+        """Performs retraining.  """
+        return self._get_session('retrain-empty-layer').retrain()
+
     def cli_fast_eval(self):
         """
         Evaluates the approximate accuracy of a saved model with

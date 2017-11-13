@@ -100,6 +100,7 @@ class ChannelPruner(OverriderBase):
         return
 
     def _apply_value(self, var, session):
+        var = tf.nn.relu6(var)
         n, h, w, c = var.shape
         pool_params = {
             'padding': 'VALID',
@@ -121,9 +122,10 @@ class ChannelPruner(OverriderBase):
         # gates out feature maps with low vairance and replace the whole feature
         # map with its mean
         self.gate = util.cast(tf.abs(pooled) > self.threshold, float)
+        self.pooled = pooled
         tf.add_to_collection('mayo.gates', self.gate)
         # return mean * (1 - self.gate) + self.gate * var
-        return tf.nn.relu6(self.gate * var)
+        return self.gate * var
 
     def _info(self, session):
         gate = util.cast(session.run(self.gate), int)
