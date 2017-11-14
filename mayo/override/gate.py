@@ -48,20 +48,29 @@ class ChannelGater(OverriderBase):
     threshold = Parameter('threshold', 1, [], tf.float32)
     alpha = Parameter('alpha', 1, [], tf.float32)
 
-    def __init__(self, threshold=None, alpha=None, should_update=True):
+    def __init__(self, threshold=None, alpha=None, policy=None, should_update=True):
         super().__init__(should_update)
         self.threshold = threshold
         self.alpha = alpha
+        self.policy = policy
 
     def _apply(self, value):
-        value = tf.nn.relu(value)
+        policy = self.policy
+        value_pool = tf.nn.relu(value)
         n, h, w, c = (int(d) for d in value.shape)
         pool_params = {
             'padding': 'VALID',
             'ksize': [1, h, w, 1],
             'strides': [1, 1, 1, 1]
         }
-        pooled = tf.nn.avg_pool(value, **pool_params)
+        if policy == 'avg' or policy is None:
+            pooled = tf.nn.avg_pool(value_pool, **pool_params)
+        if policy == 'max':
+            pooled = tf.nn.max_pool(tf.abs(value_pool), **pool_params)
+        if policy == 'mix':
+            maxed = tf.nn.max_pool(tf.abs(value_pool), **pool_params)
+            avged = tf.nn.avg_pool(tf.abs(value_pool), **pool_params)
+            pooled = maxed - avged
         #  mean, variance = tf.nn.moments(value, axes=[1, 2])
         #  variance = tf.reshape(variance, shape=[n, 1, 1, c])
         #  mean = tf.reshape(mean, shape=[n, 1, 1, c])
