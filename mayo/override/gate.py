@@ -46,12 +46,10 @@ class RandomChannelGater(OverriderBase):
 
 class ChannelGater(OverriderBase):
     threshold = Parameter('threshold', 1, [], tf.float32)
-    alpha = Parameter('alpha', 1, [], tf.float32)
 
-    def __init__(self, threshold=None, alpha=None, policy=None, should_update=True):
+    def __init__(self, threshold=None, policy=None, should_update=True):
         super().__init__(should_update)
         self.threshold = threshold
-        self.alpha = alpha
         self.policy = policy
 
     def _apply(self, value):
@@ -88,5 +86,4 @@ class ChannelGater(OverriderBase):
         return self.gate * value
 
     def _update(self, session):
-        # FIXME threshold update should be externalized
-        session.run(tf.assign(self.threshold, self.threshold + self.alpha))
+        return
