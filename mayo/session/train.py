@@ -103,10 +103,9 @@ class Train(Session):
         self.load_checkpoint(self.config.system.checkpoint.load)
 
         # final debug outputs
-        if not log.is_enabled('debug'):
-            return
-        lr = self.run(self.learning_rate)
-        log.debug('Current learning rate is {}.'.format(lr))
+        if log.is_enabled('debug'):
+            lr = self.run(self.learning_rate)
+            log.debug('Current learning rate is {}.'.format(lr))
 
         # register progress update statistics
         self.register_update(
@@ -116,14 +115,15 @@ class Train(Session):
         self.register_update('loss', self.loss, self._loss_formatter)
         self.register_update('accuarcy', self.accuracy, accuracy_formatter)
 
-    def _regularization_loss(self):
-        if not self.config.system.log.get('check_reg', False):
-            return
+        # TEMPORARY sparsity info
         with self.as_default():
-            reg_loss = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)
-            if not reg_loss:
-                return
-            self.register_update('reg loss', tf.add_n(reg_loss))
+            gates = tf.get_collection('mayo.gates')
+            valid = tf.add_n([tf.reduce_sum(g) for g in gates])
+            total = sum(g.shape.num_elements() for g in gates)
+        density = valid / total
+        self.register_update(
+            'density', density, lambda d:
+            Percent(self.change.moving_metrics('density', d, std=False)))
 
     @memoize_property
     def _summary_writer(self):
