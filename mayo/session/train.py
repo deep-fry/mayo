@@ -115,16 +115,6 @@ class Train(Session):
         self.register_update('loss', self.loss, self._loss_formatter)
         self.register_update('accuarcy', self.accuracy, accuracy_formatter)
 
-        # TEMPORARY sparsity info
-        with self.as_default():
-            gates = tf.get_collection('mayo.gates')
-            valid = tf.add_n([tf.reduce_sum(g) for g in gates])
-            total = sum(g.shape.num_elements() for g in gates)
-        density = valid / total
-        self.register_update(
-            'density', density, lambda d:
-            Percent(self.change.moving_metrics('density', d, std=False)))
-
     @memoize_property
     def _summary_writer(self):
         path = self.config.system.search_path.summary[0]

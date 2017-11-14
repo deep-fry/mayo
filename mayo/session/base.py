@@ -2,13 +2,15 @@ import os
 import re
 import time
 import subprocess
+import collections
 from contextlib import contextmanager
 
 import tensorflow as tf
 
 from mayo.log import log
 from mayo.net import TFNet
-from mayo.util import memoize_method, memoize_property, Change, flatten, Table
+from mayo.util import (
+    memoize_method, memoize_property, Change, flatten, Table, Percent)
 from mayo.override import ChainOverrider
 from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
@@ -28,6 +30,7 @@ class Session(object):
             metric_count=config.system.log.metrics_history_count)
         self._init_gpus()
         self.graph = tf.Graph()
+        self.initialized_variables = []
         self.tf_session = tf.Session(
             graph=self.graph,
             config=tf.ConfigProto(allow_soft_placement=True))
@@ -35,8 +38,7 @@ class Session(object):
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
-        self.initialized_variables = []
-        self._to_update_op = {}
+        self._to_update_op = collections.OrderedDict()
         self._to_update_formatter = {}
 
     def __del__(self):
@@ -194,6 +196,18 @@ class Session(object):
         self._to_update_op[message] = tensor
         self._to_update_formatter[message] = formatter
 
+    @memoize_method
+    def _register_extra_statistics(self):
+        # sparsity info
+        gates = tf.get_collection('mayo.gates')
+        if gates:
+            valid = tf.add_n([tf.reduce_sum(g) for g in gates])
+            total = sum(g.shape.num_elements() for g in gates)
+            density = valid / total
+            density_formatter = lambda d: Percent(
+                self.change.moving_metrics('density', d, std=False))
+            self.register_update('density', density, density_formatter)
+
     def _update_progress(self, to_update):
         if not to_update:
             return
@@ -228,14 +242,20 @@ class Session(object):
                 log.warn('Variables are not initialized: {}'.format(desc))
                 self.tf_session.run(tf.variables_initializer(uninit_vars))
                 self.initialized_variables += uninit_vars
+
             # assign overrider hyperparameters
             self._overrider_assign_parameters()
+
+            # extra statistics to print in progress update
+            self._register_extra_statistics()
+
             # session run
             filtered_to_update_op = {
                 k: v for k, v in self._to_update_op.items()
                 if isinstance(v, (tf.Tensor, tf.Variable))}
             results, to_update = self.tf_session.run(
                 (ops, filtered_to_update_op), **kwargs)
+
         to_update = dict(self._to_update_op, **to_update)
         self._update_progress(to_update)
         return results
