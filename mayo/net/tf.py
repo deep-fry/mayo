@@ -177,7 +177,7 @@ class TFNet(TFNetBase):
         else:
             # regularizer policy
             regu_cls, regu_params = object_from_params(policy)
-            regularization = regu_cls(**regu_params)(gate)
+            regularization = regu_cls(**regu_params)(tf.stop_gradient(output) * gate)
             tf.add_to_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
             # threshold
