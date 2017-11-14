@@ -46,10 +46,12 @@ class RandomChannelGater(OverriderBase):
 
 class ChannelGater(OverriderBase):
     threshold = Parameter('threshold', 1, [], tf.float32)
+    alpha = Parameter('alpha', 1, [], tf.float32)
 
-    def __init__(self, threshold=None, should_update=True):
+    def __init__(self, threshold=None, alpha=None, should_update=True):
         super().__init__(should_update)
         self.threshold = threshold
+        self.alpha = alpha
 
     def _apply(self, value):
         value = tf.nn.relu(value)

@@ -123,7 +123,6 @@ class RetrainBase(Train):
 
         if math.isnan(loss):
             raise ValueError("Model diverged with a nan-valued loss")
-        self._update_progress(epoch, loss, acc, self._cp_epoch)
         summary_delta = self.change.delta('summary.epoch', epoch)
 
         if system.summary.save and summary_delta >= 0.1:
@@ -245,7 +244,7 @@ class RetrainBase(Train):
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
-            self._update_progress(epoch, loss, acc, self._cp_epoch)
+            # self._update_progress(epoch, loss, acc, self._cp_epoch)
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
         self._reset_stats()
@@ -256,7 +255,7 @@ class RetrainBase(Train):
         ))
         self._reset_stats()
         name = self.config.model.name
-        self.stream = open('trainers/{}_retrain_base.yaml'.format(name), 'w')
+        self.stream = open('trainers/log/{}_retrain_base.yaml'.format(name), 'w')
         self.dump_data = {
             'retrain': {
                 'train_acc_base': float(self.acc_base),
