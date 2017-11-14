@@ -1,0 +1,107 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 224
+            width: 224
+            channels: 3
+        validate:
+            - {type: central_crop, fraction: 0.875}
+        final_cpu: null
+        final_gpu:
+            - {type: normalize_channels}
+model:
+    name: squeezenet_v10
+    description: |
+        AlexNet-level accuracy with 50x fewer parameters and <0.5MB model size.
+        This implementation is based on::
+          https://arxiv.org/abs/1602.07360
+        We use the following reference model::
+          https://github.com/pytorch/vision/blob/master/torchvision/models/squeezenet.py
+        Alternative implementations::
+          https://github.com/vonclites/squeezenet
+          https://github.com/rcmalli/keras-squeezenet
+          https://github.com/DeepScale/SqueezeNet/blob/master/SqueezeNet_v1.1/train_val.prototxt
+    layers:
+        _init: &init
+            biases_initializer:
+                type: tensorflow.constant_initializer
+                value: 0.01
+        _conv: &conv
+            type: convolution
+            padding: same
+            kernel_size: 1
+            stride: 1
+            # weight_initializer defaults to xavier
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0005
+            <<: *init
+        _fc: &fc
+            type: fully_connected
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            <<: *init
+        _gate: &gate
+            type: local_gating
+            policy:
+                type: threshold_based
+                alpha: 0.1
+        _fire: &fire
+            type: module
+            kwargs: {squeeze_depth: null, expand_depth: null}
+            layers:
+                gate:
+                    <<: *gate
+                squeeze:
+                    <<: *conv
+                    num_outputs: ^squeeze_depth
+                expand1: &expand1
+                    <<: *conv
+                    num_outputs: ^expand_depth
+                expand3: {<<: *expand1, kernel_size: 3}
+                concat:
+                    type: concat
+                    axis: 3
+            graph:
+                - {from: input, with: [squeeze, gate], to: squeezed}
+                - {from: squeezed, with: [expand1, gate], to: expanded1}
+                - {from: squeezed, with: [expand3, gate], to: expanded3}
+                - {from: [expanded1, expanded3], with: concat, to: output}
+        conv1: {<<: *conv, kernel_size: 7, stride: 2, num_outputs: 96}
+        pool1: &pool
+            {type: max_pool, kernel_size: 3, stride: 2}
+        gate1: *gate
+        fire2: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
+        gate2: *gate
+        fire3: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
+        gate3: *gate
+        fire4: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
+        pool4: {type: max_pool, kernel_size: 3, stride: 2}
+        gate4: *gate
+        fire5: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
+        gate5: *gate
+        fire6: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
+        gate6: *gate
+        fire7: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
+        gate7: *gate
+        fire8: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
+        pool8: {type: max_pool, kernel_size: 3, stride: 2}
+        gate8: *gate
+        fire9: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
+        gate9: *gate
+        dropout9: &dropout {type: dropout, keep_prob: 0.5}
+        conv10: {<<: *conv, num_outputs: num_classes}
+        pool10: {type: average_pool, kernel_size: 13, stride: 1}
+        gate10: *gate
+        logits: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: input
+        with:
+            [conv1, gate1, pool1
+             fire2, gate2, fire3, gate3, fire4, gate4, pool4,
+             fire5, gate5, fire6, gate6, fire7, gate7, fire8, gate8, pool8,
+             fire9, gate9, dropout9, conv10, gate10, pool10, logits]
+        to: output

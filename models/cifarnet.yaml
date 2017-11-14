@@ -26,6 +26,7 @@ model:
             weights_initializer: &trunc_norm_init
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.05
+            # activation_fn: null
         _pool: &pool
             type: max_pool
             kernel_size: 3
