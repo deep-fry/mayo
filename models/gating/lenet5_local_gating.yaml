@@ -1,0 +1,44 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 28
+            width: 28
+            channels: 1
+        validate: null
+        final_cpu: {type: linear_map, scale: 2.0, shift: -1.0}
+model:
+    name: lenet5
+    layers:
+        _init: &init
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+        conv0: &conv
+            <<: *init
+            type: convolution
+            kernel_size: 5
+            padding: valid
+            num_outputs: 20
+        pool0: &pool
+            type: max_pool
+            kernel_size: 2
+            stride: 2
+            padding: valid
+        gate0: &gate
+            type: local_gating
+            policy:
+                type: threshold_based
+                alpha: 0.01
+        conv1: {<<: *conv, num_outputs: 50}
+        gate1: {<<: *gate}
+        pool1: *pool
+        flatten: {type: flatten}
+        dropout: {type: dropout, keep_prob: 0.5}
+        fc1: &fc {<<: *init, type: fully_connected, num_outputs: 500}
+        logits: {<<: *fc, activation_fn: null, num_outputs: num_classes}
+    graph:
+        from: input
+        with: [conv0, gate0, pool0, conv1, gate1, pool1, flatten, dropout, fc1, logits]
+        to: output

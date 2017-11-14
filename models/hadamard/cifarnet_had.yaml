@@ -1,0 +1,97 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 32
+            width: 32
+            channels: 3
+        validate:
+            - {type: crop_or_pad}
+            # - {type: central_crop, fraction: 0.875}
+        final_cpu:
+            - {type: standardize_image}
+model:
+    name: cifarnet_had
+    layers:
+        _conv: &conv
+            type: convolution
+            kernel_size: [3, 3]
+            padding: same
+            normalizer_fn:
+                type: tensorflow.contrib.slim.batch_norm
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
+            weights_initializer: &trunc_norm_init
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            activation_fn: tensorflow.nn.relu6
+        _dhconv: &dhconv
+            type: module
+            kwargs: {stride: null, num_outputs: null}
+            layers:
+                depthwise:
+                    type: depthwise_separable_convolution
+                    <<: *conv
+                    stride: ^stride
+                    depth_multiplier: 1
+                    depthwise_regularizer:
+                        type: tensorflow.contrib.layers.l2_regularizer
+                        scale: 0.00004
+                hadamard:
+                    type: hadamard
+                    use_scales: false
+            graph: {from: input, with: [depthwise, hadamard], to: output}
+        _dsconv: &dsconv
+            <<: *conv
+            type: depthwise_separable_convolution
+            depth_multiplier: 1
+            depthwise_regularizer: null
+            pointwise_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
+        _pool: &pool
+            type: max_pool
+            kernel_size: 3
+            stride: 2
+            padding: valid
+        _fc: &fc
+            type: fully_connected
+            weights_initializer:
+                <<: *trunc_norm_init
+                stddev: 0.04
+            biases_initializer: &bias_init
+                type: tensorflow.constant_initializer
+                value: 0.1
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.004
+        conv0: {<<: *conv, kernel_size: 3, num_outputs: 1024}
+        conv1: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 1024}
+        conv2: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 1024}
+        pool2: *pool
+        conv3: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 1024}
+        conv4: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 1024}
+        pool4: *pool
+        conv5: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 1024}
+        conv6: {<<: *dhconv, kernel_size: 3, stride: 1, num_outputs: 1024}
+        pool6: {type: average_pool, kernel_size: 7, stride: 2, padding: valid}
+        dropout: {type: dropout, keep_prob: 0.5}
+        fc:
+            type: convolution
+            kernel_size: 1
+            num_outputs: num_classes
+            activation_fn: null
+            normalizer_fn: null
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
+        logits: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: input
+        with: [
+            conv0, conv1, conv2, pool2, conv3, conv4, pool4, conv5, conv6,
+            pool6, dropout, fc, logits]
+        to: output
