@@ -522,3 +522,11 @@ class LayerwiseEmptyRetrain(LayerwiseRetrain):
         tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
         loss, acc, num_epochs, _ = self.run(tasks)
         return loss, acc, num_epochs
+
+class GlobalwiseEmptyRetrain(GlobalRetrain):
+    def once(self):
+        # this is overriding once to an empty run
+        op_imgs_seen = tf.assign_add(self.imgs_seen, self.batch_size)
+        tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
+        loss, acc, num_epochs, _ = self.run(tasks)
+        return loss, acc, num_epochs

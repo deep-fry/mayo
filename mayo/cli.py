@@ -12,7 +12,7 @@ from mayo.log import log
 from mayo.config import Config
 from mayo.session import (
     Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain,
-    LayerwiseEmptyRetrain)
+    LayerwiseEmptyRetrain, GlobalwiseEmptyRetrain)
 
 _root = os.path.dirname(__file__)
 
@@ -155,6 +155,10 @@ Arguments:
         elif action == 'retrain-empty-layer':
             cls = LayerwiseEmptyRetrain
             keys += self._train_keys
+        elif action == 'retrain-empty-global':
+            print('hi')
+            cls = GlobalwiseEmptyRetrain
+            keys += self._train_keys
         elif action == 'validate':
             cls = Evaluate
             keys += self._validate_keys
@@ -258,6 +262,10 @@ Arguments:
     def cli_retrain_empty_layer(self):
         """Performs retraining.  """
         return self._get_session('retrain-empty-layer').retrain()
+
+    def cli_retrain_empty_global(self):
+        """Performs retraining.  """
+        return self._get_session('retrain-empty-global').retrain()
 
     def cli_fast_eval(self):
         """
