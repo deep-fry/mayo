@@ -182,14 +182,15 @@ class TFNet(TFNetBase):
             # training happens in softmax_cross_entropy
             gate = tf.stop_gradient(gate)
         else:
-            # regularizer policy
-            regu_cls, regu_params = object_from_params(policy)
             # threshold
             omap = {'Sign': 'Identity'}
             with tf.get_default_graph().gradient_override_map(omap):
                 gate = tf.sign(gate)
                 gate = tf.clip_by_value(gate, 0, 1)
-            regularization = regu_cls(**regu_params)(gate)
+            # regularizer policy
+            regu_cls, regu_params = object_from_params(policy)
+            to_regularize = tf.stop_gradient(output) * gate
+            regularization = regu_cls(**regu_params)(to_regularize)
             tf.add_to_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
         tf.add_to_collection('mayo.gates', gate)

@@ -1,5 +1,6 @@
 import os
 import re
+import time
 import subprocess
 from contextlib import contextmanager
 
@@ -23,7 +24,8 @@ class Session(object):
         default_graph = tf.get_default_graph()
         default_graph.finalize()
         self.config = config
-        self.change = Change()
+        self.change = Change(
+            metric_count=config.system.log.metrics_history_count)
         self._init_gpus()
         self.graph = tf.Graph()
         self.tf_session = tf.Session(
@@ -34,6 +36,8 @@ class Session(object):
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
         self.initialized_variables = []
+        self._to_update_op = {}
+        self._to_update_formatter = {}
 
     def __del__(self):
         log.debug('Finishing...')
@@ -182,6 +186,36 @@ class Session(object):
         for o in self.nets[0].overriders:
             o.assign_parameters(self)
 
+    def register_update(self, message, tensor, formatter=None):
+        """
+        Register message and tensor to print in progress update
+        at each self.run().
+        """
+        self._to_update_op[message] = tensor
+        self._to_update_formatter[message] = formatter
+
+    def _update_progress(self, to_update):
+        if not to_update:
+            return
+        info = []
+        for key, value in to_update.items():
+            formatter = self._to_update_formatter[key]
+            if formatter:
+                value = formatter(value)
+            info.append('{}: {}'.format(key, value))
+        # performance
+        epoch = to_update.get('epoch')
+        interval = self.change.delta('step.duration', time.time())
+        if epoch and interval != 0:
+            size = self.config.dataset.num_examples_per_epoch.get(self.mode)
+            imgs = epoch * size
+            imgs_per_step = self.change.delta('step.images', imgs)
+            imgs_per_sec = imgs_per_step / float(interval)
+            imgs_per_sec = self.change.moving_metrics(
+                'imgs_per_sec', imgs_per_sec, std=False)
+            info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
+        log.info(' | '.join(info), update=True)
+
     def run(self, ops, **kwargs):
         with self.as_default():
             # ensure variables are initialized
@@ -197,7 +231,14 @@ class Session(object):
             # assign overrider hyperparameters
             self._overrider_assign_parameters()
             # session run
-            return self.tf_session.run(ops, **kwargs)
+            filtered_to_update_op = {
+                k: v for k, v in self._to_update_op.items()
+                if isinstance(v, (tf.Tensor, tf.Variable))}
+            results, to_update = self.tf_session.run(
+                (ops, filtered_to_update_op), **kwargs)
+        to_update = dict(self._to_update_op, **to_update)
+        self._update_progress(to_update)
+        return results
 
     def _preprocess(self):
         with self.as_default():

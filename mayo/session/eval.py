@@ -1,4 +1,3 @@
-import time
 import math
 
 import tensorflow as tf
@@ -36,19 +35,6 @@ class EvaluateBase(Session):
                 return None
             return tf.add_n(valid) / total
 
-    def _update_progress(self, step, top1, top5, num_iterations):
-        interval = self.change.delta('step.duration', time.time())
-        if interval == 0:
-            return
-        metric_count = self.config.system.log.metrics_history_count
-        imgs_per_sec = self.batch_size * self.change.delta('step', step)
-        imgs_per_sec /= interval
-        imgs_per_sec = self.change.moving_metrics(
-            'imgs_per_sec', imgs_per_sec, std=False, over=metric_count)
-        info = 'eval: {} | top1: {} | top5: {:.2f} | {:.1f}/s'.format(
-            Percent(step / num_iterations), top1, top5, imgs_per_sec)
-        log.info(info, update=True)
-
     def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint
         if key is None:
@@ -81,13 +67,16 @@ class EvaluateBase(Session):
                 top5s += sum(top5)
                 top1_acc = Percent(top1s / total)
                 top5_acc = Percent(top5s / total)
+                self.register_update('eval', Percent(total / num_examples))
+                self.register_update('top1', top1_acc)
+                self.register_update('top5', top5_acc)
                 step += 1
-                self._update_progress(step, top1_acc, top5_acc, num_iterations)
         except KeyboardInterrupt as e:
             log.info('Evaluation aborted.')
             if not keyboard_interrupt:
                 raise e
         else:
+            self._update_progress(self._to_update_op)
             log.info('Evaluation complete.')
             log.info('    top1: {}, top5: {} [{} images]'.format(
                 top1_acc, top5_acc, total))

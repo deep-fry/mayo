@@ -205,6 +205,11 @@ class OverriderBase(object):
             self.__class__.__qualname__, self.name)
 
 
+class EmptyOverrider(OverriderBase):
+    def _apply(self, value):
+        return value
+
+
 class ChainOverrider(OverriderBase, Sequence):
     """ Composition of overriders.  """
     def __init__(self, overriders, should_update=True):
