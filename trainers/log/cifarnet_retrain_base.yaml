@@ -1,0 +1,3 @@
+retrain:
+  loss_base: 0.1284776727762546
+  train_acc_base: 0.947402046319797
