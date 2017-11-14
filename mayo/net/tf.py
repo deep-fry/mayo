@@ -189,8 +189,7 @@ class TFNet(TFNetBase):
                 gate = tf.clip_by_value(gate, 0, 1)
             # regularizer policy
             regu_cls, regu_params = object_from_params(policy)
-            to_regularize = tf.stop_gradient(output) * gate
-            regularization = regu_cls(**regu_params)(to_regularize)
+            regularization = regu_cls(**regu_params)(gate)
             tf.add_to_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
         tf.add_to_collection('mayo.gates', gate)

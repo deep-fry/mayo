@@ -3,7 +3,7 @@ import math
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize_property, Percent, Table
+from mayo.util import Percent, Table
 from mayo.session.base import Session
 
 
@@ -23,18 +23,6 @@ class EvaluateBase(Session):
             self._top1_op = tf.concat(top1s, axis=0)
             self._top5_op = tf.concat(top5s, axis=0)
 
-    @memoize_property
-    def gate_sparsity(self):
-        with self.as_default():
-            total = 0
-            valid = []
-            for gate in tf.get_collection('mayo.gates'):
-                total += gate.shape.num_elements()
-                valid.append(tf.reduce_sum(gate))
-            if total == 0:
-                return None
-            return tf.add_n(valid) / total
-
     def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint
         if key is None:
@@ -46,16 +34,9 @@ class EvaluateBase(Session):
         # evaluation
         log.info('Starting evaluation...')
         top1s, top5s, step, total = 0.0, 0.0, 0, 0
-        overall_gate_sparsity = 0
-        tasks = [self._top1_op, self._top5_op]
-        if self.gate_sparsity is not None:
-            tasks.append(self.gate_sparsity)
         try:
             while step < num_iterations:
-                results = self.run(tasks)
-                top1, top5, *results = results
-                if self.gate_sparsity is not None:
-                    overall_gate_sparsity += results.pop()
+                top1, top5 = self.run([self._top1_op, self._top5_op])
                 if step == num_iterations - 1:
                     # final iteration
                     top1 = top1[:num_final_examples]
@@ -76,14 +57,9 @@ class EvaluateBase(Session):
             if not keyboard_interrupt:
                 raise e
         else:
-            self._update_progress(self._to_update_op)
             log.info('Evaluation complete.')
             log.info('    top1: {}, top5: {} [{} images]'.format(
                 top1_acc, top5_acc, total))
-            if self.gate_sparsity is not None:
-                log.info(
-                    '{} of features are active.'
-                    .format(Percent(overall_gate_sparsity / num_iterations)))
             return top1_acc, top5_acc
 
     def eval_all(self):
