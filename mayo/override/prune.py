@@ -100,14 +100,14 @@ class ChannelPruner(OverriderBase):
         return
 
     def _apply_value(self, var, session):
-        var = tf.nn.relu6(var)
+        var_relu = tf.nn.relu(var)
         n, h, w, c = var.shape
         pool_params = {
             'padding': 'VALID',
             'ksize': [1, h, w, 1],
             'strides': [1, 1, 1, 1]
         }
-        pooled = tf.nn.avg_pool(var, **pool_params)
+        pooled = tf.nn.avg_pool(var_relu, **pool_params)
 
         n = int(n)
         c = int(c)
