@@ -67,8 +67,8 @@ model:
                     axis: 3
             graph:
                 - {from: input, with: [squeeze, gate], to: squeezed}
-                - {from: squeezed, with: [expand1, gate], to: expanded1}
-                - {from: squeezed, with: [expand3, gate], to: expanded3}
+                - {from: squeezed, with: expand1, to: expanded1}
+                - {from: squeezed, with: expand3, to: expanded3}
                 - {from: [expanded1, expanded3], with: concat, to: output}
         conv1: {<<: *conv, kernel_size: 7, stride: 2, num_outputs: 96}
         pool1: &pool

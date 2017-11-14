@@ -1,0 +1,12 @@
+retrain:
+  cont_list:
+    tower_0/lenet5/lenet5/conv0/BiasAdd: false
+    tower_0/lenet5_2/lenet5/conv1/BiasAdd: true
+  loss_base: 0.0028396507774615136
+  train_acc_base: 0.9981897676112288
+retrain:
+  cont_list:
+    tower_0/lenet5/lenet5/conv0/BiasAdd: false
+    tower_0/lenet5_2/lenet5/conv1/BiasAdd: false
+  loss_base: 0.0028396507774615136
+  train_acc_base: 0.9981897676112288
