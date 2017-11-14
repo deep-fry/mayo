@@ -25,8 +25,8 @@ model:
                 # type: softmax_cross_entropy
                 # density: 0.2
                 type: tensorflow.contrib.layers.l1_regularizer
-                scale: 0.0004
-            # trainable: false
+                scale: 0.00001
+            trainable: false
         pool0: &pool
             type: max_pool
             kernel_size: 2
