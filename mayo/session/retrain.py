@@ -141,7 +141,8 @@ class RetrainBase(Train):
             # current setup exceeds max epoches, retrieve backwards
             if epoch >= iter_max_epoch and epoch > 0:
                 self.retrain_cnt += 1
-                self.reset_num_epochs()
+                with log.demote():
+                    self.reset_num_epochs()
                 self.log_thresholds(self.loss_avg, self.acc_avg)
                 return self.backward_policy()
         return True
@@ -221,7 +222,8 @@ class RetrainBase(Train):
         log.info('Start profiling for one epoch')
         epoch = 0
         self._reset_stats()
-        self.reset_num_epochs()
+        with log.demote():
+            self.reset_num_epochs()
         if self.config.retrain.get('train_acc_base'):
             # if acc is hand coded in yaml
             self.acc_base = self.config.retrain.train_acc_base
@@ -248,7 +250,8 @@ class RetrainBase(Train):
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
         self._reset_stats()
-        self.reset_num_epochs()
+        with log.demote():
+            self.reset_num_epochs()
         log.info('profiled baseline, loss is {}, acc is {}'.format(
             self.loss_base,
             self.acc_base,
@@ -340,7 +343,8 @@ class GlobalRetrain(RetrainBase):
         self.log_thresholds(self.loss_avg, self.acc_avg)
         self.profile_overrider()
         self.overriders_refresh()
-        self.reset_num_epochs()
+        with log.demote():
+            self.reset_num_epochs()
         return True
 
     def log_thresholds(self, loss, acc):
@@ -369,14 +373,16 @@ class GlobalRetrain(RetrainBase):
             self._decrease_scale()
             thresholds = self.info.get(self.nets[0].overriders[0], 'threshold')
             log.debug('Recovered thresholds to {}.'.format(thresholds))
-            self.reset_num_epochs()
+            with log.demote():
+                self.reset_num_epochs()
             return True
         # stop if reach min scale
         else:
             for o in self.nets[0].overriders:
                 self.cont[self.target_layer] = False
             log.debug('All layers done.')
-            self.reset_num_epochs()
+            with log.demote():
+                self.reset_num_epochs()
             return False
 
     def _decrease_scale(self):
@@ -422,7 +428,8 @@ class LayerwiseRetrain(RetrainBase):
         self.log_thresholds(self.loss_avg, self.acc_avg)
         self.profile_overrider()
         self.overriders_refresh()
-        self.reset_num_epochs()
+        with log.demote():
+            self.reset_num_epochs()
         # FIXME decarese?
         log.info('decarese threshold, working on {}'.format(self.target_layer))
         return True
@@ -458,7 +465,8 @@ class LayerwiseRetrain(RetrainBase):
             if is_contiunue:
                 # overriders are refreshed inside decrease scale
                 self._decrease_scale()
-                self.reset_num_epochs()
+                with log.demote():
+                    self.reset_num_epochs()
                 log.info(
                     'Decreasing scale to {}, working on {}...'
                     .format(self._fetch_scale(), self.target_layer))
@@ -471,7 +479,8 @@ class LayerwiseRetrain(RetrainBase):
                 # fetch a new layer to retrain
                 self.profile_overrider()
                 self.overriders_refresh()
-                self.reset_num_epochs()
+                with log.demote():
+                    self.reset_num_epochs()
                 log.info('switching layer, working on {}'.format(
                     self.target_layer))
                 log.info('priority_list: {}'.format(self.priority_list))
