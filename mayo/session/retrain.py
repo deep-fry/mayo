@@ -331,8 +331,6 @@ class GlobalRetrain(RetrainBase):
         self.overriders_update()
 
     def forward_policy(self, floor_epoch):
-        log.debug('Targeting on {}'.format(self.target_layer))
-        log.debug('log: {}'.format(self.log))
         with log.demote():
             self.save_checkpoint(
                 'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
@@ -345,6 +343,11 @@ class GlobalRetrain(RetrainBase):
         self.overriders_refresh()
         with log.demote():
             self.reset_num_epochs()
+        for o in self.nets[0].overriders:
+            if o.name == self.target_layer:
+                threshold = self.info.get(o, 'threshold')
+        log.info('update threshold to {}, working on {}'.format(
+            threshold, self.target_layer))
         return True
 
     def log_thresholds(self, loss, acc):
@@ -362,7 +365,6 @@ class GlobalRetrain(RetrainBase):
         end_scale = self.info.get(self.nets[0].overriders[0], 'end_scale')
         scale = self.info.get(self.nets[0].overriders[0], 'scale')
         if scale >= 0:
-            # FIXME is_contiunue??
             is_contiunue = self._fetch_scale() > end_scale
         else:
             is_contiunue = self._fetch_scale() < end_scale
@@ -372,7 +374,9 @@ class GlobalRetrain(RetrainBase):
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
             thresholds = self.info.get(self.nets[0].overriders[0], 'threshold')
-            log.debug('Recovered thresholds to {}.'.format(thresholds))
+            log.info(
+                'Decreasing scale to {}, threshold is {}...'
+                .format(self._fetch_scale(), thresholds))
             with log.demote():
                 self.reset_num_epochs()
             return True
@@ -380,7 +384,10 @@ class GlobalRetrain(RetrainBase):
         else:
             for o in self.nets[0].overriders:
                 self.cont[self.target_layer] = False
-            log.debug('All layers done.')
+            thresholds = self.info.get(self.nets[0].overriders[0], 'threshold')
+            log.info(
+                'All layers done, final threshold is {}'
+                .format(thresholds))
             with log.demote():
                 self.reset_num_epochs()
             return False
@@ -430,8 +437,11 @@ class LayerwiseRetrain(RetrainBase):
         self.overriders_refresh()
         with log.demote():
             self.reset_num_epochs()
-        # FIXME decarese?
-        log.info('decarese threshold, working on {}'.format(self.target_layer))
+        for o in self.nets[0].overriders:
+            if o.name == self.target_layer:
+                threshold = self.info.get(o, 'threshold')
+        log.info('update threshold to {}, working on {}'.format(
+            threshold, self.target_layer))
         return True
 
     def backward_policy(self):
@@ -458,11 +468,10 @@ class LayerwiseRetrain(RetrainBase):
             end_scale = self.info.get(o_recorded, 'end_scale')
             scale = self.info.get(o_recorded, 'scale')
             if scale >= 0:
-                # FIXME is_contiunue ??
-                is_contiunue = self._fetch_scale() > end_scale
+                contiunue = self._fetch_scale() > end_scale
             else:
-                is_contiunue = self._fetch_scale() < end_scale
-            if is_contiunue:
+                contiunue = self._fetch_scale() < end_scale
+            if contiunue:
                 # overriders are refreshed inside decrease scale
                 self._decrease_scale()
                 with log.demote():
