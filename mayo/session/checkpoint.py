@@ -91,7 +91,7 @@ class CheckpointHandler(object):
             return tf.global_variables()
 
     def load(self, key=_checkpoint_latest):
-        if key != 0 and not key:
+        if key is False or (key != 0 and not key):
             log.debug('Checkpoint loading disabled.')
             return []
         try:
