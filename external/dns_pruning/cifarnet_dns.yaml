@@ -1,0 +1,11 @@
+---
+model.layers:
+    conv1: &overrider
+        weights_overrider: &pruner
+            type: mayo.override.DNSPruner
+            c_rate: 1
+        biases_overrider: {<<: *pruner}
+    conv2: {<<: *overrider}
+    fc3: {<<: *overrider}
+    fc4: {<<: *overrider}
+    logits: {<<: *overrider}
