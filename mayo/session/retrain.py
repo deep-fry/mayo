@@ -16,6 +16,8 @@ class OverriderInfo(object):
         self.start_ths = {}
         self.scale_update_factors = {}
         self.targets = {}
+        # now only supports retraining on one overrider
+        self.meta = overriders_info[0]
 
         for meta in overriders_info:
             scale_dict = {}
@@ -25,7 +27,9 @@ class OverriderInfo(object):
             th_start_dict = {}
             scale_min_dict = {}
             for o in overriders:
-                if o.__class__.__name__ in meta.type:
+                # overrider might be wrapped in ChainOverrider
+                o = self.get_overrider(o)
+                if o is not None:
                     scale_dict[o.name] = meta.range['scale']
                     scale_min_dict[o.name] = meta.range['min_scale']
                     update_dict[o.name] = meta.scale_update_factor
@@ -56,6 +60,7 @@ class OverriderInfo(object):
             self.targets[cls_name] = str(meta.target)
 
     def get(self, overrider, info_type):
+        overrider = self.get_overrider(overrider)
         cls_name = overrider.__class__.__name__
         if info_type == 'end_threshold':
             return self.max_ths[cls_name][overrider.name]
@@ -74,6 +79,7 @@ class OverriderInfo(object):
         raise ValueError('{} is not a collected info key.'.format(info_type))
 
     def set(self, overrider, info_type, value):
+        overrider = self.get_overrider(overrider)
         cls_name = overrider.__class__.__name__
         if info_type == 'threshold':
             self.ths[cls_name][overrider.name] = value
@@ -82,6 +88,20 @@ class OverriderInfo(object):
         else:
             raise ValueError(
                 '{} is not a collected info key.'.format(info_type))
+
+    def get_overrider(self, overrider):
+        cls_name = overrider.__class__.__name__
+        if cls_name == 'ChainOverrider':
+            for chained_overrider in overrider:
+                if chained_overrider.__class__.__name__ in self.meta.type:
+                    return chained_overrider
+            return None
+        else:
+            if cls_name in self.meta.type:
+                return overrider
+            else:
+                return None
+
 
 
 class RetrainBase(Train):
@@ -115,6 +135,13 @@ class RetrainBase(Train):
         # init all overriders
         for o in self.nets[0].overriders:
             self.overrider_init(o)
+
+    def once(self):
+        tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
+        noop, loss, acc, num_epochs = self.run(tasks)
+        if math.isnan(loss):
+            raise ValueError('Model diverged with a nan-valued loss.')
+        return (loss, acc, num_epochs)
 
     def _retrain_iteration(self):
         system = self.config.system
