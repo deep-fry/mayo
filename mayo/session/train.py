@@ -104,7 +104,7 @@ class Train(Session):
 
         # final debug outputs
         if log.is_enabled('debug'):
-            lr = self.run(self.learning_rate)
+            lr = self.run(self.learning_rate, update_progress=False)
             log.debug('Current learning rate is {}.'.format(lr))
 
         # register progress update statistics
@@ -121,13 +121,13 @@ class Train(Session):
         return tf.summary.FileWriter(path, graph=self.graph)
 
     def _save_summary(self, epoch):
-        summary = self.run(self._summary_op)
+        summary = self.run(self._summary_op, update_progress=False)
         self._summary_writer.add_summary(summary, epoch)
 
     def reset_num_epochs(self):
         log.info('Reseting number of training epochs of the model...')
         with self.as_default():
-            self.run(tf.assign(self.imgs_seen, 0))
+            self.run(tf.assign(self.imgs_seen, 0), update_progress=False)
         self.change.reset('checkpoint.epoch')
 
     def once(self):

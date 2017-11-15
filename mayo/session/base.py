@@ -230,7 +230,7 @@ class Session(object):
             info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
         log.info(' | '.join(info), update=True)
 
-    def run(self, ops, **kwargs):
+    def run(self, ops, update_progress=True, **kwargs):
         with self.as_default():
             # ensure variables are initialized
             uninit_vars = []
@@ -256,9 +256,12 @@ class Session(object):
             results, to_update = self.tf_session.run(
                 (ops, filtered_to_update_op), **kwargs)
 
-        to_update = dict(self._to_update_op, **to_update)
-        self._update_progress(to_update)
-        return results
+            # progress update
+            if update_progress:
+                to_update = dict(self._to_update_op, **to_update)
+                self._update_progress(to_update)
+
+            return results
 
     def _preprocess(self):
         with self.as_default():
