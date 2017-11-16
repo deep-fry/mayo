@@ -211,6 +211,10 @@ class Session(object):
                 self.change.moving_metrics('density', d, std=False))
             self.register_update('density', density, density_formatter)
 
+    @memoize_property
+    def num_examples_per_epoch(self):
+        return self.config.dataset.num_examples_per_epoch[self.mode]
+
     def _update_progress(self, to_update):
         if not to_update:
             return
@@ -223,10 +227,12 @@ class Session(object):
         # performance
         epoch = to_update.get('epoch')
         interval = self.change.delta('step.duration', time.time())
-        if epoch and interval != 0:
-            size = self.config.dataset.num_examples_per_epoch.get(self.mode)
-            imgs = epoch * size
-            imgs_per_step = self.change.delta('step.images', imgs)
+        if interval != 0:
+            if epoch:
+                imgs = epoch * self.num_examples_per_epoch
+                imgs_per_step = self.change.delta('step.images', imgs)
+            else:
+                imgs_per_step = self.batch_size
             imgs_per_sec = imgs_per_step / float(interval)
             imgs_per_sec = self.change.moving_metrics(
                 'imgs_per_sec', imgs_per_sec, std=False)
