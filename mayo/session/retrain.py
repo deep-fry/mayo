@@ -134,11 +134,10 @@ class RetrainBase(Train):
             self.overrider_init(o)
 
     def once(self):
+        train_op = self._train_op
         if self.config.retrain.get('eval_only', False):
             # do not run training operations when `retrain.eval_only` is set
-            train_op = {}
-        else:
-            train_op = self._train_op
+            train_op = train_op['imgs_seen']
         tasks = [train_op, self.loss, self.accuracy, self.num_epochs]
         noop, loss, acc, num_epochs = self.run(tasks, update_progress=True)
         if math.isnan(loss):
@@ -260,19 +259,13 @@ class RetrainBase(Train):
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
-        tasks = [
-            tf.assign_add(self.imgs_seen, self.batch_size),
-            self.loss,
-            self.accuracy,
-            self.num_epochs,
-        ]
-        # while epoch < 0.1:
+        imgs_seen = self._train_op['imgs_seen']
+        tasks = [imgs_seen, self.loss, self.accuracy, self.num_epochs]
         while epoch < 1.0:
             _, loss, acc, epoch = self.run(tasks, update_progress=True)
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
-            # self._update_progress(epoch, loss, acc, self._cp_epoch)
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
         self._reset_stats()

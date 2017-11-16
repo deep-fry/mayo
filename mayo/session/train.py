@@ -129,6 +129,7 @@ class Train(Session):
         with self.as_default():
             self.run(tf.assign(self.imgs_seen, 0))
         self.change.reset('checkpoint.epoch')
+        self.change.reset('step')
 
     def once(self):
         tasks = [self._train_op, self.loss, self.num_epochs]
