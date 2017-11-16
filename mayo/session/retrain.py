@@ -135,7 +135,7 @@ class RetrainBase(Train):
 
     def once(self):
         tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
-        noop, loss, acc, num_epochs = self.run(tasks)
+        noop, loss, acc, num_epochs = self.run(tasks, update_progress = True)
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         return (loss, acc, num_epochs)
