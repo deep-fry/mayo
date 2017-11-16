@@ -152,6 +152,8 @@ class Session(object):
             return var_avgs.apply(avg_vars)
 
     def load_checkpoint(self, name):
+        # flush overrider parameter assignment
+        self.run([])
         # restore variables
         restore_vars = self.checkpoint.load(name)
         for v in restore_vars:
