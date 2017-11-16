@@ -130,7 +130,8 @@ class OverriderBase(object):
     def _tracking_getter(self, getter, scope):
         @functools.wraps(getter)
         def wrapped(name, *args, **kwargs):
-            var = getter('{}.{}'.format(scope, name), *args, **kwargs)
+            var_name = '{}/{}.{}'.format(scope, self.__class__.__name__, name)
+            var = getter(var_name, *args, **kwargs)
             self.internals[name] = var
             return var
         return wrapped
@@ -143,6 +144,8 @@ class OverriderBase(object):
         self._applied = True
         self.name = value.op.name
         self.before = value
+        self._scope = scope
+        self._original_getter = getter
         self._getter = self._tracking_getter(getter, scope)
         self.after = self._apply(value)
         # ensure instantiation of all parameter variables
@@ -214,7 +217,19 @@ class ChainOverrider(OverriderBase, Sequence):
     """ Composition of overriders.  """
     def __init__(self, overriders, should_update=True):
         super().__init__(should_update)
+        self._check_repetition(overriders)
         self._overriders = overriders
+
+    @staticmethod
+    def _check_repetition(overriders):
+        cls_names = []
+        for o in overriders:
+            cls_name = o.__class__.__name__
+            if cls_name in cls_names:
+                raise TypeError(
+                    'We do not support overriding with repeated overrider '
+                    'types, {} is defined twice.'.format(cls_name))
+            cls_names.append(cls_name)
 
     def __getitem__(self, index):
         return self._overriders[index]
@@ -228,7 +243,7 @@ class ChainOverrider(OverriderBase, Sequence):
 
     def _apply(self, value):
         for o in self._overriders:
-            value = o.apply(self._getter, value)
+            value = o.apply(self._scope, self._original_getter, value)
         return value
 
     def _update(self, session):

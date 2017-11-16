@@ -92,10 +92,8 @@ class ParameterTransformer(object):
             params['activation_fn'] = fn
         activation_overrider = params.pop('activation_overrider', None)
         if activation_overrider:
-            scope = 'activations/{}'.format(
-                activation_overrider.__class__.__name__)
             params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
-                activation_overrider.apply(scope, tf.get_variable, x))
+                activation_overrider.apply('activations', tf.get_variable, x))
             self.overriders.append(activation_overrider)
 
         # num outputs
@@ -139,8 +137,7 @@ class ParameterTransformer(object):
             if overrider is None:
                 return v
             log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
-            scope = '{}/{}'.format(name, overrider.__class__.__name__)
-            ov = overrider.apply(scope, getter, v)
+            ov = overrider.apply(name, getter, v)
             self.overriders.append(overrider)
             return ov
 
