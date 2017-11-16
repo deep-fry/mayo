@@ -269,7 +269,7 @@ class RetrainBase(Train):
         # while epoch < 0.1:
         while epoch < 1.0:
             _, loss, acc, epoch = self.run(
-                self.empty_eval_run())
+                self.empty_eval_run(), update_progress=True)
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
@@ -301,7 +301,7 @@ class RetrainBase(Train):
             density = valid_elements / float(num_elements)
             metric_value *= density
         if hasattr(o, 'width'):
-            if isinstance(o.width, (tf.Variable, tf.Tensor))
+            if isinstance(o.width, (tf.Variable, tf.Tensor)):
                 bits = self.run(o.width)
             else:
                 bits = o.width
@@ -554,16 +554,13 @@ class LayerwiseRetrain(RetrainBase):
 class LayerwiseEmptyRetrain(LayerwiseRetrain):
     def once(self):
         # this is overriding once to an empty run
-        op_imgs_seen = tf.assign_add(self.imgs_seen, self.batch_size)
-        tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
-        loss, acc, num_epochs, _ = self.run(tasks)
-        return loss, acc, num_epochs
-
+        _, loss, acc, epoch = self.run(
+                self.empty_eval_run(), update_progress=True)
+        return loss, acc, epoch
 
 class GlobalwiseEmptyRetrain(GlobalRetrain):
     def once(self):
         # this is overriding once to an empty run
-        op_imgs_seen = tf.assign_add(self.imgs_seen, self.batch_size)
-        tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
-        loss, acc, num_epochs, _ = self.run(tasks)
-        return loss, acc, num_epochs
+        _, loss, acc, epoch = self.run(
+                self.empty_eval_run(), update_progress=True)
+        return loss, acc, epoch
