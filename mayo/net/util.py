@@ -111,14 +111,11 @@ class ParameterTransformer(object):
         scope = slim.arg_scope([params['normalizer_fn']], **norm_params)
         scope_list.append(scope)
 
-    def _add_var_scope(self, module_path, scope_list):
+    def _add_var_scope(self, params, module_path, scope_list):
         if not module_path:
-            return
+            raise ValueError('Module path is empty.')
         path = '/'.join(module_path)
-        scope = tf.variable_scope(path, reuse=self.reuse)
-        scope_list.append(scope)
 
-    def _add_overrider_scope(self, params, scope_list):
         biases_overrider = params.pop('biases_overrider', None)
         weights_overrider = params.pop('weights_overrider', None)
 
@@ -137,15 +134,11 @@ class ParameterTransformer(object):
             self.overriders.append(overrider)
             return ov
 
-        @contextlib.contextmanager
-        def custom_scope():
-            # we do not have direct access to variable creation,
-            # so scope must be used
-            scope = tf.get_variable_scope()
-            with tf.variable_scope(scope, custom_getter=custom_getter):
-                yield
-
-        scope_list.append(custom_scope())
+        # we do not have direct access to variable creation,
+        # so scope must be used
+        scope = tf.variable_scope(
+            path, reuse=self.reuse, custom_getter=custom_getter)
+        scope_list.append(scope)
 
     @staticmethod
     @contextlib.contextmanager
@@ -163,10 +156,8 @@ class ParameterTransformer(object):
         scope_list.append(cpu_context)
         # normalization arg_scope
         self._add_norm_scope(params, scope_list)
-        # variable scope
-        self._add_var_scope(module_path, scope_list)
-        # overrider custom-getter variable scope
-        self._add_overrider_scope(params, scope_list)
+        # variable scope with custom getter for overriders
+        self._add_var_scope(params, module_path, scope_list)
         # custom nested scope
         return self._scope_functional(scope_list)
 

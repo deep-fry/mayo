@@ -46,7 +46,7 @@ class Parameter(object):
                         'Parameter {} does not specify a configuration for {}.'
                         .format(self.name, key))
             kwargs[key] = value
-        kwargs['name'] = '{}/{}'.format(instance.name, self.name)
+        kwargs['name'] = self.name
         init = kwargs.pop('initial')
         if init is not None and not isinstance(init, Initializer):
             init = tf.constant_initializer(
