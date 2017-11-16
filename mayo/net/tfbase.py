@@ -82,18 +82,33 @@ class TFNetBase(NetBase):
         return acc
 
     def info(self):
-        var_info = Table(['variable', 'shape'])
-        var_info.add_rows((v, v.shape) for v in tf.trainable_variables())
-        var_info.add_column(
-            'count', lambda row: var_info[row, 'shape'].num_elements())
-        var_info.set_footer(
-            ['', '    total:', sum(var_info.get_column('count'))])
+        # trainable table
+        trainable_vars = tf.trainable_variables()
+        trainable = Table(['trainable', 'shape'])
+        trainable.add_rows((v, v.shape) for v in trainable_vars)
+        trainable.add_column(
+            'count', lambda row: trainable[row, 'shape'].num_elements())
+        trainable.set_footer(
+            ['', '    total:', sum(trainable.get_column('count'))])
+
+        # nontrainable table
+        nontrainable = Table(['nontrainable', 'shape'])
+        for var in tf.global_variables():
+            if var not in trainable_vars:
+                nontrainable.add_row((var, var.shape))
+
+        # layers
         layer_info = Table(['layer', 'shape'])
         for name, tensors in self.layers().items():
             tensors = ensure_list(tensors)
             for tensor in tensors:
                 layer_info.add_row((name, tensor.shape))
-        return {'variables': var_info, 'layers': layer_info}
+
+        return {
+            'trainables': trainable,
+            'nontrainables': nontrainable,
+            'layers': layer_info,
+        }
 
     def _params_to_text(self, params):
         arguments = []

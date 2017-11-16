@@ -127,23 +127,23 @@ class OverriderBase(object):
         raise NotImplementedError(
             'Overrider method `._apply()` must be implemented.')
 
-    def _tracking_getter(self, getter):
+    def _tracking_getter(self, getter, scope):
         @functools.wraps(getter)
         def wrapped(name, *args, **kwargs):
-            var = getter(name, *args, **kwargs)
+            var = getter('{}.{}'.format(scope, name), *args, **kwargs)
             self.internals[name] = var
             return var
         return wrapped
 
-    def apply(self, getter, value):
+    def apply(self, scope, getter, value):
         """
         Things to apply to the variable in `value`, returns the
         overridden result.
         """
         self._applied = True
-        self._getter = self._tracking_getter(getter)
         self.name = value.op.name
         self.before = value
+        self._getter = self._tracking_getter(getter, scope)
         self.after = self._apply(value)
         # ensure instantiation of all parameter variables
         for param in self.parameters:

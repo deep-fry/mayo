@@ -294,8 +294,8 @@ Arguments:
         else:
             session = self._get_session('validate')
         info = session.info()
-        print(info['variables'].format())
-        print(info['layers'].format())
+        for key in ('trainables', 'nontrainables', 'layers'):
+            print(info[key].format())
         for table in info.get('overriders', {}).values():
             print(table.format())
 

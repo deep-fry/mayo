@@ -76,6 +76,14 @@ class ParameterTransformer(object):
         for name in param_names:
             _create_object_for_key(params, name)
 
+    @staticmethod
+    def _apply_overrider(component, overrider, tensor):
+        # apply overrider within the given scope named by component, so as
+        # to create variables that are specific to that overrider to avoid
+        # collision within the same layer.
+        with tf.variable_scope(component):
+            return overrider
+
     def _config_layer(self, name, params):
         # activation
         fn = params.get('activation_fn', None)
@@ -84,9 +92,10 @@ class ParameterTransformer(object):
             params['activation_fn'] = fn
         activation_overrider = params.pop('activation_overrider', None)
         if activation_overrider:
+            scope = 'activations/{}'.format(
+                activation_overrider.__class__.__name__)
             params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
-                activation_overrider.apply(tf.get_variable, x))
-        if activation_overrider:
+                activation_overrider.apply(scope, tf.get_variable, x))
             self.overriders.append(activation_overrider)
 
         # num outputs
@@ -130,7 +139,8 @@ class ParameterTransformer(object):
             if overrider is None:
                 return v
             log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
-            ov = overrider.apply(getter, v)
+            scope = '{}/{}'.format(name, overrider.__class__.__name__)
+            ov = overrider.apply(scope, getter, v)
             self.overriders.append(overrider)
             return ov
 
