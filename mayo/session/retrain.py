@@ -350,6 +350,7 @@ class RetrainBase(Train):
 class GlobalRetrain(RetrainBase):
     def overriders_refresh(self):
         for o in self.nets[0].overriders:
+            o = self.info.get_overrider(o)
             self.overrider_refresh(o)
             o.should_update = True
         self.overriders_update()
@@ -384,14 +385,21 @@ class GlobalRetrain(RetrainBase):
 
     def backward_policy(self):
         # if did not reach min scale
-        end_scale = self.info.get(self.nets[0].overriders[0], 'end_scale')
-        scale = self.info.get(self.nets[0].overriders[0], 'scale')
+        tmp_o = self.nets[0].overriders[0]
+        end_scale = self.info.get(tmp_o, 'end_scale')
+        scale = self.info.get(tmp_o, 'scale')
+        end_threshold = self.info.get(tmp_o, 'end_threshold')
+        threshold = self.info.get(tmp_o, 'threshold')
         if scale >= 0:
-            should_continue = self._fetch_scale() > end_scale
+            scale_check = self._fetch_scale() > end_scale
+            threshold_check = end_threshold > threshold
+            run = scale_check and threshold_check
         else:
-            should_continue = self._fetch_scale() < end_scale
+            scale_check = self._fetch_scale() < end_scale
+            threshold_check = end_threshold < threshold
+            run = scale_check and threshold_check
 
-        if should_continue:
+        if run:
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
@@ -409,6 +417,10 @@ class GlobalRetrain(RetrainBase):
             log.info(
                 'All layers done, final threshold is {}'
                 .format(thresholds))
+            if not threshold_check:
+                log.info('threshold meets its minimum')
+            if not scale_check:
+                log.info('scale meets its minimum')
             self.reset_num_epochs()
             return False
 
@@ -437,6 +449,7 @@ class GlobalRetrain(RetrainBase):
 class LayerwiseRetrain(RetrainBase):
     def overriders_refresh(self):
         for o in self.nets[0].overriders:
+            o = self.info.get_overrider(o)
             if o.name == self.target_layer:
                 self.overrider_refresh(o)
                 o.should_update = True
@@ -486,11 +499,15 @@ class LayerwiseRetrain(RetrainBase):
                     break
             end_scale = self.info.get(o_recorded, 'end_scale')
             scale = self.info.get(o_recorded, 'scale')
+            end_threshold = self.info.get(o_recorded, 'end_threshold')
+            threshold = self.info.get(o_recorded, 'threshold')
             if scale >= 0:
-                should_continue = self._fetch_scale() > end_scale
+                run = self._fetch_scale() > end_scale and\
+                    threshold <= end_threshold
             else:
-                should_continue = self._fetch_scale() < end_scale
-            if should_continue:
+                run = self._fetch_scale() < end_scale and\
+                    threshold >= end_threshold
+            if run:
                 # overriders are refreshed inside decrease scale
                 self._decrease_scale()
                 self.reset_num_epochs()
@@ -507,6 +524,10 @@ class LayerwiseRetrain(RetrainBase):
                 self.profile_overrider()
                 self.overriders_refresh()
                 self.reset_num_epochs()
+                if not threshold_check:
+                    log.info('threshold meets its minimum')
+                if not scale_check:
+                    log.info('scale meets its minimum')
                 log.info('switching layer, working on {}'.format(
                     self.target_layer))
                 log.info('priority_list: {}'.format(self.priority_list))
