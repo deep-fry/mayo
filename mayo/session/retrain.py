@@ -168,8 +168,7 @@ class RetrainBase(Train):
             # current setup exceeds max epoches, retrieve backwards
             if epoch >= iter_max_epoch and epoch > 0:
                 self.retrain_cnt += 1
-                with log.demote():
-                    self.reset_num_epochs()
+                self.reset_num_epochs()
                 self.log_thresholds(self.loss_avg, self.acc_avg)
                 return self.backward_policy()
         return True
@@ -249,8 +248,7 @@ class RetrainBase(Train):
         log.info('Start profiling for one epoch')
         epoch = 0
         self._reset_stats()
-        with log.demote():
-            self.reset_num_epochs()
+        self.reset_num_epochs()
         if self.config.retrain.get('train_acc_base'):
             # if acc is hand coded in yaml
             self.acc_base = self.config.retrain.train_acc_base
@@ -277,8 +275,7 @@ class RetrainBase(Train):
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
         self._reset_stats()
-        with log.demote():
-            self.reset_num_epochs()
+        self.reset_num_epochs()
         log.info('profiled baseline, loss is {}, acc is {}'.format(
             self.loss_base,
             self.acc_base,
@@ -301,9 +298,7 @@ class RetrainBase(Train):
             density = valid_elements / float(num_elements)
             metric_value *= density
         if hasattr(o, 'width'):
-            # pin the library name to assert
-            # FIXME WHAT? use `isinstance(o.width, (tf.Variable, tf.Tensor))`
-            if tf.__name__ in type(o.width).__module__:
+            if isinstance(o.width, (tf.Variable, tf.Tensor))
                 bits = self.run(o.width)
             else:
                 bits = o.width
@@ -358,9 +353,8 @@ class GlobalRetrain(RetrainBase):
         self.overriders_update()
 
     def forward_policy(self, floor_epoch):
-        with log.demote():
-            self.save_checkpoint(
-                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.save_checkpoint(
+            'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
         self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
         self._cp_epoch = floor_epoch
@@ -368,8 +362,7 @@ class GlobalRetrain(RetrainBase):
         self.log_thresholds(self.loss_avg, self.acc_avg)
         self.profile_overrider()
         self.overriders_refresh()
-        with log.demote():
-            self.reset_num_epochs()
+        self.reset_num_epochs()
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
                 threshold = self.info.get(o, 'threshold')
@@ -404,8 +397,7 @@ class GlobalRetrain(RetrainBase):
             log.info(
                 'Decreasing scale to {}, threshold is {}...'
                 .format(self._fetch_scale(), thresholds))
-            with log.demote():
-                self.reset_num_epochs()
+            self.reset_num_epochs()
             return True
         # stop if reach min scale
         else:
@@ -415,8 +407,7 @@ class GlobalRetrain(RetrainBase):
             log.info(
                 'All layers done, final threshold is {}'
                 .format(thresholds))
-            with log.demote():
-                self.reset_num_epochs()
+            self.reset_num_epochs()
             return False
 
     def _decrease_scale(self):
@@ -452,9 +443,8 @@ class LayerwiseRetrain(RetrainBase):
     def forward_policy(self, floor_epoch):
         log.debug('Targeting on {}...'.format(self.target_layer))
         log.debug('Log: {}'.format(self.log))
-        with log.demote():
-            self.save_checkpoint(
-                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.save_checkpoint(
+            'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
         self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
         self._cp_epoch = floor_epoch
@@ -462,8 +452,7 @@ class LayerwiseRetrain(RetrainBase):
         self.log_thresholds(self.loss_avg, self.acc_avg)
         self.profile_overrider()
         self.overriders_refresh()
-        with log.demote():
-            self.reset_num_epochs()
+        self.reset_num_epochs()
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
                 threshold = self.info.get(o, 'threshold')
@@ -501,8 +490,7 @@ class LayerwiseRetrain(RetrainBase):
             if contiunue:
                 # overriders are refreshed inside decrease scale
                 self._decrease_scale()
-                with log.demote():
-                    self.reset_num_epochs()
+                self.reset_num_epochs()
                 log.info(
                     'Decreasing scale to {}, working on {}...'
                     .format(self._fetch_scale(), self.target_layer))
@@ -515,8 +503,7 @@ class LayerwiseRetrain(RetrainBase):
                 # fetch a new layer to retrain
                 self.profile_overrider()
                 self.overriders_refresh()
-                with log.demote():
-                    self.reset_num_epochs()
+                self.reset_num_epochs()
                 log.info('switching layer, working on {}'.format(
                     self.target_layer))
                 log.info('priority_list: {}'.format(self.priority_list))
