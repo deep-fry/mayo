@@ -116,7 +116,7 @@ class OverriderBase(object):
             # add our variable to the list of initialized_variables
             if var not in session.initialized_variables:
                 session.initialized_variables.append(var)
-        session.tf_session.run(ops)
+        session.raw_run(ops)
         self._parameter_variables_assignment = {}
 
     def _apply(self, value):

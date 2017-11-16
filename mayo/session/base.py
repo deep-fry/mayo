@@ -239,6 +239,9 @@ class Session(object):
             info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
         log.info(' | '.join(info), update=True)
 
+    def raw_run(self, ops, **kwargs):
+        return self.tf_session.run(ops, **kwargs)
+
     def run(self, ops, update_progress=False, **kwargs):
         with self.as_default():
             # ensure variables are initialized
@@ -249,7 +252,7 @@ class Session(object):
             if uninit_vars:
                 desc = ', '.join(v.op.name for v in uninit_vars)
                 log.warn('Variables are not initialized: {}'.format(desc))
-                self.tf_session.run(tf.variables_initializer(uninit_vars))
+                self.raw_run(tf.variables_initializer(uninit_vars))
                 self.initialized_variables += uninit_vars
 
             # assign overrider hyperparameters
@@ -262,7 +265,7 @@ class Session(object):
             filtered_to_update_op = {
                 k: v for k, v in self._to_update_op.items()
                 if isinstance(v, (tf.Tensor, tf.Variable))}
-            results, to_update = self.tf_session.run(
+            results, to_update = self.raw_run(
                 (ops, filtered_to_update_op), **kwargs)
 
             # progress update
