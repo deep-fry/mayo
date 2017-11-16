@@ -34,7 +34,8 @@ class Session(object):
         self.tf_session = tf.Session(
             graph=self.graph,
             config=tf.ConfigProto(allow_soft_placement=True))
-        self.preprocessor = Preprocess(self.tf_session, self.mode, config)
+        self.preprocessor = Preprocess(
+            self.tf_session, self.mode, config, self.num_gpus)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
