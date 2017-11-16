@@ -171,15 +171,13 @@ class OverriderBase(object):
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """
         with session.as_default():
-            session.run(
-                tf.assign(self.before, self.after), update_progress=False)
+            session.run(tf.assign(self.before, self.after))
 
     def reset(self, session):
         """Reset internal variables to their respective initial values.  """
         with session.as_default():
             for var in self.internals.values():
-                session.run(
-                    tf.assign(var, var.initial_value), update_progress=False)
+                session.run(tf.assign(var, var.initial_value))
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering

@@ -231,7 +231,7 @@ class Session(object):
             info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
         log.info(' | '.join(info), update=True)
 
-    def run(self, ops, update_progress=True, **kwargs):
+    def run(self, ops, update_progress=False, **kwargs):
         with self.as_default():
             # ensure variables are initialized
             uninit_vars = []
