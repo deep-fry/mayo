@@ -122,8 +122,6 @@ class TFNetBase(NetBase):
         # transform parameters
         params, scope = self._transformer.transform(name, params, module_path)
         with scope:
-            print(tf.contrib.framework.get_name_scope())
-            __import__('ipdb').set_trace()
             layer_type = params['type']
             layer_key = '{}/{}'.format(
                 tf.get_variable_scope().name, params['scope'])

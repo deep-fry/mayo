@@ -134,11 +134,19 @@ class ParameterTransformer(object):
             self.overriders.append(overrider)
             return ov
 
-        # we do not have direct access to variable creation,
-        # so scope must be used
-        scope = tf.variable_scope(
-            path, reuse=self.reuse, custom_getter=custom_getter)
-        scope_list.append(scope)
+        @contextlib.contextmanager
+        def custom_scope():
+            # we do not have direct access to variable creation,
+            # so scope must be used
+            # FIXME there is currently no possible workaround for
+            # auto-generated `name_scope` from `variable_scope` with names that
+            # are being uniquified.  See #39.
+            var_scope = tf.variable_scope(
+                path, reuse=self.reuse, custom_getter=custom_getter)
+            with var_scope as scope:
+                yield scope
+
+        scope_list.append(custom_scope())
 
     @staticmethod
     @contextlib.contextmanager
