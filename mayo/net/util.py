@@ -76,6 +76,14 @@ class ParameterTransformer(object):
         for name in param_names:
             _create_object_for_key(params, name)
 
+    @staticmethod
+    def _apply_overrider(component, overrider, tensor):
+        # apply overrider within the given scope named by component, so as
+        # to create variables that are specific to that overrider to avoid
+        # collision within the same layer.
+        with tf.variable_scope(component):
+            return overrider
+
     def _config_layer(self, name, params):
         # activation
         fn = params.get('activation_fn', None)
@@ -85,8 +93,7 @@ class ParameterTransformer(object):
         activation_overrider = params.pop('activation_overrider', None)
         if activation_overrider:
             params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
-                activation_overrider.apply(tf.get_variable, x))
-        if activation_overrider:
+                activation_overrider.apply('activations', tf.get_variable, x))
             self.overriders.append(activation_overrider)
 
         # num outputs
@@ -111,14 +118,11 @@ class ParameterTransformer(object):
         scope = slim.arg_scope([params['normalizer_fn']], **norm_params)
         scope_list.append(scope)
 
-    def _add_var_scope(self, module_path, scope_list):
+    def _add_var_scope(self, params, module_path, scope_list):
         if not module_path:
-            return
+            raise ValueError('Module path is empty.')
         path = '/'.join(module_path)
-        scope = tf.variable_scope(path, reuse=self.reuse)
-        scope_list.append(scope)
 
-    def _add_overrider_scope(self, params, scope_list):
         biases_overrider = params.pop('biases_overrider', None)
         weights_overrider = params.pop('weights_overrider', None)
 
@@ -133,7 +137,7 @@ class ParameterTransformer(object):
             if overrider is None:
                 return v
             log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
-            ov = overrider.apply(getter, v)
+            ov = overrider.apply(name, getter, v)
             self.overriders.append(overrider)
             return ov
 
@@ -141,9 +145,13 @@ class ParameterTransformer(object):
         def custom_scope():
             # we do not have direct access to variable creation,
             # so scope must be used
-            scope = tf.get_variable_scope()
-            with tf.variable_scope(scope, custom_getter=custom_getter):
-                yield
+            # FIXME there is currently no possible workaround for
+            # auto-generated `name_scope` from `variable_scope` with names that
+            # are being uniquified.  See #39.
+            var_scope = tf.variable_scope(
+                path, reuse=self.reuse, custom_getter=custom_getter)
+            with var_scope as scope:
+                yield scope
 
         scope_list.append(custom_scope())
 
@@ -163,10 +171,8 @@ class ParameterTransformer(object):
         scope_list.append(cpu_context)
         # normalization arg_scope
         self._add_norm_scope(params, scope_list)
-        # variable scope
-        self._add_var_scope(module_path, scope_list)
-        # overrider custom-getter variable scope
-        self._add_overrider_scope(params, scope_list)
+        # variable scope with custom getter for overriders
+        self._add_var_scope(params, module_path, scope_list)
         # custom nested scope
         return self._scope_functional(scope_list)
 

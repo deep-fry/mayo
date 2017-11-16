@@ -96,12 +96,9 @@ class OverriderInfo(object):
                 if chained_overrider.__class__.__name__ in self.meta.type:
                     return chained_overrider
             return None
-        else:
-            if cls_name in self.meta.type:
-                return overrider
-            else:
-                return None
-
+        if cls_name in self.meta.type:
+            return overrider
+        return None
 
 
 class RetrainBase(Train):
@@ -258,9 +255,14 @@ class RetrainBase(Train):
             if self.config.retrain.get('loss_base'):
                 self.loss_base = self.config.retrain.loss_base
             name = self.config.model.name
-            self.stream = open('trainers/{}_retrain_base.yaml'.format(name), 'w')
-            self.dump_data = {'retrain':{'train_acc_base':float(self.acc_base),
-            'loss_base': float(self.loss_base)}}
+            self.stream = open(
+                'trainers/{}_retrain_base.yaml'.format(name), 'w')
+            self.dump_data = {
+                'retrain': {
+                    'train_acc_base': float(self.acc_base),
+                    'loss_base': float(self.loss_base),
+                },
+            }
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
@@ -282,7 +284,8 @@ class RetrainBase(Train):
         ))
         self._reset_stats()
         name = self.config.model.name
-        self.stream = open('trainers/log/{}_retrain_base.yaml'.format(name), 'w')
+        self.stream = open(
+            'trainers/log/{}_retrain_base.yaml'.format(name), 'w')
         self.dump_data = {
             'retrain': {
                 'train_acc_base': float(self.acc_base),
@@ -385,11 +388,11 @@ class GlobalRetrain(RetrainBase):
         end_scale = self.info.get(self.nets[0].overriders[0], 'end_scale')
         scale = self.info.get(self.nets[0].overriders[0], 'scale')
         if scale >= 0:
-            is_contiunue = self._fetch_scale() > end_scale
+            should_continue = self._fetch_scale() > end_scale
         else:
-            is_contiunue = self._fetch_scale() < end_scale
+            should_continue = self._fetch_scale() < end_scale
 
-        if is_contiunue:
+        if should_continue:
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
@@ -456,8 +459,9 @@ class LayerwiseRetrain(RetrainBase):
         for o in self.nets[0].overriders:
             if o.name == self.target_layer:
                 threshold = self.info.get(o, 'threshold')
-        log.info('update threshold to {}, working on {}'.format(
-            threshold, self.target_layer))
+        log.info(
+            'update threshold to {}, working on {}'
+            .format(threshold, self.target_layer))
         return True
 
     def backward_policy(self):
@@ -484,10 +488,10 @@ class LayerwiseRetrain(RetrainBase):
             end_scale = self.info.get(o_recorded, 'end_scale')
             scale = self.info.get(o_recorded, 'scale')
             if scale >= 0:
-                contiunue = self._fetch_scale() > end_scale
+                should_continue = self._fetch_scale() > end_scale
             else:
-                contiunue = self._fetch_scale() < end_scale
-            if contiunue:
+                should_continue = self._fetch_scale() < end_scale
+            if should_continue:
                 # overriders are refreshed inside decrease scale
                 self._decrease_scale()
                 self.reset_num_epochs()
@@ -554,6 +558,7 @@ class LayerwiseEmptyRetrain(LayerwiseRetrain):
         tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
         loss, acc, num_epochs, _ = self.run(tasks)
         return loss, acc, num_epochs
+
 
 class GlobalwiseEmptyRetrain(GlobalRetrain):
     def once(self):

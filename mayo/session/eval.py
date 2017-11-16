@@ -36,7 +36,8 @@ class EvaluateBase(Session):
         top1s, top5s, step, total = 0.0, 0.0, 0, 0
         try:
             while step < num_iterations:
-                top1, top5 = self.run([self._top1_op, self._top5_op])
+                top1, top5 = self.run(
+                    [self._top1_op, self._top5_op], update_progress=True)
                 if step == num_iterations - 1:
                     # final iteration
                     top1 = top1[:num_final_examples]

@@ -179,7 +179,7 @@ class _ImagePreprocess(object):
 
 
 class Preprocess(object):
-    def __init__(self, session, mode, config):
+    def __init__(self, session, mode, config, num_gpus):
         super().__init__()
         self.session = session
         if mode not in ['train', 'validate']:
@@ -187,11 +187,11 @@ class Preprocess(object):
                 'Unrecognized preprocessing mode {!r}'.format(mode))
         self.mode = mode
         self.config = config
-        self.moment = self.config.dataset.get('moment')
-        self.num_threads = self.config.system.preprocess.num_threads
-        self.num_gpus = self.config.system.num_gpus
-        self.image_shape = self.config.image_shape()
+        self.num_gpus = num_gpus
         self.batch_size_per_gpu = self.config.system.batch_size_per_gpu
+        self.num_threads = self.config.system.preprocess.num_threads
+        self.moment = self.config.dataset.get('moment')
+        self.image_shape = self.config.image_shape()
 
     @staticmethod
     def _decode_jpeg(buffer, channels):

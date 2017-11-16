@@ -46,7 +46,7 @@ class Parameter(object):
                         'Parameter {} does not specify a configuration for {}.'
                         .format(self.name, key))
             kwargs[key] = value
-        kwargs['name'] = '{}/{}'.format(instance.name, self.name)
+        kwargs['name'] = self.name
         init = kwargs.pop('initial')
         if init is not None and not isinstance(init, Initializer):
             init = tf.constant_initializer(
@@ -116,7 +116,7 @@ class OverriderBase(object):
             # add our variable to the list of initialized_variables
             if var not in session.initialized_variables:
                 session.initialized_variables.append(var)
-        session.tf_session.run(ops)
+        session.raw_run(ops)
         self._parameter_variables_assignment = {}
 
     def _apply(self, value):
@@ -127,23 +127,26 @@ class OverriderBase(object):
         raise NotImplementedError(
             'Overrider method `._apply()` must be implemented.')
 
-    def _tracking_getter(self, getter):
+    def _tracking_getter(self, getter, scope):
         @functools.wraps(getter)
         def wrapped(name, *args, **kwargs):
-            var = getter(name, *args, **kwargs)
+            var_name = '{}/{}.{}'.format(scope, self.__class__.__name__, name)
+            var = getter(var_name, *args, **kwargs)
             self.internals[name] = var
             return var
         return wrapped
 
-    def apply(self, getter, value):
+    def apply(self, scope, getter, value):
         """
         Things to apply to the variable in `value`, returns the
         overridden result.
         """
         self._applied = True
-        self._getter = self._tracking_getter(getter)
         self.name = value.op.name
         self.before = value
+        self._scope = scope
+        self._original_getter = getter
+        self._getter = self._tracking_getter(getter, scope)
         self.after = self._apply(value)
         # ensure instantiation of all parameter variables
         for param in self.parameters:
@@ -171,15 +174,13 @@ class OverriderBase(object):
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """
         with session.as_default():
-            session.run(
-                tf.assign(self.before, self.after), update_progress=False)
+            session.run(tf.assign(self.before, self.after))
 
     def reset(self, session):
         """Reset internal variables to their respective initial values.  """
         with session.as_default():
             for var in self.internals.values():
-                session.run(
-                    tf.assign(var, var.initial_value), update_progress=False)
+                session.run(tf.assign(var, var.initial_value))
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
@@ -216,7 +217,19 @@ class ChainOverrider(OverriderBase, Sequence):
     """ Composition of overriders.  """
     def __init__(self, overriders, should_update=True):
         super().__init__(should_update)
+        self._check_repetition(overriders)
         self._overriders = overriders
+
+    @staticmethod
+    def _check_repetition(overriders):
+        cls_names = []
+        for o in overriders:
+            cls_name = o.__class__.__name__
+            if cls_name in cls_names:
+                raise TypeError(
+                    'We do not support overriding with repeated overrider '
+                    'types, {} is defined twice.'.format(cls_name))
+            cls_names.append(cls_name)
 
     def __getitem__(self, index):
         return self._overriders[index]
@@ -230,7 +243,7 @@ class ChainOverrider(OverriderBase, Sequence):
 
     def _apply(self, value):
         for o in self._overriders:
-            value = o.apply(self._getter, value)
+            value = o.apply(self._scope, self._original_getter, value)
         return value
 
     def _update(self, session):

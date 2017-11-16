@@ -34,7 +34,8 @@ class Session(object):
         self.tf_session = tf.Session(
             graph=self.graph,
             config=tf.ConfigProto(allow_soft_placement=True))
-        self.preprocessor = Preprocess(self.tf_session, self.mode, config)
+        self.preprocessor = Preprocess(
+            self.tf_session, self.mode, config, self.num_gpus)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
@@ -151,6 +152,8 @@ class Session(object):
             return var_avgs.apply(avg_vars)
 
     def load_checkpoint(self, name):
+        # flush overrider parameter assignment
+        self.run([])
         # restore variables
         restore_vars = self.checkpoint.load(name)
         for v in restore_vars:
@@ -208,6 +211,10 @@ class Session(object):
                 self.change.moving_metrics('density', d, std=False))
             self.register_update('density', density, density_formatter)
 
+    @memoize_property
+    def num_examples_per_epoch(self):
+        return self.config.dataset.num_examples_per_epoch[self.mode]
+
     def _update_progress(self, to_update):
         if not to_update:
             return
@@ -220,17 +227,22 @@ class Session(object):
         # performance
         epoch = to_update.get('epoch')
         interval = self.change.delta('step.duration', time.time())
-        if epoch and interval != 0:
-            size = self.config.dataset.num_examples_per_epoch.get(self.mode)
-            imgs = epoch * size
-            imgs_per_step = self.change.delta('step.images', imgs)
+        if interval != 0:
+            if epoch:
+                imgs = epoch * self.num_examples_per_epoch
+                imgs_per_step = self.change.delta('step.images', imgs)
+            else:
+                imgs_per_step = self.batch_size
             imgs_per_sec = imgs_per_step / float(interval)
             imgs_per_sec = self.change.moving_metrics(
                 'imgs_per_sec', imgs_per_sec, std=False)
             info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
         log.info(' | '.join(info), update=True)
 
-    def run(self, ops, update_progress=True, **kwargs):
+    def raw_run(self, ops, **kwargs):
+        return self.tf_session.run(ops, **kwargs)
+
+    def run(self, ops, update_progress=False, **kwargs):
         with self.as_default():
             # ensure variables are initialized
             uninit_vars = []
@@ -240,7 +252,7 @@ class Session(object):
             if uninit_vars:
                 desc = ', '.join(v.op.name for v in uninit_vars)
                 log.warn('Variables are not initialized: {}'.format(desc))
-                self.tf_session.run(tf.variables_initializer(uninit_vars))
+                self.raw_run(tf.variables_initializer(uninit_vars))
                 self.initialized_variables += uninit_vars
 
             # assign overrider hyperparameters
@@ -253,7 +265,7 @@ class Session(object):
             filtered_to_update_op = {
                 k: v for k, v in self._to_update_op.items()
                 if isinstance(v, (tf.Tensor, tf.Variable))}
-            results, to_update = self.tf_session.run(
+            results, to_update = self.raw_run(
                 (ops, filtered_to_update_op), **kwargs)
 
             # progress update
