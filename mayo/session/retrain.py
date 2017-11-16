@@ -135,7 +135,7 @@ class RetrainBase(Train):
 
     def once(self):
         tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
-        noop, loss, acc, num_epochs = self.run(tasks, update_progress = True)
+        noop, loss, acc, num_epochs = self.run(tasks, update_progress=True)
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         return (loss, acc, num_epochs)
@@ -144,9 +144,6 @@ class RetrainBase(Train):
         system = self.config.system
         loss, acc, epoch = self.once()
         self._update_stats(loss, acc)
-
-        if math.isnan(loss):
-            raise ValueError("Model diverged with a nan-valued loss")
         summary_delta = self.change.delta('summary.epoch', epoch)
 
         if system.summary.save and summary_delta >= 0.1:
@@ -233,14 +230,6 @@ class RetrainBase(Train):
         else:
             self.target_layer = self.priority_list.pop()
 
-    def empty_eval_run(self):
-        tasks = []
-        tasks.append(tf.assign_add(self.imgs_seen, self.batch_size))
-        tasks.append(self.loss)
-        tasks.append(self.accuracy)
-        tasks.append(self.num_epochs)
-        return tasks
-
     def profile_for_one_epoch(self):
         log.info('Start profiling for one epoch')
         epoch = 0
@@ -266,10 +255,15 @@ class RetrainBase(Train):
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
+        tasks = [
+            tf.assign_add(self.imgs_seen, self.batch_size),
+            self.loss,
+            self.accuracy,
+            self.num_epochs,
+        ]
         # while epoch < 0.1:
         while epoch < 1.0:
-            _, loss, acc, epoch = self.run(
-                self.empty_eval_run(), update_progress=True)
+            _, loss, acc, epoch = self.run(tasks, update_progress=True)
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
@@ -549,18 +543,3 @@ class LayerwiseRetrain(RetrainBase):
         else:
             if acc > self.acc_base:
                 self.log[self.target_layer] = (value, loss, acc)
-
-
-class LayerwiseEmptyRetrain(LayerwiseRetrain):
-    def once(self):
-        # this is overriding once to an empty run
-        _, loss, acc, epoch = self.run(
-                self.empty_eval_run(), update_progress=True)
-        return loss, acc, epoch
-
-class GlobalwiseEmptyRetrain(GlobalRetrain):
-    def once(self):
-        # this is overriding once to an empty run
-        _, loss, acc, epoch = self.run(
-                self.empty_eval_run(), update_progress=True)
-        return loss, acc, epoch

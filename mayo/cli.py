@@ -11,8 +11,7 @@ from docopt import docopt
 from mayo.log import log
 from mayo.config import Config
 from mayo.session import (
-    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain,
-    LayerwiseEmptyRetrain, GlobalwiseEmptyRetrain)
+    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain)
 
 _root = os.path.dirname(__file__)
 
@@ -151,13 +150,6 @@ Arguments:
             keys += self._train_keys
         elif action == 'retrain-global':
             cls = GlobalRetrain
-            keys += self._train_keys
-        elif action == 'retrain-empty-layer':
-            cls = LayerwiseEmptyRetrain
-            keys += self._train_keys
-        elif action == 'retrain-empty-global':
-            print('hi')
-            cls = GlobalwiseEmptyRetrain
             keys += self._train_keys
         elif action == 'validate':
             cls = Evaluate
