@@ -1,0 +1,4 @@
+# Rules to import original model to gatied model.
+---
+rename:
+    /mask: /DynamicNetworkSurgeryPruner.mask

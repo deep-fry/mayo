@@ -235,7 +235,7 @@ class Session(object):
                 imgs_per_step = self.batch_size
             imgs_per_sec = imgs_per_step / float(interval)
             imgs_per_sec = self.change.moving_metrics(
-                'imgs_per_sec', imgs_per_sec, std=False)
+                'step.imgs_per_sec', imgs_per_sec, std=False)
             info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
         log.info(' | '.join(info), update=True)
 

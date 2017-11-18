@@ -134,8 +134,12 @@ class RetrainBase(Train):
             self.overrider_init(o)
 
     def once(self):
-        tasks = [self._train_op, self.loss, self.accuracy, self.num_epochs]
-        noop, loss, acc, num_epochs = self.run(tasks)
+        train_op = self._train_op
+        if self.config.retrain.get('eval_only', False):
+            # do not run training operations when `retrain.eval_only` is set
+            train_op = train_op['imgs_seen']
+        tasks = [train_op, self.loss, self.accuracy, self.num_epochs]
+        noop, loss, acc, num_epochs = self.run(tasks, update_progress=True)
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         return (loss, acc, num_epochs)
@@ -144,9 +148,6 @@ class RetrainBase(Train):
         system = self.config.system
         loss, acc, epoch = self.once()
         self._update_stats(loss, acc)
-
-        if math.isnan(loss):
-            raise ValueError("Model diverged with a nan-valued loss")
         summary_delta = self.change.delta('summary.epoch', epoch)
 
         if system.summary.save and summary_delta >= 0.1:
@@ -233,14 +234,6 @@ class RetrainBase(Train):
         else:
             self.target_layer = self.priority_list.pop()
 
-    def empty_eval_run(self):
-        tasks = []
-        tasks.append(tf.assign_add(self.imgs_seen, self.batch_size))
-        tasks.append(self.loss)
-        tasks.append(self.accuracy)
-        tasks.append(self.num_epochs)
-        return tasks
-
     def profile_for_one_epoch(self):
         log.info('Start profiling for one epoch')
         epoch = 0
@@ -266,14 +259,13 @@ class RetrainBase(Train):
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
-        # while epoch < 0.1:
+        imgs_seen = self._train_op['imgs_seen']
+        tasks = [imgs_seen, self.loss, self.accuracy, self.num_epochs]
         while epoch < 1.0:
-            _, loss, acc, epoch = self.run(
-                self.empty_eval_run())
+            _, loss, acc, epoch = self.run(tasks, update_progress=True)
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
-            # self._update_progress(epoch, loss, acc, self._cp_epoch)
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
         self._reset_stats()
@@ -301,9 +293,7 @@ class RetrainBase(Train):
             density = valid_elements / float(num_elements)
             metric_value *= density
         if hasattr(o, 'width'):
-            # pin the library name to assert
-            # FIXME WHAT? use `isinstance(o.width, (tf.Variable, tf.Tensor))`
-            if tf.__name__ in type(o.width).__module__:
+            if isinstance(o.width, (tf.Variable, tf.Tensor)):
                 bits = self.run(o.width)
             else:
                 bits = o.width
@@ -353,14 +343,14 @@ class RetrainBase(Train):
 class GlobalRetrain(RetrainBase):
     def overriders_refresh(self):
         for o in self.nets[0].overriders:
+            o = self.info.get_overrider(o)
             self.overrider_refresh(o)
             o.should_update = True
         self.overriders_update()
 
     def forward_policy(self, floor_epoch):
-        with log.demote():
-            self.save_checkpoint(
-                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.save_checkpoint(
+            'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
         self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
         self._cp_epoch = floor_epoch
@@ -388,14 +378,21 @@ class GlobalRetrain(RetrainBase):
 
     def backward_policy(self):
         # if did not reach min scale
-        end_scale = self.info.get(self.nets[0].overriders[0], 'end_scale')
-        scale = self.info.get(self.nets[0].overriders[0], 'scale')
+        tmp_o = self.nets[0].overriders[0]
+        end_scale = self.info.get(tmp_o, 'end_scale')
+        scale = self.info.get(tmp_o, 'scale')
+        end_threshold = self.info.get(tmp_o, 'end_threshold')
+        threshold = self.info.get(tmp_o, 'threshold')
         if scale >= 0:
-            should_continue = self._fetch_scale() > end_scale
+            scale_check = self._fetch_scale() > end_scale
+            threshold_check = end_threshold > threshold
+            run = scale_check and threshold_check
         else:
-            should_continue = self._fetch_scale() < end_scale
+            scale_check = self._fetch_scale() < end_scale
+            threshold_check = end_threshold < threshold
+            run = scale_check and threshold_check
 
-        if should_continue:
+        if run:
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
@@ -413,6 +410,10 @@ class GlobalRetrain(RetrainBase):
             log.info(
                 'All layers done, final threshold is {}'
                 .format(thresholds))
+            if not threshold_check:
+                log.info('threshold meets its minimum')
+            if not scale_check:
+                log.info('scale meets its minimum')
             self.reset_num_epochs()
             return False
 
@@ -441,6 +442,7 @@ class GlobalRetrain(RetrainBase):
 class LayerwiseRetrain(RetrainBase):
     def overriders_refresh(self):
         for o in self.nets[0].overriders:
+            o = self.info.get_overrider(o)
             if o.name == self.target_layer:
                 self.overrider_refresh(o)
                 o.should_update = True
@@ -449,9 +451,8 @@ class LayerwiseRetrain(RetrainBase):
     def forward_policy(self, floor_epoch):
         log.debug('Targeting on {}...'.format(self.target_layer))
         log.debug('Log: {}'.format(self.log))
-        with log.demote():
-            self.save_checkpoint(
-                'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.save_checkpoint(
+            'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
         self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
         self._cp_epoch = floor_epoch
@@ -491,11 +492,15 @@ class LayerwiseRetrain(RetrainBase):
                     break
             end_scale = self.info.get(o_recorded, 'end_scale')
             scale = self.info.get(o_recorded, 'scale')
+            end_threshold = self.info.get(o_recorded, 'end_threshold')
+            threshold = self.info.get(o_recorded, 'threshold')
             if scale >= 0:
-                should_continue = self._fetch_scale() > end_scale
+                run = self._fetch_scale() > end_scale and\
+                    threshold <= end_threshold
             else:
-                should_continue = self._fetch_scale() < end_scale
-            if should_continue:
+                run = self._fetch_scale() < end_scale and\
+                    threshold >= end_threshold
+            if run:
                 # overriders are refreshed inside decrease scale
                 self._decrease_scale()
                 self.reset_num_epochs()
@@ -512,6 +517,10 @@ class LayerwiseRetrain(RetrainBase):
                 self.profile_overrider()
                 self.overriders_refresh()
                 self.reset_num_epochs()
+                if not threshold_check:
+                    log.info('threshold meets its minimum')
+                if not scale_check:
+                    log.info('scale meets its minimum')
                 log.info('switching layer, working on {}'.format(
                     self.target_layer))
                 log.info('priority_list: {}'.format(self.priority_list))
@@ -553,21 +562,3 @@ class LayerwiseRetrain(RetrainBase):
         else:
             if acc > self.acc_base:
                 self.log[self.target_layer] = (value, loss, acc)
-
-
-class LayerwiseEmptyRetrain(LayerwiseRetrain):
-    def once(self):
-        # this is overriding once to an empty run
-        op_imgs_seen = tf.assign_add(self.imgs_seen, self.batch_size)
-        tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
-        loss, acc, num_epochs, _ = self.run(tasks)
-        return loss, acc, num_epochs
-
-
-class GlobalwiseEmptyRetrain(GlobalRetrain):
-    def once(self):
-        # this is overriding once to an empty run
-        op_imgs_seen = tf.assign_add(self.imgs_seen, self.batch_size)
-        tasks = [self.loss, self.accuracy, self.num_epochs, op_imgs_seen]
-        loss, acc, num_epochs, _ = self.run(tasks)
-        return loss, acc, num_epochs
