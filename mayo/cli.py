@@ -46,10 +46,6 @@ def meta():
     return meta_dict
 
 
-class SessionNotInitializedError(Exception):
-    pass
-
-
 class CLI(object):
     _DOC = """
 {__mayo__} {__version__} ({__date__})
@@ -101,11 +97,11 @@ Arguments:
         usage_meta['commands'] = '\n'.join(descriptions)
         return self.doc() + self._USAGE.format(**usage_meta)
 
-    def _validate_config(self, keys, action, dry=False):
+    def _validate_config(self, keys, action, test=False):
         for k in keys:
             if k in self.config:
                 continue
-            if dry:
+            if test:
                 return False
             log.error_exit(
                 'Please ensure config content {!r} is imported before '
@@ -137,9 +133,13 @@ Arguments:
 
     def _get_session(self, action=None):
         if not action:
-            if not self.session:
-                raise SessionNotInitializedError(
-                    'Session not initialized, please train or eval first.')
+            if self.session:
+                return self.session
+            keys = self._train_keys
+            if self._validate_config(keys, 'train', test=True):
+                self.session = self._get_session('train')
+            else:
+                self.session = self._get_session('validate')
             return self.session
         keys = self._model_keys + self._dataset_keys
         if action == 'train':
@@ -219,19 +219,14 @@ Arguments:
             f.write(chrome_trace)
 
     def cli_visualize(self):
+        import pandas as pd
+        import ggplot
         # collect all info
         session = self._get_session('train')
         overriders = session.nets[0].overriders
-        meta = {}
-        picked = []
-        for o in overriders:
-            meta[o.name] = session.run(o.after)
-            if 'conv1' in o.name or 'fc1' in o.name:
-                picked.append(meta[o.name])
-        import pandas as pd
-        import ggplot
-        for name, data in meta.items():
-            df = pd.DataFrame({name: meta[name].flatten()})
+        results = {o.name: session.run(o.after) for o in overriders}
+        for name, data in results.items():
+            df = pd.DataFrame({name: results[name].flatten()})
             df = pd.melt(df)
             p = ggplot.ggplot(ggplot.aes(x='value', color='variable'), data=df)
             p += ggplot.geom_histogram(bins=1024)
@@ -251,14 +246,6 @@ Arguments:
         """Performs retraining.  """
         return self._get_session('retrain-global').retrain()
 
-    def cli_retrain_empty_layer(self):
-        """Performs retraining.  """
-        return self._get_session('retrain-empty-layer').retrain()
-
-    def cli_retrain_empty_global(self):
-        """Performs retraining.  """
-        return self._get_session('retrain-empty-global').retrain()
-
     def cli_fast_eval(self):
         """
         Evaluates the approximate accuracy of a saved model with
@@ -274,27 +261,6 @@ Arguments:
         """Evaluates all checkpoints for accuracy.  """
         print(self._get_session('validate').eval_all())
 
-    def cli_export(self):
-        """Exports the current config.  """
-        print(self.config.to_yaml())
-
-    def cli_info(self):
-        """Prints parameter and layer info of the model.  """
-        keys = self._train_keys
-        if self._validate_config(keys, 'train', dry=True):
-            session = self._get_session('train')
-        else:
-            session = self._get_session('validate')
-        info = session.info()
-        for key in ('trainables', 'nontrainables', 'layers'):
-            print(info[key].format())
-        for table in info.get('overriders', {}).values():
-            print(table.format())
-
-    def cli_reset_num_epochs(self):
-        """Resets the number of training epochs.  """
-        self._get_session('train').reset_num_epochs()
-
     def cli_overriders_update(self):
         """Updates variable overriders in the training session.  """
         self._get_session('train').overriders_update()
@@ -307,18 +273,29 @@ Arguments:
         """Reset the internal state of overriders.  """
         self._get_session('train').overriders_reset()
 
-    def cli_save(self):
-        """Saves the latest checkpoint.  """
-        self.session.checkpoint.save('latest')
+    def cli_reset_num_epochs(self):
+        """Resets the number of training epochs.  """
+        self._get_session('train').reset_num_epochs()
+
+    def cli_export(self):
+        """Exports the current config.  """
+        print(self.config.to_yaml())
+
+    def cli_info(self):
+        """Prints parameter and layer info of the model.  """
+        info = self._get_session().info()
+        for key in ('trainables', 'nontrainables', 'layers'):
+            print(info[key].format())
+        for table in info.get('overriders', {}).values():
+            print(table.format())
 
     def cli_interact(self):
         """Interacts with the train/eval session using iPython.  """
-        try:
-            self._get_session().interact()
-        except SessionNotInitializedError:
-            log.warn('Session not initalized, interacting with "mayo.cli".')
-            from IPython import embed
-            embed()
+        self._get_session().interact()
+
+    def cli_save(self):
+        """Saves the latest checkpoint.  """
+        self.session.checkpoint.save('latest')
 
     def _invalidate_session(self):
         if not self.session:
