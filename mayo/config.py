@@ -296,7 +296,6 @@ class Config(BaseConfig):
 
     def _check(self):
         if os.environ.pop('CUDA_VISIBLE_DEVICES', None):
-            from mayo import log
             log.warn(
                 'Ignoring "CUDA_VISIBLE_DEVICES", as it is overridden '
                 'by config "system.visible_gpus".')
