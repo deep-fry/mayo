@@ -45,6 +45,9 @@ class Train(Session):
 
     @staticmethod
     def _average_gradients(tower_grads):
+        tower_grads = list(tower_grads)
+        if len(tower_grads) == 1:
+            return tower_grads[0]
         average_grads = []
         for grad_and_vars in zip(*tower_grads):
             grads = []
