@@ -25,7 +25,7 @@ In this case, I overrided the system definitions in [system.yaml](../mayo/system
 the batch size and number of gpus in the command line.
 Notice system.yaml is read by default.
 
-#### Datasets
+## Datasets
 Datasets are defined at ```whatever/mayo-dev/datasets```, only two datasets
 come with the project (cifar10 and mnist).
 
