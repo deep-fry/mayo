@@ -48,7 +48,7 @@ class FixedPointQuantizer(QuantizerBase):
     References:
         [1] https://arxiv.org/pdf/1604.03168
     """
-    width = Parameter('width', 16, [], tf.int32)
+    width = Parameter('width', 32, [], tf.int32)
     point = Parameter('point', 2, [], tf.int32)
 
     def __init__(self, point=None, width=None, should_update=True):
