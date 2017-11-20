@@ -2,13 +2,8 @@
 model.layers:
     conv0: &overrider
         weights_overrider:
-            type: mayo.override.MayoDNSPruner
-            c_rate: 0
-            should_update: false
+            type: mayo.override.DynamicNetworkSurgeryPruner
         biases_overrider:
-            type: mayo.override.MayoDNSPruner
-            c_rate: 0
-            should_update: false
     conv1: {<<: *overrider}
     conv2: {<<: *overrider}
     conv3: {<<: *overrider}
