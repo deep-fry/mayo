@@ -1,4 +1,5 @@
 # Mayo 101
+I've written some [slides](https://www.overleaf.com/read/rtrqmcmkfkhv) for introducing what is mayo.
 
 Assuming you've cloned mayo and put it under the directory ```whatever```
 Notice you might need git lfs to download all the datasets (mnist and cifa10).
