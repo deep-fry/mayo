@@ -3,7 +3,6 @@ model.layers:
     conv0: &overrider
         weights_overrider:
             type: mayo.override.DynamicNetworkSurgeryPruner
-        biases_overrider:
     conv1: {<<: *overrider}
     conv2: {<<: *overrider}
     conv3: {<<: *overrider}
