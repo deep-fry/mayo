@@ -56,7 +56,6 @@ class TFNetBase(NetBase):
             labels = slim.one_hot_encoding(self.labels(), logits.shape[1])
             loss = tf.losses.softmax_cross_entropy(
                 logits=logits, onehot_labels=labels)
-            loss = tf.reduce_mean(loss)
         return loss
 
     def top(self, count=1):
@@ -120,19 +119,6 @@ class TFNetBase(NetBase):
             arguments.append('{}={}'.format(k, v))
         return '    ' + '\n    '.join(arguments)
 
-    def _instantiate_numeric_padding(self, tensors, params):
-        pad = params.get('padding')
-        if not isinstance(pad, int):
-            return tensors
-        # disable pad for next layer
-        params['padding'] = 'VALID'
-        # 4D tensor NxHxWxC, pad H and W
-        paddings = [[0, 0], [pad, pad], [pad, pad], [0, 0]]
-        if isinstance(tensors, collections.Sequence):
-            return [tf.pad(t, paddings) for t in tensors]
-        else:
-            return tf.pad(tensors, paddings)
-
     def _instantiate_layer(self, name, tensors, params, module_path):
         # transform parameters
         params, scope = self._transformer.transform(name, params, module_path)
@@ -144,7 +130,29 @@ class TFNetBase(NetBase):
             log.debug(
                 'Instantiating {!r} of type {!r} with arguments:\n{}'
                 .format(layer_key, layer_type, layer_args))
-            tensors = self._instantiate_numeric_padding(tensors, params)
+            tensors = self.instantiate_numeric_padding(tensors, params)
             layer = super()._instantiate_layer(
                 name, tensors, params, module_path)
         return layer
+
+    def instantiate_numeric_padding(self, tensors, params):
+        pad = params.get('padding')
+        if pad is None or isinstance(pad, str):
+            return tensors
+        # 4D tensor NxHxWxC, pad H and W
+        if isinstance(pad, int):
+            paddings = [[0, 0], [pad, pad], [pad, pad], [0, 0]]
+        elif isinstance(pad, collections.Sequence):
+            pad_h, pad_w = pad
+            paddings = [[0, 0], pad_h, pad_w, [0, 0]]
+        else:
+            raise ValueError(
+                'We do not know what to do with a padding {!r}, we accept an '
+                'integer, a string or a sequence of height and width paddings '
+                '[pad_h, pad_w].'.format(pad))
+        # disable pad for next layer
+        params['padding'] = 'VALID'
+        if isinstance(tensors, collections.Sequence):
+            return [tf.pad(t, paddings) for t in tensors]
+        else:
+            return tf.pad(tensors, paddings)
