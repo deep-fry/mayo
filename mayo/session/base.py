@@ -72,6 +72,9 @@ class Session(object):
         return ','.join(str(g) for g in gpus[:self.num_gpus])
 
     def _init_gpus(self):
+        cuda_key = 'CUDA_VISIBLE_DEVICES'
+        if cuda_key in os.environ:
+            log.info('Using {}: {}'.format(cuda_key, os.environ[cuda_key]))
         gpus = self.config.system.get('visible_gpus', 'auto')
         if gpus != 'auto':
             if isinstance(gpus, list):
@@ -83,8 +86,10 @@ class Session(object):
         if gpus:
             log.info('Using GPUs: {}'.format(gpus))
         else:
-            log.info('Not using GPUs.')
-        os.environ['CUDA_VISIBLE_DEVICES'] = gpus
+            log.info('No GPUs available, using only one clone on CPU.')
+            # FIXME hacky way to make it instantiate only one tower
+            self.config.system.num_gpus = 1
+        os.environ[cuda_key] = gpus
 
     @contextmanager
     def as_default(self):
