@@ -53,12 +53,20 @@ class TFNet(TFNetBase):
         # tensorflow complains when stride > kernel size
         params['stride'] = min(stride, kernel[0], kernel[1])
 
+    def _should_pool_nothing(self, params):
+        # skip pooling with 1x1 kernel @ stride 1, which is a no-op
+        return params['kernel_size'] in (1, [1, 1]) and params['stride'] == 1
+
     def instantiate_average_pool(self, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
+        if self._should_pool_nothing(params):
+            return tensor
         return slim.avg_pool2d(tensor, **params)
 
     def instantiate_max_pool(self, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
+        if self._should_pool_nothing(params):
+            return tensor
         return slim.max_pool2d(tensor, **params)
 
     def instantiate_fully_connected(self, tensor, params):
