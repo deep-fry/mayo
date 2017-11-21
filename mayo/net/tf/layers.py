@@ -144,12 +144,8 @@ class TFNet(TFNetBase):
         # gating
         return tensor * gate
 
-    def instantiate_gated_convolution(self, tensor, params):
+    def _gate_network(self, tensor, params):
         num, height, width, channels = tensor.shape
-        policy = params.pop('policy')
-        # convolution
-        output = self.instantiate_convolution(tensor, params)
-        # gating network
         gate_scope = '{}/gate'.format(params['scope'])
         # pool
         pool_params = {
@@ -159,12 +155,12 @@ class TFNet(TFNetBase):
         }
         # max pool is hardware-friendlier
         gate_input = tf.stop_gradient(tensor)
-        # gate_input = self.instantiate_max_pool(gate_input, pool_params)
+        gate_input = self.instantiate_max_pool(gate_input, pool_params)
         # fc
         num_outputs = params['num_outputs']
         fc_params = {
-            'kernel_size': params['kernel_size'],
-            'padding': params['padding'],
+            'kernel_size': 1,
+            #  'padding': params['padding'],
             'num_outputs': num_outputs,
             'biases_initializer': tf.ones_initializer(),
             'weights_initializer':
@@ -172,32 +168,41 @@ class TFNet(TFNetBase):
             #  'activation_fn': None,
             'scope': gate_scope,
         }
-        gate = self.instantiate_convolution(gate_input, fc_params)
+        return self.instantiate_convolution(gate_input, fc_params)
+
+    def instantiate_gated_convolution(self, tensor, params):
+        num, height, width, channels = tensor.shape
+        policy = params.pop('policy')
+        # gating network
+        gate = self._gate_network(tensor, params)
+        # convolution
+        output = self.instantiate_convolution(tensor, params)
         # policies
-        if policy.type == 'softmax_cross_entropy':
+        if policy.type == 'predictor':
             # predictor policy
             # output pool
             _, out_height, out_width, out_channels = output.shape
             pool_params = {
                 'padding': 'VALID',
                 'kernel_size': [out_height, out_width],
-                'scope': gate_scope,
             }
-            # TODO is it really sensible to use averge pool as the
-            # threshold criteria?
-            #  output_subsample = self.instantiate_max_pool(output, pool_params)
-            output_subsample = output
-            # not training the output as we train the predictor `gate`
+            output_subsample = self.instantiate_max_pool(output, pool_params)
+            # not training with the output as we train the predictor `gate`
             output_subsample = tf.stop_gradient(output_subsample)
-            # loss
-            loss = tf.losses.softmax_cross_entropy(
-                output_subsample, gate, weights=0.001,
+            # loss to minimize
+            loss = tf.losses.mean_squared_error(
+                output_subsample, gate, weights=0.01,
                 loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+
             def update_func(session, collection):
+                def formatter(loss):
+                    loss_mean, loss_std = session.change.moving_metrics('gate.loss', loss)
+                    loss_std = '±{}'.format(Percent(loss_std / loss_mean))
+                    return '{:10f}{:5}'.format(loss_mean, loss_std)
                 loss = tf.get_collection(collection)[0]
-                session.register_update('gate loss', loss, session._loss_formatter)
+                session.register_update('gate loss', loss, formatter)
             self.register_update('mayo.gate.loss', loss, update_func)
-            return output  # short-circuit gating
+
             # thresholding
             k = math.ceil(int(out_channels) * policy.density)
             gate_top_k, _ = tf.nn.top_k(gate, k=k, sorted=True)
