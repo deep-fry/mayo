@@ -1,0 +1,16 @@
+---
+model.layers:
+    conv0: &overrider
+        weights_overrider:
+            type: mayo.override.DGQuantizer
+            # type: mayo.override.FixedPointQuantizer
+            overflow_rate: 0.01
+            width: 32
+        biases_overrider:
+            type: mayo.override.DGQuantizer
+            # type: mayo.override.FixedPointQuantizer
+            overflow_rate: 0.01
+            width: 32
+    conv1: {<<: *overrider}
+    fc1: {<<: *overrider}
+    logits: {<<: *overrider}

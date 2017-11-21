@@ -113,17 +113,17 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
         super().__init__(None, width, should_update=should_update)
         self.overflow_rate = overflow_rate
 
-    def _update_policy(self, tensor):
+    def _update_policy(self, tensor, session):
         raise NotImplementedError
 
     def _update(self, session):
-        self.point = self._update_policy(session.run(self.before))
+        self.point = self._update_policy(session.run(self.before), session)
 
 
 class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):
     _initial_point = 1
 
-    def _update_policy(self, tensor):
+    def _update_policy(self, tensor, session):
         """ algorithm described in: https://arxiv.org/pdf/1412.7024  """
         w = self.eval(self.width)
         p = self._initial_point
@@ -137,9 +137,9 @@ class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):
 
 
 class DGQuantizer(DynamicFixedPointQuantizerBase):
-    def _update_policy(self, tensor):
+    def _update_policy(self, tensor, session):
         """ simple brute-force, optimal result.  """
-        w = self.width
+        w = session.run(self.width)
         for p in range(w + 1):
             rate = self._quantize(tensor, point=p, compute_overflow_rate=True)
             if rate <= self.overflow_rate:
