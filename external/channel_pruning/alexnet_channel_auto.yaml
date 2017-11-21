@@ -1,0 +1,16 @@
+---
+model.layers:
+    conv0: &overrider
+        activation_overrider:
+            type: mayo.override.ChannelGater
+            policy: avg
+            threshold: 0.0
+            should_update: true
+    conv1: {<<: *overrider}
+    conv2: {<<: *overrider}
+    conv3: {<<: *overrider}
+    conv4: {<<: *overrider}
+    conv5: {<<: *overrider}
+    fc6: {<<: *overrider}
+    fc7: {<<: *overrider}
+    logits: {<<: *overrider}
