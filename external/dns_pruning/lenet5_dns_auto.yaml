@@ -5,10 +5,6 @@ model.layers:
             type: mayo.override.DynamicNetworkSurgeryPruner
             alpha: 0
             should_update: false
-        biases_overrider:
-            type: mayo.override.DynamicNetworkSurgeryPruner
-            alpha: 0
-            should_update: false
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
     logits: {<<: *overrider}

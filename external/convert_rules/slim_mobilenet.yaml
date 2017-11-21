@@ -12,3 +12,5 @@ rename:
     Conv2d_: conv
     softmax: null
     loss: null
+    _depthwise: /depthwise
+    _pointwise: /pointwise

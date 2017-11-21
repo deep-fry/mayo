@@ -2,3 +2,4 @@
 ---
 rename:
     /mask: /DynamicNetworkSurgeryPruner.mask
+    /alpha: /DynamicNetworkSurgeryPruner.alpha

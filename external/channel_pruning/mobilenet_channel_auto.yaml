@@ -1,8 +1,11 @@
 ---
 model.layers:
     conv0: &overrider
-        weights_overrider:
-            type: mayo.override.DynamicNetworkSurgeryPruner
+      activation_overrider:
+          type: mayo.override.ChannelGater
+          policy: avg
+          threshold: 0.0
+          should_update: true
     conv1: {<<: *overrider}
     conv2: {<<: *overrider}
     conv3: {<<: *overrider}
