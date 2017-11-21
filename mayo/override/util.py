@@ -90,7 +90,7 @@ def floor(value):
 
 def round(value):
     if is_constant(value):
-        return round(value)
+        return math.floor(value+0.5)
     if is_numpy(value):
         return np.round(value)
     omap = {'Round': 'Identity'}
