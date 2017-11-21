@@ -16,6 +16,7 @@ class TFNetBase(NetBase):
         self.is_training = is_training
         self._transformer = ParameterTransformer(
             num_classes, is_training, reuse)
+        self.update_functions = {}
         super().__init__(model, {'input': images})
         self._labels = labels
         self._verify_io()
@@ -31,6 +32,11 @@ class TFNetBase(NetBase):
             raise ValueError(
                 'We expect the graph to have a unique logits output named '
                 '"output", found {!r}.'.format(nodes))
+
+    def register_update(self, collection, tensor, function):
+        # register function to register tensor in progress update
+        tf.add_to_collection(collection, tensor)
+        self.update_functions[collection] = function
 
     def labels(self):
         return self._labels

@@ -10,7 +10,7 @@ import tensorflow as tf
 from mayo.log import log
 from mayo.net import TFNet
 from mayo.util import (
-    memoize_method, memoize_property, Change, flatten, Table, Percent)
+    memoize_method, memoize_property, Change, flatten, Table)
 from mayo.override import ChainOverrider
 from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
@@ -26,14 +26,14 @@ class Session(object):
         default_graph = tf.get_default_graph()
         default_graph.finalize()
         self.config = config
-        self.change = Change(
-            metric_count=config.system.log.metrics_history_count)
+        self.change = Change()
         self._init_gpus()
         self.graph = tf.Graph()
         self.initialized_variables = []
         self.tf_session = tf.Session(
             graph=self.graph,
             config=tf.ConfigProto(allow_soft_placement=True))
+        self.tf_session.mayo_session = self
         self.preprocessor = Preprocess(
             self.tf_session, self.mode, config, self.num_gpus)
         self.checkpoint = CheckpointHandler(
@@ -109,12 +109,14 @@ class Session(object):
 
     @memoize_property
     def num_steps(self):
-        return self.imgs_seen / self.batch_size
+        with self.as_default():
+            return self.imgs_seen / self.batch_size
 
     @memoize_property
     def num_epochs(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        return self.imgs_seen / imgs_per_epoch
+        with self.as_default():
+            return self.imgs_seen / imgs_per_epoch
 
     def _mean_metric(self, func):
         with self.as_default():
@@ -126,6 +128,7 @@ class Session(object):
 
     @memoize_property
     def loss(self):
+        # average loss without regularization, only for human consumption
         return self._mean_metric(lambda net: net.loss())
 
     def global_variables(self):
@@ -204,18 +207,6 @@ class Session(object):
         self._to_update_op[message] = tensor
         self._to_update_formatter[message] = formatter
 
-    @memoize_method
-    def _register_extra_statistics(self):
-        # sparsity info
-        gates = tf.get_collection('mayo.gates')
-        if gates:
-            valid = tf.add_n([tf.reduce_sum(g) for g in gates])
-            total = sum(g.shape.num_elements() for g in gates)
-            density = valid / total
-            density_formatter = lambda d: Percent(
-                self.change.moving_metrics('density', d, std=False))
-            self.register_update('density', density, density_formatter)
-
     @memoize_property
     def num_examples_per_epoch(self):
         return self.config.dataset.num_examples_per_epoch[self.mode]
@@ -247,6 +238,11 @@ class Session(object):
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
+    @memoize_method
+    def _register_update(self):
+        for collection, func in self.nets[0].update_functions.items():
+            func(self, collection)
+
     def run(self, ops, update_progress=False, **kwargs):
         with self.as_default():
             # ensure variables are initialized
@@ -264,7 +260,7 @@ class Session(object):
             self._overrider_assign_parameters()
 
             # extra statistics to print in progress update
-            self._register_extra_statistics()
+            self._register_update()
 
             # session run
             filtered_to_update_op = {

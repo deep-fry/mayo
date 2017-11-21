@@ -3,7 +3,7 @@ import math
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.util import object_from_params
+from mayo.util import object_from_params, Percent
 from mayo.net.util import use_name_not_scope
 from mayo.net.tfbase import TFNetBase
 
@@ -89,6 +89,18 @@ class TFNet(TFNetBase):
     def instantiate_flatten(self, tensor, params):
         return slim.flatten(tensor, **params)
 
+    def _gate_sparsity(self, session, collection):
+        # sparsity info
+        gates = tf.get_collection(collection)
+        if not gates:
+            return
+        valid = tf.add_n([tf.reduce_sum(g) for g in gates])
+        total = sum(g.shape.num_elements() for g in gates)
+        density = valid / total
+        density_formatter = lambda d: Percent(
+            session.change.moving_metrics('density', d, std=False))
+        session.register_update('density', density, density_formatter)
+
     def instantiate_local_gating(self, tensor, params):
         num, height, width, channels = tensor.shape
         policy = params.pop('policy')
@@ -100,8 +112,9 @@ class TFNet(TFNetBase):
             'scope': gate_scope,
         }
         # max pool is hardware-friendlier
-        # gate = self.instantiate_max_pool(tensor, pool_params)
-        gate = self.instantiate_average_pool(tensor, pool_params)
+        gate_input = tf.stop_gradient(tensor)
+        # gate = self.instantiate_max_pool(gate_input, pool_params)
+        gate = self.instantiate_average_pool(gate_input, pool_params)
         if policy.type == 'threshold_based':
             alpha = policy.alpha
             gate = tf.cast(tf.abs(gate) > alpha, tf.float32)
@@ -127,7 +140,7 @@ class TFNet(TFNetBase):
             with tf.get_default_graph().gradient_override_map(omap):
                 gate = tf.sign(gate)
                 gate = tf.clip_by_value(gate, 0, 1)
-        tf.add_to_collection('mayo.gates', gate)
+        self.register_update('mayo.gates', gate, self._gate_sparsity)
         # gating
         return tensor * gate
 
@@ -145,8 +158,8 @@ class TFNet(TFNetBase):
             'scope': gate_scope,
         }
         # max pool is hardware-friendlier
-        gate = self.instantiate_max_pool(tensor, pool_params) - \
-            self.instantiate_average_pool(tensor, pool_params)
+        gate_input = tf.stop_gradient(tensor)
+        gate_input = self.instantiate_max_pool(gate_input, pool_params)
         # fc
         num_outputs = params['num_outputs']
         fc_params = {
@@ -171,12 +184,12 @@ class TFNet(TFNetBase):
             }
             # TODO is it really sensible to use averge pool as the
             # threshold criteria?
-            avg_output = self.instantiate_max_pool(output, pool_params)
+            output_subsample = self.instantiate_max_pool(output, pool_params)
             # not training the output as we train the predictor `gate`
-            avg_output = tf.stop_gradient(avg_output)
+            output_subsample = tf.stop_gradient(output_subsample)
             # loss
             tf.losses.softmax_cross_entropy(
-                avg_output, gate, weights=0.00001,
+                output_subsample, gate, weights=0.00001,
                 loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
             # thresholding
             k = math.ceil(int(out_channels) * policy.density)
@@ -200,7 +213,7 @@ class TFNet(TFNetBase):
             regularization = regu_cls(**regu_params)(gate)
             tf.add_to_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES, regularization)
-        tf.add_to_collection('mayo.gates', gate)
+        self.register_update('mayo.gates', gate, self._gate_sparsity)
         # gating
         return output * gate
 

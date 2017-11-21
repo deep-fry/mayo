@@ -15,8 +15,6 @@ system:
         level: info
         frame: false
         tensorflow: 2
-        metrics_history_count: 200
-        check_reg: false
     search_path:
         dataset:
             - datasets/
