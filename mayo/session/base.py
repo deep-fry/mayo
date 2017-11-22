@@ -161,7 +161,7 @@ class Session(object):
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
-        self.run([])
+        self._overrider_assign_parameters()
         # restore variables
         restore_vars = self.checkpoint.load(name)
         for v in restore_vars:
@@ -251,8 +251,8 @@ class Session(object):
                 if var not in self.initialized_variables:
                     uninit_vars.append(var)
             if uninit_vars:
-                desc = ', '.join(v.op.name for v in uninit_vars)
-                log.warn('Variables are not initialized: {}'.format(desc))
+                desc = '\n    '.join(v.op.name for v in uninit_vars)
+                log.warn('Variables are not initialized:\n    {}'.format(desc))
                 self.raw_run(tf.variables_initializer(uninit_vars))
                 self.initialized_variables += uninit_vars
 

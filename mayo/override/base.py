@@ -9,11 +9,15 @@ from mayo.util import memoize_property
 
 
 class OverrideNotAppliedError(Exception):
-    """Invoke apply before update.  """
+    """Always invoke .apply() before .update().  """
+
+
+class OverrideAlreadyAppliedError(Exception):
+    """Do not repeatly invoke .apply().  """
 
 
 class GetterInvokedOutsideApplyError(Exception):
-    """Function getter() is invoked not in apply()."""
+    """Function getter() is invoked not in apply().  """
 
 
 def _getter_not_initialized(*args, **kwargs):
@@ -141,6 +145,10 @@ class OverriderBase(object):
         Things to apply to the variable in `value`, returns the
         overridden result.
         """
+        if self._applied:
+            raise OverrideAlreadyAppliedError(
+                'Overrider has already been applied to {!r}'
+                .format(self.before))
         self._applied = True
         self.name = value.op.name
         self.before = value

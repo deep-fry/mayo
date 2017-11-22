@@ -16,27 +16,25 @@ class TFNet(TFNetBase):
 
     def instantiate_depthwise_separable_convolution(self, tensor, params):
         scope = params.pop('scope')
-        num_outputs = params.pop('num_outputs', None)
         # depthwise layer
-        stride = params.pop('stride')
-        kernel = params.pop('kernel_size')
-        depth_multiplier = params.pop('depth_multiplier', 1)
-        depthwise_regularizer = params.pop('depthwise_regularizer')
-        # pop it out, so later **params is correct
-        pointwise_regularizer = params.pop('pointwise_regularizer', None)
+        depthwise_params = params['depthwise']
+        stride = depthwise_params['stride']
+        kernel = depthwise_params['kernel_size']
+        regularizer = depthwise_params.get('depthwise_regularizer')
         depthwise = slim.separable_conv2d(
             tensor, num_outputs=None, kernel_size=kernel, stride=stride,
-            weights_regularizer=depthwise_regularizer, depth_multiplier=1,
-            scope='{}/depthwise'.format(scope), **params)
-        if num_outputs is None:
-            # skip pointwise if `num_outputs` is not specified
+            weights_regularizer=regularizer, depth_multiplier=1,
+            scope='{}/depthwise'.format(scope))
+        pointwise_params = params.get('pointwise')
+        if pointwise_params is None:
             return depthwise
         # pointwise layer
-        num_outputs = max(int(num_outputs * depth_multiplier), 8)
+        num_outputs = pointwise_params['num_outputs']
+        weights_regularizer = pointwise_params.get('weights_regularizer')
         pointwise = slim.conv2d(
             depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
-            weights_regularizer=pointwise_regularizer,
-            scope='{}/pointwise'.format(scope), **params)
+            weights_regularizer=weights_regularizer,
+            scope='{}/pointwise'.format(scope))
         return pointwise
 
     @staticmethod

@@ -36,28 +36,28 @@ model:
         _dsconv: &dsconv
             <<: *conv
             type: depthwise_separable_convolution
-            depth_multiplier: 1
-            depthwise_regularizer: null
-            pointwise_regularizer: *regularizer
+            depthwise:
+                weights_regularizer: null
+            pointwise:
+                weights_regularizer: *regularizer
         conv0:
             <<: *conv
             stride: 2
-            num_outputs: !arith >
-                max(int(32 * $(model.layers._dsconv.depth_multiplier)), 8)
+            num_outputs: 32
             weights_regularizer: *regularizer
-        conv1: {<<: *dsconv, stride: 1, num_outputs: 64}
-        conv2: {<<: *dsconv, stride: 2, num_outputs: 128}
-        conv3: {<<: *dsconv, stride: 1, num_outputs: 128}
-        conv4: {<<: *dsconv, stride: 2, num_outputs: 256}
-        conv5: {<<: *dsconv, stride: 1, num_outputs: 256}
-        conv6: {<<: *dsconv, stride: 2, num_outputs: 512}
-        conv7: {<<: *dsconv, stride: 1, num_outputs: 512}
-        conv8: {<<: *dsconv, stride: 1, num_outputs: 512}
-        conv9: {<<: *dsconv, stride: 1, num_outputs: 512}
-        conv10: {<<: *dsconv, stride: 1, num_outputs: 512}
-        conv11: {<<: *dsconv, stride: 1, num_outputs: 512}
-        conv12: {<<: *dsconv, stride: 2, num_outputs: 1024}
-        conv13: {<<: *dsconv, stride: 1, num_outputs: 1024}
+        conv1: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 64}
+        conv2: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 128}
+        conv3: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 128}
+        conv4: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 256}
+        conv5: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 256}
+        conv6: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 512}
+        conv7: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
+        conv8: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
+        conv9: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
+        conv10: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
+        conv11: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
+        conv12: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 1024}
+        conv13: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 1024}
         pool: {type: average_pool, kernel_size: 7, stride: 2, padding: valid}
         dropout: {type: dropout, keep_prob: 0.999}
         fc:
