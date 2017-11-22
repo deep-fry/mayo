@@ -4,32 +4,29 @@ import itertools
 import collections
 import networkx as nx
 
-from mayo.util import ensure_list
+from mayo.util import ensure_list, recursive_apply
 
 
 def _replace_module_kwargs(params):
-    def recursive_replace(value, replace):
-        if isinstance(value, str):
-            if value.startswith('^'):
-                return replace[value[1:]]
-            return value
-        if isinstance(value, list):
-            return [recursive_replace(v, replace) for v in value]
-        if isinstance(value, collections.Mapping):
-            if value.get('type') == 'module':
-                # skip inner modules
-                return value
-            for k, v in value.items():
-                value[k] = recursive_replace(v, replace)
-            return value
-        return value
-
     kwargs = params.get('kwargs', {})
-    replace = {
+    replace_map = {
         key: params.get(key, default_value)
         for key, default_value in kwargs.items()}
+
+    def skip(value):
+        if not isinstance(value, collections.Mapping):
+            return None
+        if value.get('type') != 'module':
+            return None
+        return value
+
+    def replace(value):
+        if value.startswith('^'):
+            return replace_map[value[1:]]
+        return value
+
     layers = copy.deepcopy(params['layers'])
-    params['layers'] = recursive_replace(layers, replace)
+    params['layers'] = recursive_apply(layers, {str: replace}, skip)
     return params
 
 

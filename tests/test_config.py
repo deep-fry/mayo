@@ -35,6 +35,15 @@ class TestDotDict(TestCase):
         d = _DotDict(od)
         self.assertDictEqual(d._mapping, {'a': {'b': 1}})
 
+    def test_nested_dot_path_construct(self):
+        od = {'a.b': {'c.d': 1}}
+        d = _DotDict(od)
+        td = {'a': {'b': {'c': {'d': 1}}}}
+        self.assertDictEqual(d._mapping, td)
+        od = {'a': {'b': {'c.d': 1}}}
+        d = _DotDict(od)
+        self.assertDictEqual(d._mapping, td)
+
     def test_merge(self):
         self.d.merge({'a': 4, 'b': {'d': 3}})
         self.assertDictEqual(self.d._mapping, {'a': 4, 'b': {'c': 2, 'd': 3}})
@@ -42,6 +51,11 @@ class TestDotDict(TestCase):
     def test_dot_path_merge(self):
         self.d.merge({'b.c': 3})
         self.assertDictEqual(self.d._mapping, {'a': 1, 'b': {'c': 3}})
+
+    def test_nested_dot_path_merge(self):
+        self.d.merge({'b': {'d': {'e.f': 3}}})
+        self.assertDictEqual(
+            self.d._mapping, {'a': 1, 'b': {'c': 2, 'd': {'e': {'f': 3}}}})
 
     def test_get(self):
         d = self.d

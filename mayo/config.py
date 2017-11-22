@@ -10,6 +10,7 @@ import collections
 import yaml
 
 from mayo.log import log
+from mayo.util import recursive_apply
 
 
 class YamlTag(object):
@@ -128,14 +129,18 @@ class _DotDict(collections.MutableMapping):
                 'Cannot construct {!r} from data of type {!r}'.format(
                     self.__class__, type(data)))
         super().__init__()
-        super().__setattr__('_root', root or self)
-        if not normalize:
-            super().__setattr__('_mapping', data)
-        else:
-            super().__setattr__('_mapping', {})
-            # normalize key paths
-            for key, value in data.items():
-                self[key] = value
+        self.set('_root', root or self)
+        if normalize:
+            data = self._normalize(data)
+        self.set('_mapping', data)
+
+    def _normalize(self, value):
+        def normalize_map(mapping):
+            d = _DotDict({}, normalize=False)
+            for key, value in mapping.items():
+                d[key] = value
+            return d._mapping
+        return recursive_apply(value, {collections.Mapping: normalize_map})
 
     def __deepcopy__(self, memo):
         data = copy.deepcopy(self._mapping, memo)
@@ -156,9 +161,10 @@ class _DotDict(collections.MutableMapping):
         self._merge(self, md)
 
     def _eval(self, value):
-        if isinstance(value, YamlScalarTag):
+        def eval_tag(value):
             return value.__class__(self._eval(value.content)).value()
-        if isinstance(value, str):
+
+        def eval_str(value):
             regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]*)\)'
             while True:
                 keys = re.findall(regex, value, re.MULTILINE)
@@ -174,24 +180,30 @@ class _DotDict(collections.MutableMapping):
                             'with placeholder {!r}.'.format(placeholder))
                     value = value.replace(placeholder, v)
             return value
-        if isinstance(value, collections.Mapping):
+
+        def skip_map(value):
+            if not isinstance(value, collections.Mapping):
+                return None
             if not isinstance(value, _DotDict):
                 return _DotDict(value, self._root, False)
-        if isinstance(value, (tuple, list, set, frozenset)):
-            return value.__class__(self._eval(v) for v in value)
-        return value
+            return value
 
-    def _dot_path(self, dot_path_key, dictionary=None, setdefault=None):
+        funcs = {YamlScalarTag: eval_tag, str: eval_str}
+        return recursive_apply(value, funcs, skip_map)
+
+    @staticmethod
+    def _dot_path(dot_path_key, dictionary, setdefault=None):
         def type_error(keyable, key):
             raise KeyError(
                 'Key path {!r} resolution stopped at {!r} because the '
                 'current object {!r} is not key-addressable.'
                 .format(dot_path_key, key, keyable))
-
-        if not hasattr(dot_path_key, 'split'):
-            type_error(self, dot_path_key)
-        *dot_path, final_key = dot_path_key.split('.')
-        keyable = dictionary or self._mapping
+        try:
+            *dot_path, final_key = dot_path_key.split('.')
+        except AttributeError:
+            raise KeyError(
+                'Key path {!r} is not a string'.format(dot_path_key))
+        keyable = dictionary
         for index, key in enumerate(dot_path):
             try:
                 if isinstance(keyable, (tuple, list)):
@@ -219,12 +231,12 @@ class _DotDict(collections.MutableMapping):
         return keyable, final_key
 
     def __getitem__(self, key):
-        obj, key = self._dot_path(key)
+        obj, key = self._dot_path(key, self._mapping)
         return self._eval(obj[key])
     __getattr__ = __getitem__
 
     def __setitem__(self, key, value):
-        obj, key = self._dot_path(key, setdefault=True)
+        obj, key = self._dot_path(key, self._mapping, setdefault=True)
         obj[key] = value
     __setattr__ = __setitem__
 
@@ -233,7 +245,7 @@ class _DotDict(collections.MutableMapping):
         super().__setattr__(key, value)
 
     def __delitem__(self, key):
-        obj, key = self._dot_path(key)
+        obj, key = self._dot_path(key, self._mapping)
         del obj[key]
     __delattr__ = __delitem__
 

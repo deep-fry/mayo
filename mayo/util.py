@@ -332,3 +332,20 @@ def ensure_list(item_or_list):
     if isinstance(item_or_list, list):
         return item_or_list
     raise TypeError('Unrecognized type.')
+
+
+def recursive_apply(obj, apply_func_map, skip_func=None):
+    if skip_func:
+        skip_obj = skip_func(obj)
+        if skip_obj is not None:
+            return skip_obj
+    if isinstance(obj, collections.Mapping):
+        for k, v in obj.items():
+            obj[k] = recursive_apply(v, apply_func_map, skip_func)
+    elif isinstance(obj, (tuple, list, set, frozenset)):
+        obj = obj.__class__(
+            recursive_apply(v, apply_func_map, skip_func) for v in obj)
+    for cls, func in apply_func_map.items():
+        if isinstance(obj, cls):
+            return func(obj)
+    return obj
