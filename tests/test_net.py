@@ -11,7 +11,7 @@ from mayo.config import Config
 from mayo.net.graph import Graph, TensorNode, LayerNode, JoinNode
 from mayo.net.util import ParameterTransformer
 from mayo.net.base import NetBase
-from mayo.net.tf import Net
+from mayo.net.tf import TFNet
 from mayo.override import FixedPointQuantizer
 
 
@@ -178,13 +178,13 @@ class TestTransformer(TestCase):
             'weights_overrider': FixedPointQuantizer(),
         }
         scopes = []
-        self.transformer._add_overrider_scope(params, scopes)
+        self.transformer._add_var_scope(params, ['module'], scopes)
         with scopes[0]:
             v = tf.get_variable('test', [1])
             b = tf.get_variable('biases', [1])
             w = tf.get_variable('weights', [1])
         self.assertIsInstance(v, tf.Variable)
-        self.assertEqual(v.op.name, 'test')
+        self.assertEqual(v.op.name, 'module/test')
         self.assertEqual(len(self.transformer.overriders), 2)
         self.assertEqual(b, self.transformer.overriders[0].after)
         self.assertEqual(w, self.transformer.overriders[1].after)
@@ -245,8 +245,8 @@ class TestNetBase(TestCase):
         self.assertSequenceEqual(output.shape, [2, 6])
 
 
-class TestNet(TestCase):
-    class Net(Net):
+class TestTFNet(TestCase):
+    class Net(TFNet):
         def instantiate_variable(self, tensor, params):
             with tf.variable_scope(params['scope']):
                 return tf.get_variable('var', [], tf.float32)
@@ -276,6 +276,6 @@ class TestNet(TestCase):
         config = Config()
         config.yaml_update('models/lenet5.yaml')
         images = tf.ones([1, 28, 28, 1], dtype=tf.float32)
-        net = Net(config.model, images, None, 10, False, False)
+        net = TFNet(config.model, images, None, 10, False, False)
         logits = net.logits()
         self.assertSequenceEqual(logits.shape, [1, 10])

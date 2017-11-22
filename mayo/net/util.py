@@ -1,7 +1,5 @@
-import copy
 import itertools
 import contextlib
-import collections
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -24,30 +22,6 @@ class ParameterTransformer(object):
         self.is_training = is_training
         self.reuse = reuse
         self.overriders = []
-
-    @classmethod
-    def _recursive_replace(cls, value, replace):
-        if isinstance(value, str):
-            if value.startswith('^'):
-                return replace[value[1:]]
-            return value
-        if isinstance(value, list):
-            return [cls._recursive_replace(v, replace) for v in value]
-        if isinstance(value, collections.Mapping):
-            for k, v in value.items():
-                value[k] = cls._recursive_replace(v, replace)
-            return value
-        return value
-
-    def _repace_module_kwargs(self, params):
-        if params['type'] != 'module':
-            return
-        kwargs = params.get('kwargs', {})
-        replace = {
-            key: params.get(key, default_value)
-            for key, default_value in kwargs.items()}
-        layers = copy.deepcopy(params['layers'])
-        params['layers'] = self._recursive_replace(layers, replace)
 
     def _create_hyperobjects(self, params):
         def _create_object_for_key(params, key):
@@ -178,8 +152,6 @@ class ParameterTransformer(object):
 
     def transform(self, name, params, module_path):
         params = dict(params)
-        # replace module kwargs with values
-        self._repace_module_kwargs(params)
         # weight and bias hyperparams
         self._create_hyperobjects(params)
         # layer configs
