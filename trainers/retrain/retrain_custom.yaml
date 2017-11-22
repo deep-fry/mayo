@@ -1,0 +1,25 @@
+retrain:
+    iter_max_epoch: 10
+    tolerance: 0.001
+    retrain_mode: vairables
+    run_status: normal
+    parameters:
+        target: ['conv0/weights/DGQuantizer.width:0']
+        associated: ['conv1/weights:0']
+        range: {from: 16, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}
+
+# retrain:
+#     iter_max_epoch: 10
+#     tolerance: 0.001
+#     retrain_mode: custom
+#     run_status: normal
+#     _width: &width
+#           from: 16
+#           to: 1
+#           init_scale: -2
+#           min_scale: -1
+#           scale_update_factor: 0.5
+#     parameters:
+#           conv0/weights/DGQuantizer.width:
+#               <<: *width
+#               associate: conv1/weights
