@@ -19,10 +19,7 @@ model:
         _regu: &regularizer
             type: tensorflow.contrib.layers.l2_regularizer
             scale: 0.00004
-        _conv: &conv
-            type: convolution
-            kernel_size: [3, 3]
-            padding: same
+        _common: &common
             normalizer_fn:
                 type: tensorflow.contrib.slim.batch_norm
                 center: true
@@ -33,18 +30,20 @@ model:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
             activation_fn: tensorflow.nn.relu6
-        _dsconv: &dsconv
-            <<: *conv
-            type: depthwise_separable_convolution
-            depthwise:
-                weights_regularizer: null
-            pointwise:
-                weights_regularizer: *regularizer
-        conv0:
-            <<: *conv
-            stride: 2
-            num_outputs: 32
             weights_regularizer: *regularizer
+        _conv_common: &conv_common
+            <<: *common
+            kernel_size: [3, 3]
+            stride: 2
+            padding: same
+        _dsconv: &dsconv
+            type: depthwise_separable_convolution
+            depthwise: {<<: *conv_common, weights_regularizer: null}
+            pointwise: {<<: *common}
+        conv0:
+            <<: *conv_common
+            type: convolution
+            num_outputs: 32
         conv1: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 64}
         conv2: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 128}
         conv3: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 128}
