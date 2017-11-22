@@ -5,100 +5,70 @@ import yaml
 
 from mayo.log import log
 from mayo.session.train import Train
+from mayo.override import OverriderBase
 
 
-class OverriderInfo(object):
-    def __init__(self, overriders_info, overriders, session):
-        self.max_ths = {}
-        self.min_scales = {}
-        self.ths = {}
+class Info(object):
+    def __init__(self, meta_info, session, targeting_vars, associated_vars,
+        run_status):
         self.scales = {}
-        self.start_ths = {}
+        self.min_scales = {}
         self.scale_update_factors = {}
-        self.targets = {}
+        self.start_ths = {}
+        self.ths = {}
+        self.max_ths = {}
+
         # now only supports retraining on one overrider
-        self.meta = overriders_info[0]
+        self.meta = meta_info
+        self.targeting_vars = targeting_vars
+        self.associated_vars = associated_vars
 
-        for meta in overriders_info:
-            scale_dict = {}
-            update_dict = {}
-            th_dict = {}
-            th_max_dict = {}
-            th_start_dict = {}
-            scale_min_dict = {}
-            for o in overriders:
-                # overrider might be wrapped in ChainOverrider
-                o = self.get_overrider(o)
-                if o is not None:
-                    scale_dict[o.name] = meta.range['scale']
-                    scale_min_dict[o.name] = meta.range['min_scale']
-                    update_dict[o.name] = meta.scale_update_factor
-                    if meta.special == 'continue':
-                        if not hasattr(o, meta.target):
-                            raise ValueError(
-                                'Missing {} in checkpoint.'
-                                .format(meta.target))
-                        th = session.run(getattr(o, meta.target))
-                        th_dict[o.name] = th
-                        th_start_dict[o.name] = th
-                        log.info('{} is continuing on {}.'.format(o.name, th))
-                    else:
-                        th_dict[o.name] = meta.range['from']
-                        th_start_dict[o.name] = meta.range['from']
-                    th_max_dict[o.name] = meta.range['to']
-                    cls_name = o.__class__.__name__
-            if scale_dict == {}:
-                raise ValueError(
-                    '{} is not found in overrider definitions, '
-                    'but has been specified as a target.'.format(meta.type))
-            self.scales[cls_name] = scale_dict
-            self.min_scales[cls_name] = scale_min_dict
-            self.ths[cls_name] = th_dict
-            self.start_ths[cls_name] = th_start_dict
-            self.max_ths[cls_name] = th_max_dict
-            self.scale_update_factors[cls_name] = update_dict
-            self.targets[cls_name] = str(meta.target)
+        for target in targeting_vars:
+            name = target.name
+            self.scales[name] = meta_info.range['scale']
+            self.min_scales[name] = meta_info.range['min_scale']
+            self.scale_update_factors[name] = \
+                meta_info.range['scale_update_factor']
 
-    def get(self, overrider, info_type):
-        overrider = self.get_overrider(overrider)
-        cls_name = overrider.__class__.__name__
+            if run_status == 'continue':
+                th = session.run(target)
+                self.ths[name] = th
+                self.start_ths[name] = th
+                log.info('{} is continuing on {}.'.format(name, th))
+            else:
+                self.ths[name] = meta_info.range['from']
+                self.start_ths[name] = meta_info.range['from']
+            self.max_ths[name] = meta_info.range['to']
+        if self.scales == {}:
+            raise ValueError(
+                '{} is not found in overrider definitions, '
+                'but has been specified as a target.'.format(meta.type))
+
+    def get(self, variable, info_type):
+        name = variable.name
         if info_type == 'end_threshold':
-            return self.max_ths[cls_name][overrider.name]
+            return self.max_ths[name]
         if info_type == 'end_scale':
-            return self.min_scales[cls_name][overrider.name]
+            return self.min_scales[name]
         if info_type == 'threshold':
-            return self.ths[cls_name][overrider.name]
+            return self.ths[name]
         if info_type == 'start_threshold':
-            return self.start_ths[cls_name][overrider.name]
+            return self.start_ths[name]
         if info_type == 'scale':
-            return self.scales[cls_name][overrider.name]
+            return self.scales[name]
         if info_type == 'scale_factor':
-            return self.scale_update_factors[cls_name][overrider.name]
-        if info_type == 'target':
-            return self.targets[cls_name]
+            return self.scale_update_factors[name]
         raise ValueError('{} is not a collected info key.'.format(info_type))
 
     def set(self, overrider, info_type, value):
-        overrider = self.get_overrider(overrider)
-        cls_name = overrider.__class__.__name__
+        name = variable.name
         if info_type == 'threshold':
-            self.ths[cls_name][overrider.name] = value
+            self.ths[name] = value
         elif info_type == 'scale':
-            self.scales[cls_name][overrider.name] = value
+            self.scales[name] = value
         else:
             raise ValueError(
                 '{} is not a collected info key.'.format(info_type))
-
-    def get_overrider(self, overrider):
-        cls_name = overrider.__class__.__name__
-        if cls_name == 'ChainOverrider':
-            for chained_overrider in overrider:
-                if chained_overrider.__class__.__name__ in self.meta.type:
-                    return chained_overrider
-            return None
-        if cls_name in self.meta.type:
-            return overrider
-        return None
 
 
 class RetrainBase(Train):
@@ -116,13 +86,44 @@ class RetrainBase(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
+    def _fetch_as_overriders(self, info):
+        for o in self.nets[0].overriders:
+            # fetch the targeting variables
+            cls_name = o.__class__.__name__
+            # handel chained overrider
+            if cls_name == 'ChainOverrider':
+                for chained_o in o:
+                    if chained_o.__class__.__name__ in info.type:
+                        o = chained_o
+            self.targeting_vars.append(getattr(o, info.target))
+            self.associated_vars.append(o)
+
+    def _fetch_as_variables(self, info):
+        for name in info.target:
+            for item in self.global_variables():
+                if name in item.name:
+                    self.targeting_vars.append(item)
+        for name in info.associated:
+            for item in self.global_variables():
+                if name in item.name:
+                    self.associated_vars.append(item)
+
+
     def _init_scales(self):
+        info = self.config.retrain.parameters
+        self.targeting_vars = []
+        self.associated_vars = []
         # define initial scale
-        overriders_info = self.config.retrain.overriders
-        self.info = OverriderInfo(
-            overriders_info, self.nets[0].overriders, self.tf_session)
+        if self.retrain_mode == 'overriders':
+            self._fetch_as_overriders(info)
+        else:
+            self._fetch_as_variables(info)
+        run_status = self.config.retrain.run_status
+        self.info = Info(info, self.tf_session, self.targeting_vars,
+            self.associated_vars, run_status)
 
     def _init_retrain(self):
+        self.retrain_mode = self.config.retrain.retrain_mode
         self._init_scales()
         self._reset_stats()
         self._reset_vars()
@@ -130,8 +131,8 @@ class RetrainBase(Train):
         self.profile_overrider(start=True)
         self.profile_for_one_epoch()
         # init all overriders
-        for o in self.nets[0].overriders:
-            self.overrider_init(o)
+        for variable in self.targeting_vars:
+            self.variable_init(variable)
 
     def once(self):
         train_op = self._train_op
@@ -197,23 +198,23 @@ class RetrainBase(Train):
             if self.config.retrain.get('cont_list'):
                 # if yaml exists, load it and compute self.cont
                 doct_cont = self.config.retrain.cont_list
-                for o in self.nets[0].overriders:
-                    if doct_cont.get(o.name):
-                        self.cont[o.name] = True
+                for variable in self.targeting_vars:
+                    if doct_cont.get(variable.name):
+                        self.cont[variable.name] = True
                     else:
-                        self.cont[o.name] = False
+                        self.cont[variable.name] = False
             else:
-                for o in self.nets[0].overriders:
-                    name = o.name
+                for variable in self.targeting_vars:
+                    name = variable.name
                     self.cont[name] = True
         d = {}
         thresholds = {}
         scales = {}
-        for o in self.nets[0].overriders:
-            name = o.name
-            d[name] = self._metric_clac(o)
-            thresholds[name] = self.info.get(o, 'threshold')
-            scales[name] = self.info.get(o, 'scale')
+        for tv, av in zip(self.targeting_vars, self.associated_vars):
+            name = tv.name
+            d[name] = self._metric_clac(av)
+            thresholds[name] = self.info.get(tv, 'threshold')
+            scales[name] = self.info.get(tv, 'scale')
 
         for key in sorted(d, key=d.get):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
@@ -234,6 +235,22 @@ class RetrainBase(Train):
         else:
             self.target_layer = self.priority_list.pop()
 
+    def _prepare_yaml(self, write):
+        name = self.config.model.name
+        self.stream = open(
+            'trainers/{}_retrain_base.yaml'.format(name), 'w')
+        self.dump_data = {
+                'retrain': {
+                    'train_acc_base': float(self.acc_base),
+                    'loss_base': float(self.loss_base),
+                },
+            }
+        if write:
+            self.stream.write(yaml.dump(
+                self.dump_data,
+                default_flow_style=False))
+        return
+
     def profile_for_one_epoch(self):
         log.info('Start profiling for one epoch')
         epoch = 0
@@ -247,15 +264,7 @@ class RetrainBase(Train):
                 .format(self.acc_base))
             if self.config.retrain.get('loss_base'):
                 self.loss_base = self.config.retrain.loss_base
-            name = self.config.model.name
-            self.stream = open(
-                'trainers/{}_retrain_base.yaml'.format(name), 'w')
-            self.dump_data = {
-                'retrain': {
-                    'train_acc_base': float(self.acc_base),
-                    'loss_base': float(self.loss_base),
-                },
-            }
+            self._prepare_yaml(False)
             return
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
@@ -275,29 +284,24 @@ class RetrainBase(Train):
             self.acc_base,
         ))
         self._reset_stats()
-        name = self.config.model.name
-        self.stream = open(
-            'trainers/log/{}_retrain_base.yaml'.format(name), 'w')
-        self.dump_data = {
-            'retrain': {
-                'train_acc_base': float(self.acc_base),
-                'loss_base': float(self.loss_base),
-            },
-        }
-        yaml.dump(self.dump_data, self.stream, default_flow_style=False)
+        self._prepare_yaml(True)
 
-    def _metric_clac(self, o):
-        metric_value = num_elements = self.run(o.after).size
-        if hasattr(o, '_mask'):
-            valid_elements = np.count_nonzero(self.run(o._mask))
+    def _metric_clac(self, variable):
+        if isinstance(variable, (tf.Variable, tf.Tensor)):
+            metric_value = num_elements = self.run(variable).size
+        if hasattr(variable, '_mask'):
+            valid_elements = np.count_nonzero(self.run(variable._mask))
             density = valid_elements / float(num_elements)
             metric_value *= density
-        if hasattr(o, 'width'):
-            if isinstance(o.width, (tf.Variable, tf.Tensor)):
-                bits = self.run(o.width)
+        if hasattr(variable, 'width'):
+            if isinstance(variable.width, (tf.Variable, tf.Tensor)):
+                bits = self.run(variable.width)
             else:
-                bits = o.width
-            metric_value *= bits
+                bits = variable.width
+            if hasattr(variable, '_mask'):
+                metric_value *= bits
+            else:
+                metric_value = bits * self.run(variable.after).size
         return metric_value
 
     def _avg_stats(self):
@@ -323,29 +327,27 @@ class RetrainBase(Train):
         self.loss_avg = None
         self.best_ckpt = None
 
-    def overriders_refresh(self):
+    def variables_refresh(self):
         raise NotImplementedError(
             'Method to refresh overriders is not implemented.')
 
-    def overrider_init(self, o):
-        threshold = self.info.get(o, 'threshold')
-        target = self.info.get(o, 'target')
-        o._parameter_variables_assignment[target] = threshold
+    def variable_init(self, v):
+        threshold = self.info.get(v, 'threshold')
+        v = threshold
 
-    def overrider_refresh(self, o):
-        threshold = self.info.get(o, 'threshold')
-        scale = self.info.get(o, 'scale')
-        target = self.info.get(o, 'target')
-        self.info.set(o, 'threshold', threshold + scale)
-        setattr(o, target, threshold + scale)
+    def variable_refresh(self, v):
+        threshold = self.info.get(v, 'threshold')
+        scale = self.info.get(v, 'scale')
+        self.info.set(v, 'threshold', threshold + scale)
+        v = threshold + scale
 
 
 class GlobalRetrain(RetrainBase):
-    def overriders_refresh(self):
-        for o in self.nets[0].overriders:
-            o = self.info.get_overrider(o)
-            self.overrider_refresh(o)
-            o.should_update = True
+    def variables_refresh(self):
+        for tv, av in zip(self.targeting_vars, self.associated_vars):
+            self.variable_refresh(o)
+            if isinstance(av, OverriderBase):
+                av.should_update = True
         self.overriders_update()
 
     def forward_policy(self, floor_epoch):
@@ -357,11 +359,11 @@ class GlobalRetrain(RetrainBase):
         self.retrain_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
         self.profile_overrider()
-        self.overriders_refresh()
+        self.variables_refresh()
         self.reset_num_epochs()
-        for o in self.nets[0].overriders:
-            if o.name == self.target_layer:
-                threshold = self.info.get(o, 'threshold')
+        for tv in self.targeting_vars:
+            if tv.name == self.target_layer:
+                threshold = self.info.get(tv, 'threshold')
         log.info('update threshold to {}, working on {}'.format(
             threshold, self.target_layer))
         return True
@@ -378,11 +380,11 @@ class GlobalRetrain(RetrainBase):
 
     def backward_policy(self):
         # if did not reach min scale
-        tmp_o = self.nets[0].overriders[0]
-        end_scale = self.info.get(tmp_o, 'end_scale')
-        scale = self.info.get(tmp_o, 'scale')
-        end_threshold = self.info.get(tmp_o, 'end_threshold')
-        threshold = self.info.get(tmp_o, 'threshold')
+        tmp_tv = self.targeting_vars[0]
+        end_scale = self.info.get(tmp_tv, 'end_scale')
+        scale = self.info.get(tmp_tv, 'scale')
+        end_threshold = self.info.get(tmp_tv, 'end_threshold')
+        threshold = self.info.get(tmp_tv, 'threshold')
         if scale >= 0:
             scale_check = self._fetch_scale() > end_scale
             threshold_check = end_threshold > threshold
@@ -436,7 +438,7 @@ class GlobalRetrain(RetrainBase):
             else:
                 self.info.set(o, 'scale', scale * factor)
             # use new scale
-            self.overrider_refresh(o)
+            self.variable_refresh(o)
 
 
 class LayerwiseRetrain(RetrainBase):
@@ -444,7 +446,7 @@ class LayerwiseRetrain(RetrainBase):
         for o in self.nets[0].overriders:
             o = self.info.get_overrider(o)
             if o.name == self.target_layer:
-                self.overrider_refresh(o)
+                self.variable_refresh(o)
                 o.should_update = True
         self.overriders_update()
 
@@ -549,7 +551,7 @@ class LayerwiseRetrain(RetrainBase):
                     self.info.set(o, 'scale', int(scale * factor))
                 else:
                     self.info.set(o, 'scale', scale * factor)
-                self.overrider_refresh(o)
+                self.variable_refresh(o)
 
     def log_thresholds(self, loss, acc):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
