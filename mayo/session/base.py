@@ -269,8 +269,8 @@ class Session(object, metaclass=SessionMeta):
             if var not in self.initialized_variables:
                 uninit_vars.append(var)
         if uninit_vars:
-            desc = ', '.join(v.op.name for v in uninit_vars)
-            log.warn('Variables are not initialized: {}'.format(desc))
+            desc = '\n    '.join(v.op.name for v in uninit_vars)
+            log.warn('Variables are not initialized:\n    {}'.format(desc))
             self.raw_run(tf.variables_initializer(uninit_vars))
             self.initialized_variables += uninit_vars
 
