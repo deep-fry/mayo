@@ -29,7 +29,10 @@ class SessionMeta(type):
                 continue
             if name.startswith("__"):
                 continue
-            if isinstance(cls.__dict__.get(name), (staticmethod, classmethod)):
+            method = cls.__dict__.get(name)
+            if method is None:
+                continue
+            if isinstance(method, (staticmethod, classmethod)):
                 continue
             setattr(cls, name, mcl.wrap(cls, func))
         return cls
