@@ -167,20 +167,17 @@ class OverriderBase(object):
         if not self._applied:
             raise OverrideNotAppliedError(
                 'Method "apply" must be invoked before call "update".')
-        with session.as_default():
-            self._update(session)
+        self._update(session)
         log.debug('Updated overrider {!r}'.format(self.info(session)))
 
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """
-        with session.as_default():
-            session.run(tf.assign(self.before, self.after))
+        session.run(tf.assign(self.before, self.after))
 
     def reset(self, session):
         """Reset internal variables to their respective initial values.  """
-        with session.as_default():
-            for var in self.internals.values():
-                session.run(tf.assign(var, var.initial_value))
+        for var in self.internals.values():
+            session.run(tf.assign(var, var.initial_value))
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
@@ -194,8 +191,7 @@ class OverriderBase(object):
         return self._info_tuple()
 
     def info(self, session):
-        with session.as_default():
-            return self._info(session)
+        return self._info(session)
 
     @classmethod
     def finalize_info(cls, table):

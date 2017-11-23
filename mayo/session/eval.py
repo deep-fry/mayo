@@ -12,6 +12,9 @@ class EvaluateBase(Session):
 
     def __init__(self, config):
         super().__init__(config)
+        self._setup()
+
+    def _setup(self):
         # moving average decay
         avg_op = self.moving_average_op()
         using = 'Using' if avg_op else 'Not using'
@@ -19,9 +22,8 @@ class EvaluateBase(Session):
         # setup metrics
         metrics_func = lambda net: (net.top(1), net.top(5))
         top1s, top5s = zip(*self.net_map(metrics_func))
-        with self.as_default():
-            self._top1_op = tf.concat(top1s, axis=0)
-            self._top5_op = tf.concat(top5s, axis=0)
+        self._top1_op = tf.concat(top1s, axis=0)
+        self._top5_op = tf.concat(top5s, axis=0)
 
     def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint

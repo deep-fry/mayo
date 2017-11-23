@@ -23,7 +23,7 @@ class CheckpointHandler(object):
 
     def __init__(self, session, search_path):
         super().__init__()
-        self._session = session
+        self.tf_session = session
         self._search_path = search_path
         self._checkpoint_directories = {}
 
@@ -87,7 +87,7 @@ class CheckpointHandler(object):
         return path
 
     def _global_variables(self):
-        with self._session.graph.as_default():
+        with self.tf_session.graph.as_default():
             return tf.global_variables()
 
     def load(self, key=_checkpoint_latest):
@@ -126,7 +126,7 @@ class CheckpointHandler(object):
             'Checkpoint variables to restore:\n    {}'
             .format('\n    '.join(v.name for v in restore_vars)))
         restorer = tf.train.Saver(restore_vars)
-        restorer.restore(self._session, path)
+        restorer.restore(self.tf_session, path)
         log.debug('Checkpoint restored.')
         return restore_vars
 
@@ -139,4 +139,4 @@ class CheckpointHandler(object):
         else:
             log.info('Saving checkpoint to {!r}...'.format(cp_path))
         saver = tf.train.Saver(self._global_variables())
-        saver.save(self._session, cp_path, write_meta_graph=False)
+        saver.save(self.tf_session, cp_path, write_meta_graph=False)

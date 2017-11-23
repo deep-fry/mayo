@@ -12,10 +12,9 @@ class Train(Session):
 
     def __init__(self, config):
         super().__init__(config)
-        with self.as_default():
-            self._setup_train_operation()
-            self._setup_summaries()
-            self._init()
+        self._setup_train_operation()
+        self._setup_summaries()
+        self._init()
         self._checkpoint_epoch = ''
 
     @memoize_property
@@ -32,16 +31,14 @@ class Train(Session):
         log.debug(
             'Using learning rate {!r} with params {}.'
             .format(lr_class.__name__, params))
-        with self.as_default():
-            return lr_class(**params)
+        return lr_class(**params)
 
     @memoize_property
     def optimizer(self):
         params = self.config.train.optimizer
         optimizer_class, params = object_from_params(params)
         log.debug('Using optimizer {!r}.'.format(optimizer_class.__name__))
-        with self.as_default():
-            return optimizer_class(self.learning_rate, **params)
+        return optimizer_class(self.learning_rate, **params)
 
     @staticmethod
     def _average_gradients(tower_grads):
@@ -129,8 +126,7 @@ class Train(Session):
 
     def reset_num_epochs(self):
         log.info('Reseting number of training epochs of the model...')
-        with self.as_default():
-            self.run(tf.assign(self.imgs_seen, 0))
+        self.run(tf.assign(self.imgs_seen, 0))
         self.change.reset('checkpoint.epoch')
         self.change.reset('step')
 
