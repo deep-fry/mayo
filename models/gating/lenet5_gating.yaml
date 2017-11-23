@@ -24,11 +24,7 @@ model:
         conv0: &gated_conv
             <<: *conv
             type: gated_convolution
-            policy:
-                type: predictor
-                density: 0.5
-                # type: tensorflow.contrib.layers.l1_regularizer
-                # scale: 0.00002
+            density: 0.5
         pool0: &pool
             type: max_pool
             kernel_size: 2
