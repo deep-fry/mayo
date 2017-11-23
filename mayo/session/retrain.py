@@ -185,9 +185,9 @@ class RetrainBase(Train):
             'Method of logging threholds is not implemented.')
 
     def _fetch_scale(self):
-        for o in self.nets[0].overriders:
-            if o.name == self.target_layer:
-                return self.info.get(o, 'scale')
+        for tv in self.targeting_vars:
+            if tv.name == self.target_layer:
+                return self.info.get(tv, 'scale')
 
     def profile_overrider(self, start=False):
         self.priority_list = []
@@ -333,13 +333,13 @@ class RetrainBase(Train):
 
     def variable_init(self, v):
         threshold = self.info.get(v, 'threshold')
-        v = threshold
+        self.run(tf.assign(v, threshold))
 
     def variable_refresh(self, v):
         threshold = self.info.get(v, 'threshold')
         scale = self.info.get(v, 'scale')
         self.info.set(v, 'threshold', threshold + scale)
-        v = threshold + scale
+        self.run(tf.assign(v, threshold + scale))
 
 
 class GlobalRetrain(RetrainBase):
@@ -388,11 +388,11 @@ class GlobalRetrain(RetrainBase):
         threshold = self.info.get(tmp_tv, 'threshold')
         if scale >= 0:
             scale_check = self._fetch_scale() > end_scale
-            threshold_check = end_threshold > threshold
+            threshold_check = end_threshold < threshold
             run = scale_check and threshold_check
         else:
             scale_check = self._fetch_scale() < end_scale
-            threshold_check = end_threshold < threshold
+            threshold_check = end_threshold > threshold
             run = scale_check and threshold_check
 
         if run:
