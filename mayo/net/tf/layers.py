@@ -4,8 +4,8 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.util import object_from_params, Percent
-from mayo.net.util import use_name_not_scope
-from mayo.net.tfbase import TFNetBase
+from mayo.net.tf.util import use_name_not_scope
+from mayo.net.tf.base import TFNetBase
 
 
 class TFNet(TFNetBase):

@@ -9,9 +9,9 @@ from contextlib import contextmanager
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.net import TFNet
 from mayo.util import (
     memoize_method, memoize_property, Change, flatten, Table)
+from mayo.net.tf import TFNet
 from mayo.override import ChainOverrider
 from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler

@@ -84,6 +84,3 @@ class ChannelGater(OverriderBase):
         tf.add_to_collection('mayo.gates', self.gate)
         # return mean * (1 - self.gate) + self.gate * var
         return self.gate * value
-
-    def _update(self, session):
-        return

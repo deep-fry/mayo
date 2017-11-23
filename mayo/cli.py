@@ -1,7 +1,6 @@
 import os
 import sys
 import base64
-import time
 
 import yaml
 import tensorflow as tf
