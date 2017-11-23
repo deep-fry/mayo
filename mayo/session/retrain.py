@@ -170,7 +170,6 @@ class RetrainBase(Train):
 
         # if epoch > 0.1:
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
-            self._node_logging(True)
             self._avg_stats()
             if self.acc_avg >= self.acc_base:
                 return self.forward_policy(floor_epoch)
