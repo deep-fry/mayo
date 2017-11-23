@@ -5,7 +5,7 @@ import yaml
 
 from mayo.log import log
 from mayo.session.train import Train
-from mayo.override import OverriderBase
+from mayo.override.base import OverriderBase
 
 
 class Info(object):
@@ -60,7 +60,7 @@ class Info(object):
             return self.scale_update_factors[name]
         raise ValueError('{} is not a collected info key.'.format(info_type))
 
-    def set(self, overrider, info_type, value):
+    def set(self, variable, info_type, value):
         name = variable.name
         if info_type == 'threshold':
             self.ths[name] = value
@@ -345,7 +345,7 @@ class RetrainBase(Train):
 class GlobalRetrain(RetrainBase):
     def variables_refresh(self):
         for tv, av in zip(self.targeting_vars, self.associated_vars):
-            self.variable_refresh(o)
+            self.variable_refresh(tv)
             if isinstance(av, OverriderBase):
                 av.should_update = True
         self.overriders_update()
@@ -370,10 +370,11 @@ class GlobalRetrain(RetrainBase):
 
     def log_thresholds(self, loss, acc):
         _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
-        for o in self.nets[0].overriders:
-            value = self.info.get(o, 'threshold')
+        for tv in self.targeting_vars:
+            name = tv.name
+            value = self.info.get(tv, 'threshold')
             if prev_loss is None:
-                self.log[o.name] = (value, loss, acc)
+                self.log[name] = (value, loss, acc)
             else:
                 if acc > self.acc_base:
                     self.log[self.target_layer] = (value, loss, acc)
