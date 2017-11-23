@@ -2,6 +2,7 @@ import math
 import numpy as np
 import tensorflow as tf
 import yaml
+import pickle
 
 from mayo.log import log
 from mayo.session.train import Train
@@ -116,6 +117,18 @@ class RetrainBase(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
+    def _node_logging(self, write_to_files):
+        if not hasattr(self, 'writing_cnt'):
+            self.writing_cnt = 0
+        else:
+            self.writing_cnt += 1
+        filename = 'node_log/log' + str(self.writing_cnt) + '.pkl'
+        nodes = [n.name for n in tf.get_default_graph().as_graph_def().node]
+        ops = [op.name for op in tf.get_default_graph().get_operations()]
+        with open(filename, 'wb') as f:
+           pickle.dump([nodes,ops], f)
+
+
     def _init_scales(self):
         # define initial scale
         overriders_info = self.config.retrain.overriders
@@ -157,6 +170,7 @@ class RetrainBase(Train):
 
         # if epoch > 0.1:
         if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
+            self._node_logging(True)
             self._avg_stats()
             if self.acc_avg >= self.acc_base:
                 return self.forward_policy(floor_epoch)
