@@ -2,7 +2,7 @@ import math
 
 import tensorflow as tf
 
-from mayo.util import object_from_params, Percent
+from mayo.util import Percent
 
 
 class GateLayers(object):

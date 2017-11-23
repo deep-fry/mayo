@@ -183,7 +183,7 @@ class Session(object, metaclass=SessionMeta):
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
-        self.run([])
+        self._overrider_assign_parameters()
         # restore variables
         restore_vars = self.checkpoint.load(name)
         for v in restore_vars:
@@ -259,11 +259,6 @@ class Session(object, metaclass=SessionMeta):
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
-    @memoize_method
-    def _register_update(self):
-        for collection, func in self.nets[0].update_functions.items():
-            func(self, collection)
-
     def run(self, ops, update_progress=False, **kwargs):
         # ensure variables are initialized
         uninit_vars = []
@@ -280,7 +275,11 @@ class Session(object, metaclass=SessionMeta):
         self._overrider_assign_parameters()
 
         # extra statistics to print in progress update
-        self._register_update()
+        update_funcs = self.nets[0].update_functions
+        if update_funcs:
+            for collection in list(update_funcs):
+                func = update_funcs.pop(collection)
+                func(self, collection)
 
         # session run
         filtered_to_update_op = {
