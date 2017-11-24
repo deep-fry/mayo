@@ -3,10 +3,10 @@ model.layers:
     conv1: &overrider
         weights_overrider:
             - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
-            - {type: mayo.override.FixedPointQuantizer, point: 1, width: 16}
+            - {type: mayo.override.FixedPointQuantizer, point: 3, width: 32}
         biases_overrider:
             - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
-            - {type: mayo.override.FixedPointQuantizer, point: 1, width: 16}
+            - {type: mayo.override.FixedPointQuantizer, point: 3, width: 32}
     conv2: {<<: *overrider}
     conv3: {<<: *overrider}
     conv4: {<<: *overrider}

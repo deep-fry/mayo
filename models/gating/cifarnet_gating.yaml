@@ -22,9 +22,7 @@ model:
             weights_initializer: &trunc_norm_init
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.05
-            policy:
-                type: softmax_cross_entropy
-                density: 0.2
+            density: 0.5
         _pool: &pool
             type: max_pool
             kernel_size: 3
