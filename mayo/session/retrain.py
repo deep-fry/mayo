@@ -6,7 +6,7 @@ import pickle
 
 from mayo.log import log
 from mayo.session.train import Train
-from mayo.override.base import OverriderBase
+from mayo.override.base import OverriderBase, ChainOverrider
 
 
 class Info(object):
@@ -232,6 +232,8 @@ class RetrainBase(Train):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
             if self.cont[key]:
                 self.priority_list.append(key)
+        test_dict = d
+        import pdb; pdb.set_trace()
         log.debug('display layerwise metric')
         log.debug('{}'.format(d))
         log.debug('display thresholds')
@@ -298,19 +300,22 @@ class RetrainBase(Train):
 
     def _metric_clac(self, variable):
         if isinstance(variable, (tf.Variable, tf.Tensor)):
-            metric_value = num_elements = self.run(variable).size
-        if hasattr(variable, '_mask'):
-            valid_elements = np.count_nonzero(self.run(variable._mask))
-            density = valid_elements / float(num_elements)
-            metric_value *= density
-        if hasattr(variable, 'width'):
-            if isinstance(variable.width, (tf.Variable, tf.Tensor)):
-                bits = self.run(variable.width)
-            else:
-                bits = variable.width
+            return self.run(variable).size
+        if isinstance(variable, ChainOverrider):
+            for chained_var in variable:
+                if hasattr(variable, 'width'):
+                    value = self.run(variable.width)
+                if hasattr(variable, '_mask'):
+                    value = np.count_nonzero(self.run(variable._mask))
+                try:
+                    metric_value *= value
+                except:
+                    metric_value = value
+        if isinstance(variable, OverriderBase):
             if hasattr(variable, '_mask'):
-                metric_value *= bits
-            else:
+                metric_value = np.count_nonzero(self.run(variable._mask))
+            if hasattr(variable, 'width'):
+                bits = self.run(variable.width)
                 metric_value = bits * self.run(variable.after).size
         return metric_value
 
@@ -343,13 +348,13 @@ class RetrainBase(Train):
 
     def variable_init(self, v):
         threshold = self.info.get(v, 'threshold')
-        self.run(tf.assign(v, threshold))
+        self.assign(v, threshold)
 
     def variable_refresh(self, v):
         threshold = self.info.get(v, 'threshold')
         scale = self.info.get(v, 'scale')
         self.info.set(v, 'threshold', threshold + scale)
-        self.run(tf.assign(v, threshold + scale))
+        self.assign(v, threshold + scale)
 
 
 class GlobalRetrain(RetrainBase):
@@ -398,11 +403,11 @@ class GlobalRetrain(RetrainBase):
         end_threshold = self.info.get(tmp_tv, 'end_threshold')
         threshold = self.info.get(tmp_tv, 'threshold')
         if scale >= 0:
-            scale_check = self._fetch_scale() > end_scale
+            scale_check = self._fetch_scale() >= end_scale
             threshold_check = end_threshold < threshold
             run = scale_check and threshold_check
         else:
-            scale_check = self._fetch_scale() < end_scale
+            scale_check = self._fetch_scale() <= end_scale
             threshold_check = end_threshold > threshold
             run = scale_check and threshold_check
 
