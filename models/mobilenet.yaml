@@ -21,7 +21,8 @@ model:
             scale: 0.00004
         _conv: &conv
             type: convolution
-            kernel_size: [3, 3]
+            kernel_size: 3
+            stride: 2
             padding: same
             normalizer_fn:
                 type: tensorflow.contrib.slim.batch_norm
@@ -33,18 +34,23 @@ model:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
             activation_fn: tensorflow.nn.relu6
-        _dsconv: &dsconv
-            <<: *conv
-            type: depthwise_separable_convolution
-            depth_multiplier: 1
-            depthwise_regularizer: null
-            pointwise_regularizer: *regularizer
-        conv0:
-            <<: *conv
-            stride: 2
-            num_outputs: !arith >
-                max(int(32 * $(model.layers._dsconv.depth_multiplier)), 8)
             weights_regularizer: *regularizer
+        _dsconv: &dsconv
+            type: module
+            kwargs: {stride: null, num_outputs: null}
+            layers:
+                depthwise:
+                    <<: *conv
+                    type: depthwise_convolution
+                    stride: ^stride
+                pointwise:
+                    <<: *conv
+                    kernel_size: [1, 1]
+                    stride: 1
+                    num_outputs: ^num_outputs
+                    weights_regularizer: *regularizer
+            graph: {from: input, with: [depthwise, pointwise], to: output}
+        conv0: {<<: *conv, num_outputs: 32}
         conv1: {<<: *dsconv, stride: 1, num_outputs: 64}
         conv2: {<<: *dsconv, stride: 2, num_outputs: 128}
         conv3: {<<: *dsconv, stride: 1, num_outputs: 128}

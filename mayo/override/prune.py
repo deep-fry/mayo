@@ -26,7 +26,7 @@ class PrunerBase(OverriderBase):
 
     def _update(self, session):
         mask = self._updated_mask(self.before, self.mask, session)
-        session.run(tf.assign(self.mask, mask))
+        session.assign(self.mask, mask)
 
     def _info(self, session):
         mask = util.cast(session.run(self.mask), int)

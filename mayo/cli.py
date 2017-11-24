@@ -1,7 +1,6 @@
 import os
 import sys
 import base64
-import time
 
 import yaml
 import tensorflow as tf
@@ -165,38 +164,6 @@ Arguments:
             self.session = cls(self.config)
         return self.session
 
-    def cli_test(self):
-        # TEMPORARY check speed with cpu
-        PROFILE = True
-        # define a dummy graph
-        session = self._get_session('train')
-        imgs = []
-        with session.as_default():
-            for i, (images, labels) in enumerate(session._preprocess()):
-                imgs.append(images)
-            add_op = tf.assign_add(session.imgs_seen, session.batch_size)
-        epoch_cnt = 0
-        start = time.time()
-        from tensorflow.python.client import timeline
-        run_metadata = tf.RunMetadata()
-        options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-        while (epoch_cnt < 0.2):
-            tasks = [imgs, add_op, session.num_epochs]
-            img_o, total_imgs, epoch_cnt = session.run(tasks)
-            # fetch timeline after warmed up
-            if (epoch_cnt > 0.1) and PROFILE:
-                session.run(tasks,
-                            options=options,
-                            run_metadata=run_metadata)
-                fetched_timeline = timeline.Timeline(run_metadata.step_stats)
-                chrome_trace = fetched_timeline.generate_chrome_trace_format()
-                with open('timeline.json', 'w') as f:
-                    f.write(chrome_trace)
-                break
-            interval = total_imgs / float(time.time() - start)
-            info = 'avg: {:.2f}p/s'.format(interval)
-            log.info(info, update=True)
-
     def cli_profile(self):
         """Performs training profiling to produce timeline.json.  """
         from tensorflow.python.client import timeline
@@ -279,7 +246,10 @@ Arguments:
 
     def cli_export(self):
         """Exports the current config.  """
-        print(self.config.to_yaml())
+        name = 'export.yaml'
+        with open(name, 'w') as f:
+            f.write(self.config.to_yaml())
+        log.info('Config successfully exported to {!r}.'.format(name))
 
     def cli_info(self):
         """Prints parameter and layer info of the model.  """
