@@ -19,7 +19,11 @@ model:
         _regu: &regularizer
             type: tensorflow.contrib.layers.l2_regularizer
             scale: 0.00004
-        _common: &common
+        _conv: &conv
+            type: convolution
+            kernel_size: 3
+            stride: 2
+            padding: same
             normalizer_fn:
                 type: tensorflow.contrib.slim.batch_norm
                 center: true
@@ -31,32 +35,35 @@ model:
                 stddev: 0.09
             activation_fn: tensorflow.nn.relu6
             weights_regularizer: *regularizer
-        _conv_common: &conv_common
-            <<: *common
-            kernel_size: [3, 3]
-            stride: 2
-            padding: same
         _dsconv: &dsconv
-            type: depthwise_separable_convolution
-            depthwise: {<<: *conv_common, weights_regularizer: null}
-            pointwise: {<<: *common}
-        conv0:
-            <<: *conv_common
-            type: convolution
-            num_outputs: 32
-        conv1: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 64}
-        conv2: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 128}
-        conv3: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 128}
-        conv4: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 256}
-        conv5: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 256}
-        conv6: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 512}
-        conv7: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
-        conv8: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
-        conv9: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
-        conv10: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
-        conv11: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 512}
-        conv12: {<<: *dsconv, depthwise.stride: 2, pointwise.num_outputs: 1024}
-        conv13: {<<: *dsconv, depthwise.stride: 1, pointwise.num_outputs: 1024}
+            type: module
+            kwargs: {stride: null, num_outputs: null}
+            layers:
+                depthwise:
+                    <<: *conv
+                    type: depthwise_convolution
+                    stride: ^stride
+                pointwise:
+                    <<: *conv
+                    kernel_size: [1, 1]
+                    stride: 1
+                    num_outputs: ^num_outputs
+                    weights_regularizer: *regularizer
+            graph: {from: input, with: [depthwise, pointwise], to: output}
+        conv0: {<<: *conv, num_outputs: 32}
+        conv1: {<<: *dsconv, stride: 1, num_outputs: 64}
+        conv2: {<<: *dsconv, stride: 2, num_outputs: 128}
+        conv3: {<<: *dsconv, stride: 1, num_outputs: 128}
+        conv4: {<<: *dsconv, stride: 2, num_outputs: 256}
+        conv5: {<<: *dsconv, stride: 1, num_outputs: 256}
+        conv6: {<<: *dsconv, stride: 2, num_outputs: 512}
+        conv7: {<<: *dsconv, stride: 1, num_outputs: 512}
+        conv8: {<<: *dsconv, stride: 1, num_outputs: 512}
+        conv9: {<<: *dsconv, stride: 1, num_outputs: 512}
+        conv10: {<<: *dsconv, stride: 1, num_outputs: 512}
+        conv11: {<<: *dsconv, stride: 1, num_outputs: 512}
+        conv12: {<<: *dsconv, stride: 2, num_outputs: 1024}
+        conv13: {<<: *dsconv, stride: 1, num_outputs: 1024}
         pool: {type: average_pool, kernel_size: 7, stride: 2, padding: valid}
         dropout: {type: dropout, keep_prob: 0.999}
         fc:

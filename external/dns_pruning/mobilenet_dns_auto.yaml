@@ -3,18 +3,20 @@ model.layers:
     conv0: &overrider
         weights_overrider:
             type: mayo.override.DynamicNetworkSurgeryPruner
-    conv1: {<<: *overrider}
-    conv2: {<<: *overrider}
-    conv3: {<<: *overrider}
-    conv4: {<<: *overrider}
-    conv5: {<<: *overrider}
-    conv6: {<<: *overrider}
-    conv7: {<<: *overrider}
-    conv8: {<<: *overrider}
-    conv9: {<<: *overrider}
-    conv10: {<<: *overrider}
-    conv11: {<<: *overrider}
-    conv12: {<<: *overrider}
-    conv13: {<<: *overrider}
+    conv1: &depsep
+        layers:
+            depthwise: {<<: *overrider}
+            pointwise: {<<: *overrider}
+    conv2: {<<: *depsep}
+    conv3: {<<: *depsep}
+    conv4: {<<: *depsep}
+    conv5: {<<: *depsep}
+    conv6: {<<: *depsep}
+    conv7: {<<: *depsep}
+    conv8: {<<: *depsep}
+    conv9: {<<: *depsep}
+    conv10: {<<: *depsep}
+    conv11: {<<: *depsep}
+    conv12: {<<: *depsep}
+    conv13: {<<: *depsep}
     fc: {<<: *overrider}
-    logits: {<<: *overrider}

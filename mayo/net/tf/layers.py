@@ -13,30 +13,10 @@ class Layers(TFNetBase):
     def instantiate_convolution(self, tensor, params):
         return slim.conv2d(tensor, **params)
 
-    def instantiate_depthwise_separable_convolution(self, tensor, params):
-        scope = params.pop('scope')
-        num_outputs = params.pop('num_outputs', None)
-        # depthwise layer
-        stride = params.pop('stride')
-        kernel = params.pop('kernel_size')
-        depth_multiplier = params.pop('depth_multiplier', 1)
-        depthwise_regularizer = params.pop('depthwise_regularizer')
-        # pop it out, so later **params is correct
-        pointwise_regularizer = params.pop('pointwise_regularizer', None)
-        depthwise = slim.separable_conv2d(
-            tensor, num_outputs=None, kernel_size=kernel, stride=stride,
-            weights_regularizer=depthwise_regularizer, depth_multiplier=1,
-            scope='{}/depthwise'.format(scope), **params)
-        if num_outputs is None:
-            # skip pointwise if `num_outputs` is not specified
-            return depthwise
-        # pointwise layer
-        num_outputs = max(int(num_outputs * depth_multiplier), 8)
-        pointwise = slim.conv2d(
-            depthwise, num_outputs=num_outputs, kernel_size=[1, 1], stride=1,
-            weights_regularizer=pointwise_regularizer,
-            scope='{}/pointwise'.format(scope), **params)
-        return pointwise
+    def instantiate_depthwise_convolution(self, tensor, params):
+        multiplier = params.pop('depth_multiplier', 1)
+        return slim.separable_conv2d(
+            tensor, num_outputs=None, depth_multiplier=multiplier, **params)
 
     @staticmethod
     def _reduce_kernel_size_for_small_input(params, tensor):
