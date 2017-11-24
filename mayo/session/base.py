@@ -1,6 +1,7 @@
 import os
 import re
 import time
+import functools
 import subprocess
 import collections
 from contextlib import contextmanager
@@ -8,15 +9,53 @@ from contextlib import contextmanager
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.net import TFNet
 from mayo.util import (
     memoize_method, memoize_property, Change, flatten, Table)
+from mayo.net.tf import TFNet
 from mayo.override import ChainOverrider
 from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
 
 
-class Session(object):
+class SessionMeta(type):
+    """
+    Automatically use the correct tf_session when invoking methods in Session.
+    """
+    def __new__(mcl, name, bases, nmspc):
+        cls = super().__new__(mcl, name, bases, nmspc)
+        for name in dir(cls):
+            func = getattr(cls, name)
+            if not callable(func):
+                continue
+            if name.startswith("__"):
+                continue
+            method = cls.__dict__.get(name)
+            if method is None:
+                continue
+            if isinstance(method, (staticmethod, classmethod)):
+                continue
+            setattr(cls, name, mcl.wrap(cls, func))
+        return cls
+
+    @staticmethod
+    def wrap(cls, func):
+        @functools.wraps(func)
+        def wrapped(self, *args, **kwargs):
+            try:
+                session = self.tf_session
+            except AttributeError:
+                return func(self, *args, **kwargs)
+            with session.as_default():
+                with session.graph.as_default():
+                    return func(self, *args, **kwargs)
+
+        if getattr(func, '_wrapped', False):
+            return func
+        wrapped._wrapped = True
+        return wrapped
+
+
+class Session(object, metaclass=SessionMeta):
     mode = None
 
     def __init__(self, config):
@@ -30,6 +69,7 @@ class Session(object):
         self._init_gpus()
         self.graph = tf.Graph()
         self.initialized_variables = []
+        self._assign_operators = {}
         self.tf_session = tf.Session(
             graph=self.graph,
             config=tf.ConfigProto(allow_soft_placement=True))
@@ -91,17 +131,10 @@ class Session(object):
             self.config.system.num_gpus = 1
         os.environ[cuda_key] = gpus
 
-    @contextmanager
-    def as_default(self):
-        with self.tf_session.as_default():
-            with self.tf_session.graph.as_default():
-                yield
-
     def _tf_int(self, name, dtype=tf.int64):
-        with self.as_default():
-            return tf.get_variable(
-                name, [], initializer=tf.constant_initializer(0),
-                trainable=False, dtype=dtype)
+        return tf.get_variable(
+            name, [], initializer=tf.constant_initializer(0),
+            trainable=False, dtype=dtype)
 
     @memoize_property
     def imgs_seen(self):
@@ -109,18 +142,15 @@ class Session(object):
 
     @memoize_property
     def num_steps(self):
-        with self.as_default():
-            return self.imgs_seen / self.batch_size
+        return self.imgs_seen / self.batch_size
 
     @memoize_property
     def num_epochs(self):
         imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        with self.as_default():
-            return self.imgs_seen / imgs_per_epoch
+        return self.imgs_seen / imgs_per_epoch
 
     def _mean_metric(self, func):
-        with self.as_default():
-            return tf.reduce_mean(list(self.net_map(func)))
+        return tf.reduce_mean(list(self.net_map(func)))
 
     @memoize_property
     def accuracy(self):
@@ -132,20 +162,37 @@ class Session(object):
         return self._mean_metric(lambda net: net.loss())
 
     def global_variables(self):
-        with self.as_default():
-            return tf.global_variables()
+        return tf.global_variables()
 
     def trainable_variables(self):
-        with self.as_default():
-            return tf.trainable_variables()
+        return tf.trainable_variables()
 
     def moving_average_variables(self):
-        with self.as_default():
-            return tf.moving_average_variables()
+        return tf.moving_average_variables()
 
     def get_collection(self, key):
         func = lambda net: tf.get_collection(key)
         return flatten(self.net_map(func))
+
+    def assign(self, var, tensor, raw_run=False):
+        """
+        Variable assignment.
+
+        It uses placeholder for feeding values to assign, by doing so it avoids
+        adding a `tf.assign` every time we make a new assignment.
+        """
+        try:
+            op, placeholder = self._assign_operators[var]
+        except KeyError:
+            name = 'mayo/placeholder/{}'.format(var.op.name)
+            placeholder = tf.placeholder(
+                var.dtype, shape=var.get_shape(), name=name)
+            op = tf.assign(var, placeholder)
+            self._assign_operators[var] = op, placeholder
+        run_func = self.raw_run if raw_run else self.run
+        if isinstance(tensor, (tf.Variable, tf.Tensor)):
+            tensor = run_func(tensor)
+        run_func(op, feed_dict={placeholder: tensor})
 
     @memoize_method
     def moving_average_op(self):
@@ -153,11 +200,10 @@ class Session(object):
         if not decay:
             return None
         # instantiate moving average if moving_average_decay is supplied
-        with self.as_default():
-            var_avgs = tf.train.ExponentialMovingAverage(
-                self.config.train.moving_average_decay, self.num_steps)
-            avg_vars = tf.trainable_variables() + tf.moving_average_variables()
-            return var_avgs.apply(avg_vars)
+        var_avgs = tf.train.ExponentialMovingAverage(
+            self.config.train.moving_average_decay, self.num_steps)
+        avg_vars = tf.trainable_variables() + tf.moving_average_variables()
+        return var_avgs.apply(avg_vars)
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
@@ -172,10 +218,9 @@ class Session(object):
         self.checkpoint.save(name)
 
     def info(self):
-        with self.as_default():
-            info_dict = self.nets[0].info()
-            if self.nets[0].overriders:
-                info_dict['overriders'] = self.overrider_info()
+        info_dict = self.nets[0].info()
+        if self.nets[0].overriders:
+            info_dict['overriders'] = self.overrider_info()
         return info_dict
 
     def overrider_info(self):
@@ -238,74 +283,68 @@ class Session(object):
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
-    @memoize_method
-    def _register_update(self):
-        for collection, func in self.nets[0].update_functions.items():
-            func(self, collection)
-
     def run(self, ops, update_progress=False, **kwargs):
-        with self.as_default():
-            # ensure variables are initialized
-            uninit_vars = []
-            for var in self.global_variables():
-                if var not in self.initialized_variables:
-                    uninit_vars.append(var)
-            if uninit_vars:
-                desc = '\n    '.join(v.op.name for v in uninit_vars)
-                log.warn('Variables are not initialized:\n    {}'.format(desc))
-                self.raw_run(tf.variables_initializer(uninit_vars))
-                self.initialized_variables += uninit_vars
+        # ensure variables are initialized
+        uninit_vars = []
+        for var in self.global_variables():
+            if var not in self.initialized_variables:
+                uninit_vars.append(var)
+        if uninit_vars:
+            desc = '\n    '.join(v.op.name for v in uninit_vars)
+            log.warn('Variables are not initialized:\n    {}'.format(desc))
+            self.raw_run(tf.variables_initializer(uninit_vars))
+            self.initialized_variables += uninit_vars
 
-            # assign overrider hyperparameters
-            self._overrider_assign_parameters()
+        # assign overrider hyperparameters
+        self._overrider_assign_parameters()
 
-            # extra statistics to print in progress update
-            self._register_update()
+        # extra statistics to print in progress update
+        update_funcs = self.nets[0].update_functions
+        if update_funcs:
+            for collection in list(update_funcs):
+                func = update_funcs.pop(collection)
+                func(self, collection)
 
-            # session run
-            filtered_to_update_op = {
-                k: v for k, v in self._to_update_op.items()
-                if isinstance(v, (tf.Tensor, tf.Variable))}
-            results, to_update = self.raw_run(
-                (ops, filtered_to_update_op), **kwargs)
+        # session run
+        filtered_to_update_op = {
+            k: v for k, v in self._to_update_op.items()
+            if isinstance(v, (tf.Tensor, tf.Variable))}
+        results, to_update = self.raw_run(
+            (ops, filtered_to_update_op), **kwargs)
 
-            # progress update
-            if update_progress:
-                to_update = dict(self._to_update_op, **to_update)
-                self._update_progress(to_update)
+        # progress update
+        if update_progress:
+            to_update = dict(self._to_update_op, **to_update)
+            self._update_progress(to_update)
 
-            return results
+        return results
 
     def _preprocess(self):
-        with self.as_default():
-            return self.preprocessor.preprocess()
+        return self.preprocessor.preprocess()
 
     @contextmanager
     def _gpu_context(self, gid):
-        with self.as_default():
-            with tf.device('/gpu:{}'.format(gid)):
-                with tf.name_scope('tower_{}'.format(gid)) as scope:
-                    yield scope
+        with tf.device('/gpu:{}'.format(gid)):
+            with tf.name_scope('tower_{}'.format(gid)) as scope:
+                yield scope
 
     def _instantiate_nets(self):
         log.debug('Instantiating...')
         num_classes = self.config.num_classes()
         nets = []
-        with self.as_default():
-            for i, (images, labels) in enumerate(self._preprocess()):
-                log.debug('Instantiating graph for GPU #{}...'.format(i))
-                with self._gpu_context(i):
-                    net = TFNet(
-                        self.config.model, images, labels, num_classes,
-                        self.mode == 'train', bool(nets))
-                nets.append(net)
+        for i, (images, labels) in enumerate(self._preprocess()):
+            log.debug('Instantiating graph for GPU #{}...'.format(i))
+            with self._gpu_context(i):
+                net = TFNet(
+                    self.config.model, images, labels, num_classes,
+                    self.mode == 'train', bool(nets))
+            nets.append(net)
         return nets
 
     def net_map(self, func):
-        with self.as_default():
-            for i, net in enumerate(self.nets):
-                with self._gpu_context(i):
-                    yield func(net)
+        for i, net in enumerate(self.nets):
+            with self._gpu_context(i):
+                yield func(net)
 
     def interact(self):
         from IPython import embed
