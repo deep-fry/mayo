@@ -126,7 +126,7 @@ class Train(Session):
 
     def reset_num_epochs(self):
         log.info('Reseting number of training epochs of the model...')
-        self.run(tf.assign(self.imgs_seen, 0))
+        self.run(self.imgs_seen.initializer)
         self.change.reset('checkpoint.epoch')
         self.change.reset('step')
 

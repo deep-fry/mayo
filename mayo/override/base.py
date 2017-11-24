@@ -8,27 +8,6 @@ from mayo.log import log
 from mayo.util import memoize_property
 
 
-_assign_operators = {}
-
-
-def assign(session, var, tensor, raw_run=False):
-    """
-    Variable assignment.
-
-    It uses placeholder for feeding values to assign, by doing so it avoids
-    adding a `tf.assign` every time we make a new assignment.
-    """
-    try:
-        op = _assign_operators[var]
-    except KeyError:
-        name = 'mayo.placeholder.{}'.format(var.op.name)
-        placeholder = tf.placeholder(
-            var.dtype, shape=var.get_shape(), name=name)
-        op = _assign_operators[var] = tf.assign(var, placeholder)
-    run_func = session.raw_run if raw_run else session.run
-    run_func(op, feed_dict={name: tensor})
-
-
 class OverrideNotAppliedError(Exception):
     """Invoke apply before update.  """
 
@@ -124,7 +103,6 @@ class OverriderBase(object):
         return params
 
     def assign_parameters(self, session):
-        ops = []
         for name, value in self._parameter_variables_assignment.items():
             if value is None:
                 continue
@@ -133,11 +111,10 @@ class OverriderBase(object):
                 .format(self, name, value))
             getattr(self, name)  # ensure variable is instantiated
             var = self._parameter_variables[name]
-            ops.append(tf.assign(var, value))
+            session.assign(var, value, raw_run=True)
             # add our variable to the list of initialized_variables
             if var not in session.initialized_variables:
                 session.initialized_variables.append(var)
-        session.raw_run(ops)
         self._parameter_variables_assignment = {}
 
     def _apply(self, value):
@@ -193,12 +170,12 @@ class OverriderBase(object):
 
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """
-        session.run(tf.assign(self.before, self.after))
+        session.assign(self.before, self.after)
 
     def reset(self, session):
         """Reset internal variables to their respective initial values.  """
         for var in self.internals.values():
-            session.run(tf.assign(var, var.initial_value))
+            session.assign(var, var.initial_value)
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering

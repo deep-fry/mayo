@@ -69,6 +69,7 @@ class Session(object, metaclass=SessionMeta):
         self._init_gpus()
         self.graph = tf.Graph()
         self.initialized_variables = []
+        self._assign_operators = {}
         self.tf_session = tf.Session(
             graph=self.graph,
             config=tf.ConfigProto(allow_soft_placement=True))
@@ -172,6 +173,26 @@ class Session(object, metaclass=SessionMeta):
     def get_collection(self, key):
         func = lambda net: tf.get_collection(key)
         return flatten(self.net_map(func))
+
+    def assign(self, var, tensor, raw_run=False):
+        """
+        Variable assignment.
+
+        It uses placeholder for feeding values to assign, by doing so it avoids
+        adding a `tf.assign` every time we make a new assignment.
+        """
+        try:
+            op, placeholder = self._assign_operators[var]
+        except KeyError:
+            name = 'mayo/placeholder/{}'.format(var.op.name)
+            placeholder = tf.placeholder(
+                var.dtype, shape=var.get_shape(), name=name)
+            op = tf.assign(var, placeholder)
+            self._assign_operators[var] = op, placeholder
+        run_func = self.raw_run if raw_run else self.run
+        if isinstance(tensor, (tf.Variable, tf.Tensor)):
+            tensor = run_func(tensor)
+        run_func(op, feed_dict={placeholder: tensor})
 
     @memoize_method
     def moving_average_op(self):
