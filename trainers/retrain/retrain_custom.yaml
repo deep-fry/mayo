@@ -4,8 +4,8 @@ retrain:
     retrain_mode: vairables
     run_status: normal
     parameters:
-        target: ['conv0/weights/DGQuantizer.width:0']
-        associated: ['conv1/weights:0']
+        target: ['conv0/weights/DGQuantizer.width']
+        associated: ['conv1/weights']
         range: {from: 16, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}
 
 # retrain:
