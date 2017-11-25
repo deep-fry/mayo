@@ -3,14 +3,8 @@ retrain:
     iter_max_epoch: 1
     tolerance: 0.01
     retrain_mode: overriders
-    overriders:
-        # - type: mayo.override.FixedPointQuantizer
-        #   target: width
-        #   range: {from: 16, to: 3, scale: -2, min_scale: 0.5}
-        #   scale_update_factor: 0.5
+    run_status: normal
+    parameters:
         type: mayo.override.ChannelGater
         target: threshold
-        #range: {from: -1.0, to: 10.0, scale: 0.4, min_scale: 0.08}
-        range: {from: 0., to: 3.0, scale: 0.1, min_scale: 0.02}
-        scale_update_factor: 0.5
-        special: normal
+        range: {from: -1.0, to: 10.0, scale: 2, min_scale: 1, scale_update_factor: 0.5}

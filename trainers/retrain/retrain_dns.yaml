@@ -1,7 +1,7 @@
 retrain:
-    # iter_max_epoch: 10
-    iter_max_epoch: 0.1
-    tolerance: 0.0
+    iter_max_epoch: 10
+    # iter_max_epoch: 0.1
+    tolerance: 0.001
     retrain_mode: overriders
     run_status: normal
     parameters:
