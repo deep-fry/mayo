@@ -315,7 +315,7 @@ class RetrainBase(Train):
                 float(self.run(value.after).size)
             return density
         else:
-            return self.run(value).size
+            return self.run(value.after).size
 
     def _avg_stats(self):
         self.loss_avg = self.loss_total / float(self.step)
