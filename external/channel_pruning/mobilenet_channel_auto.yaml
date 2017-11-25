@@ -19,5 +19,3 @@ model.layers:
     conv11: {<<: *overrider}
     conv12: {<<: *overrider}
     conv13: {<<: *overrider}
-    fc: {<<: *overrider}
-    logits: {<<: *overrider}
