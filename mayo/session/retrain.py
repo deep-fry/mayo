@@ -413,7 +413,7 @@ class GlobalRetrain(RetrainBase):
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
-            thresholds = self.info.get(self.nets[0].overriders[0], 'threshold')
+            thresholds = self.info.get(self.targeting_vars[0], 'threshold')
             log.info(
                 'Decreasing scale to {}, threshold is {}...'
                 .format(self._fetch_scale(), thresholds))
