@@ -62,12 +62,12 @@ class ChannelGater(OverriderBase):
             'strides': [1, 1, 1, 1]
         }
         if policy == 'avg' or policy is None:
-            pooled = tf.nn.avg_pool(tf.abs(value_pool), **pool_params)
+            pooled = tf.nn.avg_pool(value_pool, **pool_params)
         if policy == 'max':
             pooled = tf.nn.max_pool(tf.abs(value_pool), **pool_params)
         if policy == 'mix':
             maxed = tf.nn.max_pool(tf.abs(value_pool), **pool_params)
-            avged = tf.nn.avg_pool(tf.abs(value_pool), **pool_params)
+            avged = tf.nn.avg_pool(value_pool, **pool_params)
             pooled = maxed - avged
         #  mean, variance = tf.nn.moments(value, axes=[1, 2])
         #  variance = tf.reshape(variance, shape=[n, 1, 1, c])
