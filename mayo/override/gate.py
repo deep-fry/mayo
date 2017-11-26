@@ -62,7 +62,7 @@ class ChannelGater(OverriderBase):
             'strides': [1, 1, 1, 1]
         }
         if policy == 'avg' or policy is None:
-            pooled = tf.nn.avg_pool(value_pool, **pool_params)
+            pooled = tf.nn.avg_pool(tf.abs(value_pool), **pool_params)
         if policy == 'max':
             pooled = tf.nn.max_pool(tf.abs(value_pool), **pool_params)
         if policy == 'mix':
