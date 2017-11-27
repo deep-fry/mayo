@@ -9,6 +9,7 @@ model.layers:
     conv1: &ds_conv
       layers:
         depthwise: {<<: *overrider}
+        pointwise: {<<: *overrider}
     conv2: {<<: *ds_conv}
     conv3: {<<: *ds_conv}
     conv4: {<<: *ds_conv}

@@ -413,7 +413,7 @@ class GlobalRetrain(RetrainBase):
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
-            thresholds = self.info.get(self.targeting_vars[0], 'threshold')
+            thresholds = self.info.get(tmp_tv, 'threshold')
             log.info(
                 'Decreasing scale to {}, threshold is {}...'
                 .format(self._fetch_scale(), thresholds))
@@ -422,7 +422,7 @@ class GlobalRetrain(RetrainBase):
         # stop if reach min scale
         else:
             self.cont[self.target_layer] = False
-            thresholds = self.info.get(self.targeting_vars[0], 'threshold')
+            thresholds = self.info.get(tmp_tv, 'threshold')
             log.info(
                 'All layers done, final threshold is {}'
                 .format(thresholds))

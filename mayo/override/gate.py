@@ -79,7 +79,7 @@ class ChannelGater(OverriderBase):
         #     self.gate = tf.clip_by_value(self.gate, 0, 1)
         # gates out feature maps with low vairance and replace the whole
         # feature map with its mean
-        self.gate = util.cast(tf.abs(pooled) > self.threshold, float)
+        self.gate = util.cast(tf.abs(pooled) >= self.threshold, float)
         self.pooled = pooled
         tf.add_to_collection('mayo.overrider.gates', self.gate)
         # return mean * (1 - self.gate) + self.gate * var
