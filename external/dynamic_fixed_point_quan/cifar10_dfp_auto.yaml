@@ -1,0 +1,13 @@
+---
+model.layers:
+    conv1: &overrider
+        weights_overrider:
+            # comment this line out if it is an unpruned model
+          - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
+          - {type: mayo.override.DGQuantizer, width: 16, overflow_rate: 0.001}
+        biases_overrider:
+          - {type: mayo.override.DGQuantizer, width: 16, overflow_rate: 0.001}
+    conv2: {<<: *overrider}
+    fc3: {<<: *overrider}
+    fc4: {<<: *overrider}
+    logits: {<<: *overrider}
