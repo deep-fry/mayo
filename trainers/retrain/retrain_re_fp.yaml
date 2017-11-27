@@ -1,0 +1,10 @@
+retrain:
+    iter_max_epoch: 10
+    # iter_max_epoch: 0.1
+    tolerance: 0.001
+    retrain_mode: overriders
+    run_status: normal
+    parameters:
+        type: mayo.override.Recentralizer
+        target: width
+        range: {from: 16, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}
