@@ -423,13 +423,17 @@ class GlobalRetrain(RetrainBase):
         else:
             self.cont[self.target_layer] = False
             thresholds = self.info.get(tmp_tv, 'threshold')
+            scale = self.info.get(tmp_tv, 'scale')
             log.info(
                 'All layers done, final threshold is {}'
-                .format(thresholds))
+                .format(thresholds - scale))
             if not threshold_check:
                 log.info('threshold meets its minimum')
             if not scale_check:
                 log.info('scale meets its minimum')
+            log.info(
+                'Overrider is done, model stored at {}.'
+                .format(self.best_ckpt))
             self.reset_num_epochs()
             return False
 

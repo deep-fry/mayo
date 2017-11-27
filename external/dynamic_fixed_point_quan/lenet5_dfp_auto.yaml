@@ -2,15 +2,11 @@
 model.layers:
     conv0: &overrider
         weights_overrider:
-            type: mayo.override.DGQuantizer
-            # type: mayo.override.FixedPointQuantizer
-            overflow_rate: 0.01
-            width: 32
+            # comment this line out if it is an unpruned model
+          - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
+          - {type: mayo.override.DGQuantizer, width: 16, overflow_rate: 0.001}
         biases_overrider:
-            type: mayo.override.DGQuantizer
-            # type: mayo.override.FixedPointQuantizer
-            overflow_rate: 0.01
-            width: 32
+          - {type: mayo.override.DGQuantizer, width: 16, overflow_rate: 0.001}
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
     logits: {<<: *overrider}

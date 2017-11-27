@@ -2,7 +2,5 @@
 ---
 rename:
     squeezenet_v11: squeezenet_v11_gate
-    weights: gate/weights
-    biases: gate/biases
     imgs_seen: null
     global_step: null
