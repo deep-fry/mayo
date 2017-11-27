@@ -23,6 +23,7 @@ model:
             padding: same
             kernel_size: 1
             stride: 1
+            density: 0.5
             # weight_initializer defaults to xavier
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
