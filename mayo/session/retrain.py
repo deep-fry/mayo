@@ -88,16 +88,26 @@ class RetrainBase(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
+    def _check_overrider_type(self, overrider, o_type):
+        o_name = overrider.__class__.__name__
+        if isinstance(o_type, list):
+            for ot in o_type:
+                if o_name in ot:
+                    return True
+        if o_name in o_type:
+            return True
+        return False
+
     def _fetch_as_overriders(self, info):
         for o in self.nets[0].overriders:
             # fetch the targeting variables
             # handel chained overrider
             if isinstance(o, ChainOverrider):
                 for chained_o in o:
-                    if chained_o.__class__.__name__ in info.type:
+                    if self._check_overrider_type(chained_o, info.type):
                         o = chained_o
             if isinstance(o, Recentralizer):
-                if o.__class__.__name__ in info.type:
+                if self._check_overrider_type(chained_o, info.type):
                     o = o.quantizer
             self.targeting_vars.append(getattr(o, info.target))
             self.associated_vars.append(o)
