@@ -13,6 +13,7 @@ from mayo.util import (
     memoize_method, memoize_property, Change, flatten, Table)
 from mayo.net.tf import TFNet
 from mayo.override import ChainOverrider
+from mayo.override import Recentralizer
 from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
 
@@ -228,6 +229,8 @@ class Session(object, metaclass=SessionMeta):
             for o in overriders:
                 if isinstance(o, ChainOverrider):
                     yield from flatten(o)
+                if isinstance(o, Recentralizer):
+                    yield o.quantizer
                 else:
                     yield o
         overrider_info = {}

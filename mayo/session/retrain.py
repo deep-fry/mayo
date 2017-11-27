@@ -8,7 +8,7 @@ import operator
 from mayo.log import log
 from mayo.session.train import Train
 from mayo.override.base import OverriderBase, ChainOverrider
-
+from mayo.override.quantize import Recentralizer
 
 class Info(object):
     def __init__(self, meta_info, session, targeting_vars, associated_vars,
@@ -91,12 +91,14 @@ class RetrainBase(Train):
     def _fetch_as_overriders(self, info):
         for o in self.nets[0].overriders:
             # fetch the targeting variables
-            cls_name = o.__class__.__name__
             # handel chained overrider
-            if cls_name == 'ChainOverrider':
+            if isinstance(o, ChainOverrider):
                 for chained_o in o:
                     if chained_o.__class__.__name__ in info.type:
                         o = chained_o
+            if isinstance(o, Recentralizer):
+                if o.__class__.__name__ in info.type:
+                    o = o.quantizer
             self.targeting_vars.append(getattr(o, info.target))
             self.associated_vars.append(o)
 
