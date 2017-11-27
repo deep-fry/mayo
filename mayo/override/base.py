@@ -93,6 +93,7 @@ class OverriderBase(object):
         self._parameter_config = {}
         self._parameter_variables = {}
         self._parameter_variables_assignment = {}
+        self._getter = _getter_not_initialized
         self.should_update = should_update
 
     @memoize_property
@@ -113,6 +114,8 @@ class OverriderBase(object):
             log.debug(
                 'Assigning overrider parameter: {}.{} = {}'
                 .format(self, name, value))
+            # FIXME could throw AttributeError if attribute name does not match
+            # variable name.
             getattr(self, name)  # ensure variable is instantiated
             var = self._parameter_variables[name]
             session.assign(var, value, raw_run=True)
@@ -143,10 +146,11 @@ class OverriderBase(object):
         Things to apply to the variable in `value`, returns the
         overridden result.
         """
-        if self._applied:
-            raise OverrideAlreadyAppliedError(
-                'Overrider has already been applied to {!r}'
-                .format(self.before))
+        # TODO is multiple application allowed?
+        # if self._applied:
+        #     raise OverrideAlreadyAppliedError(
+        #         'Overrider has already been applied to {!r}'
+        #         .format(self.before))
         self._applied = True
         self.name = value.op.name
         self.before = value

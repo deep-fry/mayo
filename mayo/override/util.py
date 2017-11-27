@@ -42,14 +42,12 @@ def _constants_not_accepted(func):
 
 
 def where(bool_expr, true_value=None, false_value=None):
-    args = [
-        bool_expr,
-        true_value if true_value is not None else bool_expr,
-        false_value if false_value is not None else bool_expr,
-    ]
-    if is_constant(args):
+    args = [a for a in (bool_expr, true_value, false_value) if a is not None]
+    if is_constant(*args):
         _constants_not_accepted(where)
-    if is_numpy(args):
+    if is_numpy(*args):
+        if true_value is None and false_value is None:
+            return np.where(bool_expr)
         return np.where(bool_expr, true_value, false_value)
     return tf.where(bool_expr, true_value, false_value)
 
@@ -90,7 +88,7 @@ def floor(value):
 
 def round(value):
     if is_constant(value):
-        return math.floor(value+0.5)
+        return math.floor(value + 0.5)
     if is_numpy(value):
         return np.round(value)
     omap = {'Round': 'Identity'}
@@ -132,6 +130,14 @@ def _binary_bool_operation(a, b, op):
 
 logical_or = partial(_binary_bool_operation, op='logical_or')
 logical_and = partial(_binary_bool_operation, op='logical_and')
+
+
+def logical_not(value):
+    if is_constant(value):
+        _constants_not_accepted('Logical NOT')
+    if is_numpy(value):
+        return np.logical_not(value)
+    return tf.logical_not(value)
 
 
 def _clip(*args, min_max=None):

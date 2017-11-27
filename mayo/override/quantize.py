@@ -2,7 +2,7 @@ import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize_property
+from mayo.util import memoize_property, object_from_params
 from mayo.override import util
 from mayo.override.base import OverriderBase, Parameter
 
@@ -89,7 +89,7 @@ class FixedPointQuantizer(QuantizerBase):
     def _apply(self, value):
         return self._quantize(value)
 
-    def info(self, session):
+    def _info(self, session):
         width = int(self.eval(session, self.width))
         point = int(self.eval(session, self.point))
         return self._info_tuple(width=width, point=point)
@@ -165,57 +165,6 @@ class DGTrainableQuantizer(DGQuantizer):
 
     def _apply(self, value):
         return self._quantize(value, self.width, self.point)
-
-
-class Recentralizer(QuantizerBase):
-    """ Recentralizes the distribution of pruned weights.  """
-    class QuantizedParameter(Parameter):
-        def __get__(self, instance, owner):
-            var = super().__get__(instance, owner)
-            return instance.quantizer._quantize(var)
-
-    positives = Parameter('positives', None, None, tf.int32)
-    positives_mean = QuantizedParameter('positives/mean', 1, [], tf.float32)
-    negatives_mean = QuantizedParameter('negatives/mean', -1, [], tf.float32)
-
-    def __init__(self, quantizer=None, should_update=True):
-        super().__init__(should_update)
-        self.quantizer = quantizer
-
-    @memoize_property
-    def negatives(self):
-        return util.logical_not(self.positives)
-
-    def _apply(self, value):
-        self._parameter_config = {
-            'positives': {
-                'initial': tf.ones_initializer(tf.bool),
-                'shape': value.shape,
-            },
-        }
-        positives = util.cast(self.positives, float)
-        negatives = util.cast(self.negatives, float)
-        positives_centralized = positives * (value - self.positives_mean)
-        negatives_centralized = negatives * (value - self.negatives_mean)
-        quantized = self._quantize(
-            positives_centralized + negatives_centralized)
-        value = positives * (quantized + self.positives_mean)
-        value += negatives * (quantized + self.negatives_mean)
-        return value
-
-    def _update(self, session):
-        # update internal quantizer
-        self.quantizer.update(session)
-        # update positives mask and mean values
-        value = session.run(self.before)
-        # divide them into two groups
-        mean = util.mean(value)
-        # find two central points
-        positives = value >= mean
-        self.positives = positives
-        self.positives_mean = util.mean(value[util.where(positives)])
-        negatives = util.logical_not(positives)
-        self.negatives_mean = util.mean(value[util.where(negatives)])
 
 
 class FloatingPointQuantizer(QuantizerBase):
@@ -359,3 +308,63 @@ class LogQuantizer(QuantizerBase):
         value = value / shift
         value = 2 ** value * sign
         return value
+
+
+class Recentralizer(OverriderBase):
+    """ Recentralizes the distribution of pruned weights.  """
+
+    class QuantizedParameter(Parameter):
+        def __get__(self, instance, owner):
+            var = super().__get__(instance, owner)
+            return instance._quantize(var)
+
+    positives = Parameter('positives', None, None, tf.bool)
+    positives_mean = QuantizedParameter('positives_mean', 1, [], tf.float32)
+    negatives_mean = QuantizedParameter('negatives_mean', -1, [], tf.float32)
+
+    def __init__(self, quantizer=None, should_update=True):
+        super().__init__(should_update)
+        quantizer_cls, params = object_from_params(quantizer)
+        self.quantizer = quantizer_cls(**params)
+
+    @memoize_property
+    def negatives(self):
+        return util.logical_not(self.positives)
+
+    def _quantize(self, value):
+        return self.quantizer.apply(self._scope, self._original_getter, value)
+
+    def _apply(self, value):
+        self._parameter_config = {
+            'positives': {
+                'initial': tf.ones_initializer(tf.bool),
+                'shape': value.shape,
+            },
+        }
+        positives = util.cast(self.positives, float)
+        negatives = util.cast(self.negatives, float)
+        positives_centralized = positives * (value - self.positives_mean)
+        negatives_centralized = negatives * (value - self.negatives_mean)
+        quantized = self._quantize(
+            positives_centralized + negatives_centralized)
+        value = positives * (quantized + self.positives_mean)
+        value += negatives * (quantized + self.negatives_mean)
+        return value
+
+    def _update(self, session):
+        # update internal quantizer
+        self.quantizer.update(session)
+        # update positives mask and mean values
+        value = session.run(self.before)
+        # divide them into two groups
+        mean = util.mean(value)
+        # find two central points
+        positives = value >= mean
+        self.positives = positives
+        self.positives_mean = util.mean(value[util.where(positives)])
+        negatives = util.logical_not(positives)
+        self.negatives_mean = util.mean(value[util.where(negatives)])
+
+    def _info(self, session):
+        info = self.quantizer.info(session)._asdict()
+        return self._info_tuple(**info)
