@@ -369,11 +369,18 @@ class RetrainBase(Train):
 
 class GlobalRetrain(RetrainBase):
     def variables_refresh(self):
+        update_flag = False
         for tv, av in zip(self.targeting_vars, self.associated_vars):
             self.variable_refresh(tv)
             if isinstance(av, OverriderBase):
                 av.should_update = True
-        if isinstance(av, OverriderBase):
+                update_flag = True
+            if self.config.retrain.parameters.get('update_overrider'):
+                for o in self.nets[0].overriders:
+                    if o.name in av.name:
+                        o.should_update = True
+                        update_flag = True
+        if update_flag:
             self.overriders_update()
 
     def forward_policy(self, floor_epoch):
@@ -390,8 +397,8 @@ class GlobalRetrain(RetrainBase):
         for tv in self.targeting_vars:
             if tv.name == self.target_layer:
                 threshold = self.info.get(tv, 'threshold')
-        log.info('update threshold to {}, working on {}'.format(
-            threshold, self.target_layer))
+                log.info('update threshold to {}, working on {}'.format(
+                    threshold, self.target_layer))
         return True
 
     def log_thresholds(self, loss, acc):
