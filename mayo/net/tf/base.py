@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import memoize_method, Table, ensure_list
+from mayo.util import memoize_method, Table, ensure_list, object_from_params
 from mayo.net.base import NetBase
 from mayo.net.tf.util import ParameterTransformer
 
@@ -125,9 +125,10 @@ class TFNetBase(NetBase):
             arguments.append('{}={}'.format(k, v))
         return '    ' + '\n    '.join(arguments)
 
-    def _instantiate_layer(self, name, tensors, params, module_path):
+    def _instantiate_layer(self, node, tensors, params):
         # transform parameters
-        params, scope = self._transformer.transform(name, params, module_path)
+        params, scope = self._transformer.transform(
+            node.name, params, node.module)
         with scope:
             layer_type = params['type']
             layer_key = '{}/{}'.format(
@@ -136,12 +137,14 @@ class TFNetBase(NetBase):
             log.debug(
                 'Instantiating {!r} of type {!r} with arguments:\n{}'
                 .format(layer_key, layer_type, layer_args))
-            tensors = self.instantiate_numeric_padding(tensors, params)
-            layer = super()._instantiate_layer(
-                name, tensors, params, module_path)
+            tensors = self.instantiate_numeric_padding(node, tensors, params)
+            # get method by its name to instantiate a layer
+            func, params = object_from_params(params, self, 'instantiate_')
+            # instantiation
+            layer = func(node, tensors, params)
         return layer
 
-    def instantiate_numeric_padding(self, tensors, params):
+    def instantiate_numeric_padding(self, node, tensors, params):
         pad = params.get('padding')
         if pad is None or isinstance(pad, str):
             return tensors

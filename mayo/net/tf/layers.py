@@ -8,10 +8,10 @@ from mayo.net.tf.base import TFNetBase
 class Layers(TFNetBase):
     """ Create a TensorFlow graph from "config.model" model definition.  """
 
-    def instantiate_convolution(self, tensor, params):
+    def instantiate_convolution(self, node, tensor, params):
         return slim.conv2d(tensor, **params)
 
-    def instantiate_depthwise_convolution(self, tensor, params):
+    def instantiate_depthwise_convolution(self, node, tensor, params):
         multiplier = params.pop('depth_multiplier', 1)
         return slim.separable_conv2d(
             tensor, num_outputs=None, depth_multiplier=multiplier, **params)
@@ -34,37 +34,37 @@ class Layers(TFNetBase):
         # skip pooling with 1x1 kernel @ stride 1, which is a no-op
         return params['kernel_size'] in (1, [1, 1]) and params['stride'] == 1
 
-    def instantiate_average_pool(self, tensor, params):
+    def instantiate_average_pool(self, node, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
         if self._should_pool_nothing(params):
             return tensor
         return slim.avg_pool2d(tensor, **params)
 
-    def instantiate_max_pool(self, tensor, params):
+    def instantiate_max_pool(self, node, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
         if self._should_pool_nothing(params):
             return tensor
         return slim.max_pool2d(tensor, **params)
 
-    def instantiate_fully_connected(self, tensor, params):
+    def instantiate_fully_connected(self, node, tensor, params):
         return slim.fully_connected(tensor, **params)
 
-    def instantiate_softmax(self, tensor, params):
+    def instantiate_softmax(self, node, tensor, params):
         return slim.softmax(tensor, **params)
 
-    def instantiate_dropout(self, tensor, params):
+    def instantiate_dropout(self, node, tensor, params):
         params['is_training'] = self.is_training
         return slim.dropout(tensor, **params)
 
-    def instantiate_local_response_normalization(self, tensor, params):
+    def instantiate_local_response_normalization(self, node, tensor, params):
         return tf.nn.local_response_normalization(
             tensor, **use_name_not_scope(params))
 
-    def instantiate_squeeze(self, tensor, params):
+    def instantiate_squeeze(self, node, tensor, params):
         return tf.squeeze(tensor, **use_name_not_scope(params))
 
-    def instantiate_flatten(self, tensor, params):
+    def instantiate_flatten(self, node, tensor, params):
         return slim.flatten(tensor, **params)
 
-    def instantiate_concat(self, tensors, params):
+    def instantiate_concat(self, node, tensors, params):
         return tf.concat(tensors, **use_name_not_scope(params))

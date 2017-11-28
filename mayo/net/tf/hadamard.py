@@ -4,7 +4,7 @@ import tensorflow as tf
 
 
 class HadamardLayers(object):
-    def instantiate_hadamard(self, tensor, params):
+    def instantiate_hadamard(self, node, tensor, params):
         def fwht(value):
             if value.shape[-1] == 1:
                 return value

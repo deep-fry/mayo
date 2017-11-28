@@ -84,7 +84,7 @@ class GateLayers(object):
             session.register_update('gate loss', loss, formatter)
         self.register_update('mayo.gate.loss', loss, update_func)
 
-    def instantiate_gated_convolution(self, tensor, params):
+    def instantiate_gated_convolution(self, node, tensor, params):
         density = params.pop('density')
         # gating network
         gate_scope = '{}/gate'.format(params['scope'])
@@ -102,7 +102,7 @@ class GateLayers(object):
         # actual gating
         return output * gate
 
-    def instantiate_gate(self, tensor, params):
+    def instantiate_gate(self, node, tensor, params):
         gate_scope = '{}/gate'.format(params['scope'])
         subsample = self._gate_subsample(tensor, gate_scope)
         # TODO make threshold a variable
