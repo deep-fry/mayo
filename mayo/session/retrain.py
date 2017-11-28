@@ -108,6 +108,11 @@ class RetrainBase(Train):
                         o = chained_o
             if isinstance(o, Recentralizer):
                 if self._check_overrider_type(chained_o, info.type):
+                    # a temporary hack
+                    self.targeting_vars.append(getattr(
+                        o.mean_quantizer,
+                        info.target))
+                    self.associated_vars.append(o)
                     o = o.quantizer
             self.targeting_vars.append(getattr(o, info.target))
             self.associated_vars.append(o)

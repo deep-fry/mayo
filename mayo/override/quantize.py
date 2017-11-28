@@ -361,12 +361,14 @@ class Recentralizer(OverriderBase):
         }
         positives = util.cast(self.positives, float)
         negatives = util.cast(self.negatives, float)
+        non_zeros = util.cast(value != 0, float)
+
         positives_centralized = positives * (value - self.positives_mean)
-        negatives_centralized = negatives * (value - self.negatives_mean)
+        negatives_centralized = non_zeros * negatives * (value - self.negatives_mean)
         quantized = self._quantize(
             positives_centralized + negatives_centralized)
         value = positives * (quantized + self.positives_mean)
-        value += negatives * (quantized + self.negatives_mean)
+        value += non_zeros * negatives * (quantized + self.negatives_mean)
         return value
 
     def _update(self, session):
@@ -381,7 +383,8 @@ class Recentralizer(OverriderBase):
         self.positives = positives
         self.positives_mean = util.mean(value[util.where(positives)])
         negatives = util.logical_not(positives)
-        self.negatives_mean = util.mean(value[util.where(negatives)])
+        negatives_with_non_zeros = util.logical_and(negatives, value != 0)
+        self.negatives_mean = util.mean(value[util.where(negatives_with_non_zeros)])
 
     def _info(self, session):
         info = self.quantizer.info(session)._asdict()
