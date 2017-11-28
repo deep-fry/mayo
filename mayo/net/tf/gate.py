@@ -28,7 +28,7 @@ class GateLayers(object):
         }
         gate_input = tf.stop_gradient(tensor)
         # max pool is hardware-friendlier
-        return self.instantiate_max_pool(gate_input, pool_params)
+        return self.instantiate_max_pool(None, gate_input, pool_params)
 
     def _gate_network(self, tensor, params, scope):
         gate_input = self._gate_subsample(tensor, scope)
@@ -44,7 +44,7 @@ class GateLayers(object):
             #  'activation_fn': params.get('activation_fn', tf.nn.relu),
             'scope': scope,
         }
-        return self.instantiate_convolution(gate_input, fc_params)
+        return self.instantiate_convolution(None, gate_input, fc_params)
 
     def _gate_regularizer(self, conv_output, gate_output, density):
         """
@@ -57,7 +57,7 @@ class GateLayers(object):
             'padding': 'VALID',
             'kernel_size': [out_height, out_width],
         }
-        subsampled = self.instantiate_max_pool(conv_output, pool_params)
+        subsampled = self.instantiate_max_pool(None, conv_output, pool_params)
         # not training with the output as we train the predictor `gate`
         subsampled = tf.stop_gradient(subsampled)
         num_active = math.ceil(int(out_channels) * density)
@@ -92,7 +92,7 @@ class GateLayers(object):
         gate_scope = '{}/gate'.format(params['scope'])
         gate = self._gate_network(tensor, params, gate_scope)
         # convolution
-        output = self.instantiate_convolution(tensor, params)
+        output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
         self._gate_regularizer(output, gate, density)
         # thresholding
