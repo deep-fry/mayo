@@ -61,6 +61,8 @@ class Parameter(object):
         return kwargs
 
     def __get__(self, instance, owner):
+        if instance is None:
+            return self
         try:
             return instance._parameter_variables[self.name]
         except KeyError:
@@ -84,7 +86,6 @@ class OverriderBase(object):
     overridden result; `_update` updates states of tensorflow variables used in
     `_apply`.
     """
-
     def __init__(self, should_update=True):
         super().__init__()
         self._applied = False
@@ -99,24 +100,27 @@ class OverriderBase(object):
     @memoize_property
     def parameters(self):
         params = {}
-        for key in dir(self):
+        for key in dir(self.__class__):
             if key == 'parameters':
                 continue
-            value = getattr(self, key)
+            value = getattr(self.__class__, key)
             if isinstance(value, Parameter):
-                params[key] = value
+                params[value.name] = value
         return params
 
     def assign_parameters(self, session):
         for name, value in self._parameter_variables_assignment.items():
             if value is None:
                 continue
+            value_desc = str(value).split('\n')
+            multiline = len(value_desc) > 1
+            value_desc = value_desc[0] + ('...' if multiline else '')
             log.debug(
                 'Assigning overrider parameter: {}.{} = {}'
-                .format(self, name, value))
-            # FIXME could throw AttributeError if attribute name does not match
-            # variable name.
-            getattr(self, name)  # ensure variable is instantiated
+                .format(self, name, value_desc))
+            # ensure variable is instantiated
+            self.parameters[name].__get__(self, None)
+            # assignment
             var = self._parameter_variables[name]
             session.assign(var, value, raw_run=True)
             # add our variable to the list of initialized_variables
@@ -159,8 +163,8 @@ class OverriderBase(object):
         self._getter = self._tracking_getter(getter, scope)
         self.after = self._apply(value)
         # ensure instantiation of all parameter variables
-        for param in self.parameters:
-            getattr(self, param)
+        for param in self.parameters.values():
+            param.__get__(self, None)
         return self.after
 
     def _update(self, session):

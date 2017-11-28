@@ -315,6 +315,8 @@ class Recentralizer(OverriderBase):
 
     class QuantizedParameter(Parameter):
         def __get__(self, instance, owner):
+            if instance is None:
+                return self
             var = super().__get__(instance, owner)
             return instance._quantize(var)
 
