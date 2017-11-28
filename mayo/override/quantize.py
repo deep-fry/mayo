@@ -318,25 +318,41 @@ class Recentralizer(OverriderBase):
             if instance is None:
                 return self
             var = super().__get__(instance, owner)
-            return instance._quantize(var)
+            return instance._quantize(var, mean_quantizer=True)
 
     positives = Parameter('positives', None, None, tf.bool)
     positives_mean = QuantizedParameter('positives_mean', 1, [], tf.float32)
     negatives_mean = QuantizedParameter('negatives_mean', -1, [], tf.float32)
 
-    def __init__(self, quantizer=None, should_update=True):
+    def __init__(self, quantizer, mean_quantizer=None, should_update=True):
         super().__init__(should_update)
-        quantizer_cls, params = object_from_params(quantizer)
-        self.quantizer = quantizer_cls(**params)
+        cls, params = object_from_params(quantizer)
+        self.quantizer = cls(**params)
+        self.mean_quantizer = None
+        if mean_quantizer:
+            cls, params = object_from_params(mean_quantizer)
+            self.mean_quantizer = cls(**params)
 
     @memoize_property
     def negatives(self):
         return util.logical_not(self.positives)
 
-    def _quantize(self, value):
-        return self.quantizer.apply(self._scope, self._original_getter, value)
+    def assign_parameters(self, session):
+        super().assign_parameters(session)
+        self.quantizer.assign_parameters(session)
+        if self.mean_quantizer:
+            self.mean_quantizer.assign_parameters(session)
+
+    def _quantize(self, value, mean_quantizer=False):
+        quantizer = self.mean_quantizer if mean_quantizer else self.quantizer
+        quantizer = quantizer or self.quantizer
+        scope = '{}/{}'.format(self._scope, self.__class__.__name__)
+        if mean_quantizer and self.mean_quantizer:
+            scope = '{}/mean'.format(scope)
+        return quantizer.apply(scope, self._original_getter, value)
 
     def _apply(self, value):
+        # dynamic parameter configuration
         self._parameter_config = {
             'positives': {
                 'initial': tf.ones_initializer(tf.bool),
@@ -369,4 +385,8 @@ class Recentralizer(OverriderBase):
 
     def _info(self, session):
         info = self.quantizer.info(session)._asdict()
+        if self.mean_quantizer:
+            mean_info = self.mean_quantizer.info(session)
+            for key, value in mean_info._asdict().items():
+                info['mean_' + key] = value
         return self._info_tuple(**info)
