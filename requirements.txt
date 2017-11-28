@@ -1,9 +1,10 @@
 PyYAML
-tensorflow
 docopt
 ipdb
-ipython
-readline
-termcolor
-nose
 ipdbplugin
+ipython
+networkx
+nose
+readline
+tensorflow
+termcolor
