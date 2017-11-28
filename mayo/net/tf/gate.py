@@ -39,7 +39,9 @@ class GateLayers(object):
             'biases_initializer': tf.zeros_initializer(),
             'weights_initializer':
                 tf.truncated_normal_initializer(stddev=0.01),
-            'activation_fn': params.get('activation_fn', tf.nn.relu),
+            # not using activation as we use -1 and 1 as gate labels
+            'activation_fn': None,
+            #  'activation_fn': params.get('activation_fn', tf.nn.relu),
             'scope': scope,
         }
         return self.instantiate_convolution(gate_input, fc_params)
