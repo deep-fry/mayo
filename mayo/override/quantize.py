@@ -368,9 +368,7 @@ class Recentralizer(OverriderBase):
         non_zeros = util.cast(tf.not_equal(self.before, 0), float)
 
         positives_centralized = positives * (value - self.positives_mean)
-        self.positives_centralized = positives_centralized
         negatives_centralized = negatives * (value - self.negatives_mean)
-        self.negatives_centralized = negatives_centralized
         quantized = self._quantize(
             non_zeros * (positives_centralized + negatives_centralized))
         value = positives * (quantized + self.positives_mean)
@@ -383,7 +381,8 @@ class Recentralizer(OverriderBase):
         # update positives mask and mean values
         value = session.run(self.before)
         # divide them into two groups
-        mean = util.mean(value)
+        # mean = util.mean(value)
+        mean = 0.0
         # find two central points
         positives = value >= mean
         self.positives = positives
