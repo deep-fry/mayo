@@ -112,11 +112,15 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
     def __init__(self, width, overflow_rate, should_update=True):
         super().__init__(None, width, should_update=should_update)
         self.overflow_rate = overflow_rate
+        # self.sync_point = sync_point
 
     def _update_policy(self, tensor, session):
         raise NotImplementedError
 
     def _update(self, session):
+        # if sync_point:
+        #     self.point = session.assign(sync_point)
+        # else:
         self.point = self._update_policy(session.run(self.before), session)
 
 
@@ -361,10 +365,12 @@ class Recentralizer(OverriderBase):
         }
         positives = util.cast(self.positives, float)
         negatives = util.cast(self.negatives, float)
-        non_zeros = util.cast(self.before != 0, float)
+        non_zeros = util.cast(tf.not_equal(self.before, 0), float)
 
         positives_centralized = positives * (value - self.positives_mean)
+        self.positives_centralized = positives_centralized
         negatives_centralized = negatives * (value - self.negatives_mean)
+        self.negatives_centralized = negatives_centralized
         quantized = self._quantize(
             non_zeros * (positives_centralized + negatives_centralized))
         value = positives * (quantized + self.positives_mean)

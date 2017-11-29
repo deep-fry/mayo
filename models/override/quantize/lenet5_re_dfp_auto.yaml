@@ -5,11 +5,11 @@ model.layers:
         quantizer:
             type: mayo.override.DGQuantizer
             width: 10
-            overflow_rate: 0.001
+            overflow_rate: 0.05
         mean_quantizer:
             type: mayo.override.DGQuantizer
             width: 5
-            overflow_rate: 0.001
+            overflow_rate: 0.05
     conv0: &overrider
         weights_overrider:
           - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
