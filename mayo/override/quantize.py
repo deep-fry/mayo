@@ -361,12 +361,12 @@ class Recentralizer(OverriderBase):
         }
         positives = util.cast(self.positives, float)
         negatives = util.cast(self.negatives, float)
-        non_zeros = util.cast(value != 0, float)
+        non_zeros = util.cast(self.before != 0, float)
 
         positives_centralized = positives * (value - self.positives_mean)
-        negatives_centralized = non_zeros * negatives * (value - self.negatives_mean)
+        negatives_centralized = negatives * (value - self.negatives_mean)
         quantized = self._quantize(
-            positives_centralized + negatives_centralized)
+            non_zeros * (positives_centralized + negatives_centralized))
         value = positives * (quantized + self.positives_mean)
         value += non_zeros * negatives * (quantized + self.negatives_mean)
         return value
