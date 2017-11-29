@@ -118,9 +118,6 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
         raise NotImplementedError
 
     def _update(self, session):
-        # if sync_point:
-        #     self.point = session.assign(sync_point)
-        # else:
         self.point = self._update_policy(session.run(self.before), session)
 
 
@@ -186,9 +183,9 @@ class FloatingPointQuantizer(QuantizerBase):
     When both exponent_width and mantissa_width are 0, the quantized value can
     only represent $2^{-bias}$ or 0, which is not very useful.
     """
-    exponent_width = Parameter('exponent_width', 8, [], tf.int32)
-    exponent_bias = Parameter('exponent_bias', -127, [], tf.int32)
-    mantissa_width = Parameter('mantissa_width', 23, [], tf.int32)
+    exponent_width = Parameter('exponent_width', 8, [], tf.float32)
+    exponent_bias = Parameter('exponent_bias', -127, [], tf.float32)
+    mantissa_width = Parameter('mantissa_width', 23, [], tf.float32)
 
     def __init__(
             self, exponent_width, exponent_bias, mantissa_width,

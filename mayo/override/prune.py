@@ -91,3 +91,31 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         mask = util.logical_or(mask, on_mask)
         off_mask = util.abs(var) > self.off_factor * threshold
         return util.logical_and(mask, off_mask)
+
+class ChannelPruner(PrunerBase):
+    # TODO: finish channel pruner
+    alpha = Parameter('alpha', -2, [], tf.float32)
+
+    def __init__(self, alpha=None, should_update=True):
+        super().__init__(should_update)
+        self.alpha = alpha
+
+    def _threshold(self, tensor):
+        axes = len(tensor.get_shape())
+        assert axes == 4
+        mean, var = tf.nn.moments(util.abs(tensor), axes=[1, 2])
+        return mean + self.alpha * util.sqrt(var)
+
+    def _updated_mask(self, var, mask, session):
+        return util.abs(var) > self._threshold(var)
+
+    def _info(self, session):
+        _, mask, density, count = super()._info(session)
+        alpha = session.run(self.alpha)
+        return self._info_tuple(
+            mask=mask, alpha=alpha, density=density, count_=count)
+
+    @classmethod
+    def finalize_info(cls, table):
+        footer = super().finalize_info(table)
+        table.set_footer([None] + footer)
