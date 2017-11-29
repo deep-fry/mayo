@@ -371,7 +371,7 @@ class Recentralizer(OverriderBase):
         negatives_centralized = negatives * (value - self.negatives_mean)
         quantized = self._quantize(
             non_zeros * (positives_centralized + negatives_centralized))
-        value = positives * (quantized + self.positives_mean)
+        value = non_zeros * positives * (quantized + self.positives_mean)
         value += non_zeros * negatives * (quantized + self.negatives_mean)
         return value
 
