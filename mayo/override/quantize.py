@@ -183,31 +183,33 @@ class FloatingPointQuantizer(QuantizerBase):
     When both exponent_width and mantissa_width are 0, the quantized value can
     only represent $2^{-bias}$ or 0, which is not very useful.
     """
-    exponent_width = Parameter('exponent_width', 8, [], tf.float32)
+    width = Parameter('width', 32, [], tf.float32)
     exponent_bias = Parameter('exponent_bias', -127, [], tf.float32)
     mantissa_width = Parameter('mantissa_width', 23, [], tf.float32)
 
     def __init__(
-            self, exponent_width, exponent_bias, mantissa_width,
+            self, width, exponent_bias, mantissa_width,
             should_update=True):
         super().__init__(should_update)
-        self.exponent_width = exponent_width
+        self.exponent_width = width - mantissa_width
         self.exponent_bias = exponent_bias
         self.mantissa_width = mantissa_width
-        is_valid = exponent_width >= 0 and mantissa_width >= 0
-        is_valid = not (exponent_width == 0 and mantissa_width == 0)
+        is_valid = self.exponent_width >= 0 and mantissa_width >= 0
+        is_valid = not (self.exponent_width == 0 and mantissa_width == 0)
         if not is_valid:
             raise ValueError(
                 'We expect exponent_width >= 0 and mantissa_width >= 0 '
                 'where equalities must be exclusive.')
 
-    def _decompose(self, value):
+    def _decompose(self, value, exponent_bias=None):
         """
         Decompose a single-precision floating-point into
         sign, exponent and mantissa components.
         """
+        if exponent_bias is None:
+            exponent_bias = self.exponent_bias
         # smallest non-zero floating point
-        descriminator = (2 ** self.exponent_bias) / 2
+        descriminator = (2 ** exponent_bias) / 2
         sign = util.cast(value > descriminator, int)
         sign -= util.cast(value < -descriminator, int)
         value = util.abs(value)
@@ -215,12 +217,20 @@ class FloatingPointQuantizer(QuantizerBase):
         mantissa = value / (2 ** exponent)
         return sign, exponent, mantissa
 
-    def _transform(self, sign, exponent, mantissa):
+    def _transform(
+            self, sign, exponent, mantissa, exponent_width=None,
+            mantissa_width=None, exponent_bias=None):
+        if exponent_bias is None:
+            exponent_bias = self.exponent_bias
+        if exponent_width is None:
+            exponent_width = self.exponent_width
+        if mantissa_width is None:
+            mantissa_width = self.mantissa_width
         """ Clip exponent and quantize mantissa.  """
-        exponent_min = self.exponent_bias
-        exponent_max = exponent_min + 2 ** self.exponent_width - 1
+        exponent_min = exponent_bias
+        exponent_max = exponent_min + 2 ** exponent_width - 1
         exponent = util.clip_by_value(exponent, exponent_min, exponent_max)
-        shift = util.cast(2 ** self.mantissa_width, float)
+        shift = util.cast(2 ** mantissa_width, float)
         mantissa = util.round(mantissa * shift) / shift
         # if the mantissa value gets rounded to >= 2 then we need to divide it
         # by 2 and increment exponent by 1
@@ -244,9 +254,11 @@ class FloatingPointQuantizer(QuantizerBase):
         return util.where(
             tf.equal(sign, zeros), util.cast(zeros, float), value)
 
-    def _quantize(self, value):
-        sign, exponent, mantissa = self._decompose(value)
-        sign, exponent, mantissa = self._transform(sign, exponent, mantissa)
+    def _quantize(self, value, exponent_width=None, mantissa_width=None,
+            exponent_bias=None):
+        sign, exponent, mantissa = self._decompose(value, exponent_bias)
+        sign, exponent, mantissa = self._transform(sign, exponent, mantissa,
+            exponent_width, mantissa_width, exponent_bias)
         return self._represent(sign, exponent, mantissa)
 
     def _apply(self, value):
@@ -255,6 +267,33 @@ class FloatingPointQuantizer(QuantizerBase):
         assertion = tf.Assert(tf.equal(nan, 0), [nan])
         with tf.control_dependencies([assertion]):
             return value + tf.stop_gradient(quantized - value)
+
+    def compute_exp(self, session, value, exponent_width, mantissa_width,
+            overflow_rate):
+        '''
+        compute a exponent bound based on the overflow rate
+        '''
+        max_mantissa = 2 - 2 ** (- mantissa_width)
+        max_exponent = 2 ** exponent_width - 1
+        for exp in range(-1, max(int(max_exponent), 4)):
+            max_value = self._represent(1, exp, max_mantissa)
+            overflows = util.logical_or(value < -max_value, value > max_value)
+            if session.run(_overflow_rate(overflows)) <= overflow_rate:
+                return exp
+
+    def compute_quantization_loss(self, session, value, exponent_width,
+            mantissa_width, overflow_rate):
+        max_exponent = self.compute_exp(session, value, exponent_width,
+            mantissa_width, overflow_rate)
+        # obtain exponent bias based on the bound
+        # max_exponent = bias + exponent
+        exponent_bias = max_exponent - 2 ** exponent_width - 1
+        quantized = self._quantize(value, exponent_width, mantissa_width,
+            exponent_bias)
+        num_elements = tf.cast(tf.size(value), tf.float32)
+        # mean squared loss
+        loss = tf.reduce_sum(tf.pow(value - quantized, 2.0)) / num_elements
+        return (session.run(loss), exponent_bias)
 
 
 class ShiftQuantizer(FloatingPointQuantizer):

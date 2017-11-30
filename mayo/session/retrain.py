@@ -8,7 +8,7 @@ import operator
 from mayo.log import log
 from mayo.session.train import Train
 from mayo.override.base import OverriderBase, ChainOverrider
-from mayo.override.quantize import Recentralizer
+from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
 
 class Info(object):
     def __init__(self, meta_info, session, targeting_vars, associated_vars,
@@ -385,8 +385,45 @@ class GlobalRetrain(RetrainBase):
                     if o.name in av.name:
                         o.should_update = True
                         update_flag = True
+        if isinstance(self.associated_vars[0], FloatingPointQuantizer):
+            w = self.info.get(self.targeting_vars[0], 'threshold')
+            self.allocate_exp_mantissa(w)
         if update_flag:
             self.overriders_update()
+
+    def allocate_exp_mantissa(self, width, overflow_rate=0.01):
+        '''
+        Description:
+            a hack and a specialized method for floating point quantizer.
+        Problem:
+            floating point quantization has two searching parameters: exponent
+            width and mantissa width, each of them has a different impact on
+            accuracy.
+        Solution:
+            I proposed a before retraining loss check. Brute-froce search all
+            the possible combinations between exponents and mantissa, pick
+            the combination that has the least loss compared to full-precision
+            weights
+        '''
+        biases = losses = []
+        for mantissa_width in range(1, int(width)):
+            loss = 0
+            biases = []
+            exponent_width = width - mantissa_width
+            for av in self.associated_vars:
+                tmp, bias = av.compute_quantization_loss(self, av.before,
+                    exponent_width, mantissa_width, overflow_rate)
+                # accumulate loss
+                loss += tmp
+                # collect bias
+                biases.append(bias)
+            losses.append((loss, exponent_width, mantissa_width, biases))
+        # find smallest loss
+        _, exp_width, mantissa_width, biases = min(losses,
+            key=lambda meta: meta[0])
+        for i, av in enumerate(self.associated_vars):
+            self.assign(av.mantissa_width, mantissa_width)
+            av.exponent_bias = biases[i]
 
     def forward_policy(self, floor_epoch):
         self.save_checkpoint(
@@ -481,6 +518,9 @@ class GlobalRetrain(RetrainBase):
                 self.info.set(tv, 'scale', scale * factor)
             # use new scale
             self.variable_refresh(tv)
+        if isinstance(self.associated_vars[0], FloatingPointQuantizer):
+            w = self.info.get(self.targeting_vars[0], 'threshold')
+            self.allocate_exp_mantissa(w)
 
 
 class LayerwiseRetrain(RetrainBase):
