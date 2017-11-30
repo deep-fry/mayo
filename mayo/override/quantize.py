@@ -381,7 +381,7 @@ class Recentralizer(OverriderBase):
         # mean = util.mean(value)
         mean = 0.0
         # find two central points
-        positives = value >= mean
+        positives = value > mean
         self.positives = positives
         self.positives_mean = util.mean(value[util.where(positives)])
         negatives = util.logical_not(positives)
