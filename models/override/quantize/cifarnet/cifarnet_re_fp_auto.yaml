@@ -6,8 +6,7 @@ model.layers:
           - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
           - {type: mayo.override.Recentralizer, quantizer: {type: mayo.override.FixedPointQuantizer, width: 10, point: 1}}
         biases_overrider:
-          # - {type: mayo.override.Recentralizer, quantizer: {type: mayo.override.FixedPointQuantizer, width: 10, point: 1}}
-          - {type: mayo.override.FixedPointQuantizer, point: 1, width: 4}
+          - {type: mayo.override.FixedPointQuantizer, point: 1, width: 10}
     conv2: {<<: *overrider}
     fc3: {<<: *overrider}
     fc4: {<<: *overrider}
