@@ -1,82 +1,23 @@
 ---
-dataset:
-    background_class: {use: false}
-    preprocess:
-        shape:
-            height: 224
-            width: 224
-            channels: 3
-        validate:
-            - {type: central_crop, fraction: 0.875}
-        final_cpu: null
-        final_gpu:
-            - {type: normalize_channels}
+_import: ../../squeezenet_v11.yaml
 model:
-    name: squeezenet_v11_gate
+    name: squeezenet_v11
     layers:
-        _init: &init
-            biases_initializer:
-                type: tensorflow.constant_initializer
-                value: 0.01
-        _conv: &conv
+        _gated_conv: &gated_conv
             type: gated_convolution
-            padding: same
-            kernel_size: 1
-            stride: 1
             density: 0.5
-            # weight_initializer defaults to xavier
-            weights_regularizer:
-                type: tensorflow.contrib.layers.l2_regularizer
-                scale: 0.0005
-            <<: *init
-        _fc: &fc
-            type: fully_connected
-            weights_initializer:
-                type: tensorflow.truncated_normal_initializer
-                stddev: 0.09
-            <<: *init
         _fire: &fire
-            type: module
-            kwargs: {squeeze_depth: null, expand_depth: null}
             layers:
-                squeeze:
-                    <<: *conv
-                    num_outputs: ^squeeze_depth
-                expand1: &expand1
-                    <<: *conv
-                    num_outputs: ^expand_depth
-                expand3: {<<: *expand1, kernel_size: 3}
-                concat:
-                    type: concat
-                    axis: 3
-            graph:
-                - {from: input, with: squeeze, to: squeezed}
-                - {from: squeezed, with: expand1, to: expanded1}
-                - {from: squeezed, with: expand3, to: expanded3}
-                - {from: [expanded1, expanded3], with: concat, to: output}
-        conv1: {<<: *conv, kernel_size: 3, stride: 2, num_outputs: 64}
-        pool1: &pool
-            {type: max_pool, kernel_size: 3, stride: 2}
-        fire2: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
-        fire3: {<<: *fire, squeeze_depth: 16, expand_depth: 64}
-        pool3: {type: max_pool, kernel_size: 3, stride: 2}
-        fire4: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
-        fire5: {<<: *fire, squeeze_depth: 32, expand_depth: 128}
-        pool5: {type: max_pool, kernel_size: 3, stride: 2}
-        fire6: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
-        fire7: {<<: *fire, squeeze_depth: 48, expand_depth: 192}
-        fire8: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
-        fire9: {<<: *fire, squeeze_depth: 64, expand_depth: 256}
-        dropout9: &dropout {type: dropout, keep_prob: 0.5}
-        conv10: {<<: *conv, num_outputs: num_classes}
-        pool10: {type: average_pool, kernel_size: 13, stride: 1}
-        logits: {type: squeeze, axis: [1, 2]}
-    graph:
-        from: input
-        with:
-            [conv1, pool1,
-             fire2, fire3, pool3,
-             fire4, fire5, pool5,
-             fire6, fire7, fire8, fire9, dropout9,
-             conv10, pool10, logits]
-        to: output
+                squeeze: {<<: *gated_conv}
+                expand1: {<<: *gated_conv}
+                expand3: {<<: *gated_conv}
+        conv1: {<<: *gated_conv}
+        fire2: {<<: *fire}
+        fire3: {<<: *fire}
+        fire4: {<<: *fire}
+        fire5: {<<: *fire}
+        fire6: {<<: *fire}
+        fire7: {<<: *fire}
+        fire8: {<<: *fire}
+        fire9: {<<: *fire}
+        # conv10: {<<: *gated_conv}
