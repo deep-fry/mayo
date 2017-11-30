@@ -23,6 +23,11 @@ class QuantizerBase(OverriderBase):
     def _apply(self, value):
         return self._quantize(value)
 
+    def eval(self, session, attribute):
+        if util.is_tensor(attribute):
+            return session.run(attribute)
+        return attribute
+
 
 class ThresholdBinarizer(QuantizerBase):
     def __init__(self, threshold):
@@ -60,11 +65,6 @@ class FixedPointQuantizer(QuantizerBase):
                 raise ValueError(
                     'Width of quantized value must be greater than 0.')
             self.width = width
-
-    def eval(self, session, attribute):
-        if util.is_tensor(attribute):
-            return session.run(attribute)
-        return attribute
 
     def _quantize(
             self, value, point=None, width=None, compute_overflow_rate=False):
@@ -294,6 +294,13 @@ class FloatingPointQuantizer(QuantizerBase):
         # mean squared loss
         loss = tf.reduce_sum(tf.pow(value - quantized, 2.0)) / num_elements
         return (session.run(loss), exponent_bias)
+
+    def _info(self, session):
+        width = int(self.eval(session, self.width))
+        mantissa_width = int(self.eval(session, self.mantissa_width))
+        exponent_bias = int(self.eval(session, self.exponent_bias))
+        return self._info_tuple(width=width, mantissa_width=mantissa_width,
+                                exponent_bias=exponent_bias)
 
 
 class ShiftQuantizer(FloatingPointQuantizer):
