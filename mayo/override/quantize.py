@@ -191,11 +191,12 @@ class FloatingPointQuantizer(QuantizerBase):
             self, width, exponent_bias, mantissa_width,
             should_update=True):
         super().__init__(should_update)
-        self.exponent_width = width - mantissa_width
+        self.width = width
         self.exponent_bias = exponent_bias
         self.mantissa_width = mantissa_width
-        is_valid = self.exponent_width >= 0 and mantissa_width >= 0
-        is_valid = not (self.exponent_width == 0 and mantissa_width == 0)
+        exponent_width = width - mantissa_width
+        is_valid = exponent_width >= 0 and mantissa_width >= 0
+        is_valid = not (exponent_width == 0 and mantissa_width == 0)
         if not is_valid:
             raise ValueError(
                 'We expect exponent_width >= 0 and mantissa_width >= 0 '
@@ -223,7 +224,7 @@ class FloatingPointQuantizer(QuantizerBase):
         if exponent_bias is None:
             exponent_bias = self.exponent_bias
         if exponent_width is None:
-            exponent_width = self.exponent_width
+            exponent_width = self.width - self.mantissa_width
         if mantissa_width is None:
             mantissa_width = self.mantissa_width
         """ Clip exponent and quantize mantissa.  """
@@ -307,7 +308,7 @@ class ShiftQuantizer(FloatingPointQuantizer):
     def __init__(
             self, overflow_rate, width=None, bias=None, should_update=True):
         super().__init__(
-            exponent_width=width, exponent_bias=bias,
+            width=width, exponent_bias=bias,
             mantissa_width=0, should_update=should_update)
 
     def _quantize(self, value):
