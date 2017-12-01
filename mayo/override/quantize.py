@@ -196,7 +196,8 @@ class FloatingPointQuantizer(QuantizerBase):
         self.mantissa_width = mantissa_width
         exponent_width = width - mantissa_width
         is_valid = exponent_width >= 0 and mantissa_width >= 0
-        is_valid = not (exponent_width == 0 and mantissa_width == 0)
+        is_valid = is_valid and (not (exponent_width == 0 and
+            mantissa_width == 0))
         if not is_valid:
             raise ValueError(
                 'We expect exponent_width >= 0 and mantissa_width >= 0 '
