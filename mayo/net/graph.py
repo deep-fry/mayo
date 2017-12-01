@@ -1,7 +1,9 @@
+import re
 import copy
 import pprint
 import itertools
 import collections
+
 import networkx as nx
 
 from mayo.util import ensure_list, recursive_apply
@@ -13,20 +15,33 @@ def _replace_module_kwargs(params):
         key: params.get(key, default_value)
         for key, default_value in kwargs.items()}
 
-    def skip(value):
+    def replace_str(value):
+        regex = r'\^\(([_a-zA-Z][_a-zA-Z0-9\.]*)\)'
+        while True:
+            keys = re.findall(regex, value, re.MULTILINE)
+            if not keys:
+                break
+            for k in keys:
+                placeholder = '^({})'.format(k)
+                value = value.replace(placeholder, str(replace_map[k]))
+        try:
+            return int(value)
+        except ValueError:
+            return value
+
+    def skip_inner_module(value):
         if not isinstance(value, collections.Mapping):
             return None
         if value.get('type') != 'module':
             return None
         return value
 
-    def replace(value):
-        if value.startswith('^'):
-            return replace_map[value[1:]]
-        return value
+    def replace(params, key):
+        p = copy.deepcopy(params[key])
+        params[key] = recursive_apply(p, {str: replace_str}, skip_inner_module)
 
-    layers = copy.deepcopy(params['layers'])
-    params['layers'] = recursive_apply(layers, {str: replace}, skip)
+    replace(params, 'layers')
+    replace(params, 'graph')
     return params
 
 
@@ -177,7 +192,14 @@ class Graph(object):
                     raise EdgeError(
                         'Input name {!r} collides with output name {!r} '
                         'for layer {!r}.'.format(layer_name))
-                layer_params = params['layers'].get(layer_name)
+                layer_params = None
+                if layer_name is not None:
+                    try:
+                        layer_params = params['layers'][layer_name]
+                    except KeyError:
+                        raise KeyError(
+                            'Layer named {!r} is not defined.'
+                            .format(layer_name))
                 self._add_layer(
                     input_names, output_names,
                     layer_name, layer_params, submodule_path)
