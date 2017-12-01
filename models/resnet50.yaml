@@ -23,28 +23,25 @@ model:
             _regularizer: &regularizer
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.0001
-            activation_fn: tf.nn.relu
+            activation_fn: &activator tensorflow.nn.relu
             normalizer_fn: &normalizer
                 type: tensorflow.contrib.slim.batch_norm
                 scale: true
                 decay: 0.997
                 epsilon: 0.00001
-        _conv_same: &conv_same
-            <<: *conv
-            _kernel_effective: !arith $(.kernel_size) - 1
-            _pad_begin: !arith $(._kernel_effective) // 2
-            _pad_end: !arith $(._kernel_effective) - $(._pad_begin)
-            padding: !arith >
-                [[$(._pad_begin), $(._pad_end)]] * 2
-                if $(.stride) == 1 else 'VALID'
-        _bottleneck: &bottleneck
+        _bottleneck: &neck
             type: module
-            kwargs: {depth: null, stride: null, shortcut: null}
+            kwargs:
+                depth: null
+                neck_depth: null
+                stride: null
+                padding: null
+                shortcut: null
             layers:
                 norm: &norm
                     <<: *normalizer
-                    type: batch_norm
-                    activation_fn: tf.nn.relu
+                    type: batch_normalization
+                    activation_fn: *activator
                 conv_shortcut:
                     <<: *conv
                     kernel_size: 1
@@ -55,17 +52,18 @@ model:
                 pool_shortcut:
                     type: max_pool
                     kernel_size: 1
-                    stride: ^stride
+                    stride: ^(stride)
                 conv1: &bottleneck_conv1
                     <<: *conv
                     kernel_size: 1
                     stride: 1
-                    num_outputs: !arith ^(depth) / 4
+                    num_outputs: ^(neck_depth)
                 conv2:
-                    <<: *conv_same
+                    <<: *conv
                     kernel_size: 3
-                    stride: ^stride
-                    num_outputs: !arith ^(depth) / 4
+                    stride: ^(stride)
+                    padding: ^(padding)
+                    num_outputs: ^(neck_depth)
                 conv3:
                     <<: *bottleneck_conv1
                     num_outputs: ^(depth)
@@ -78,26 +76,30 @@ model:
                 - {from: preact, with: [conv1, conv2, conv3], to: residual}
                 - {from: [shortcut, residual], with: [add], to: output}
         # root block
-        conv1: {<<: *conv_same, kernel_size: 7, stride: 2, num_outputs: 64}
+        conv1:
+            {<<: *conv, kernel_size: 7, stride: 2, padding: 3, num_outputs: 64}
         pool1: {type: max_pool, kernel_size: 3, stride: 2}
-        block1_1: {<<: *bottleneck, shortcut: conv, depth: 256, stride: 1}
-        block1_2: {<<: *bottleneck, shortcut: pool, depth: 256, stride: 1}
-        block1_3: {<<: *bottleneck, shortcut: pool, depth: 256, stride: 2}
-        block2_1: {<<: *bottleneck, shortcut: conv, depth: 512, stride: 1}
-        block2_2: {<<: *bottleneck, shortcut: pool, depth: 512, stride: 1}
-        block2_3: {<<: *bottleneck, shortcut: pool, depth: 512, stride: 1}
-        block2_4: {<<: *bottleneck, shortcut: pool, depth: 512, stride: 2}
-        block3_1: {<<: *bottleneck, shortcut: conv, depth: 1024, stride: 1}
-        block3_2: {<<: *bottleneck, shortcut: pool, depth: 1024, stride: 1}
-        block3_3: {<<: *bottleneck, shortcut: pool, depth: 1024, stride: 1}
-        block3_4: {<<: *bottleneck, shortcut: pool, depth: 1024, stride: 1}
-        block3_5: {<<: *bottleneck, shortcut: pool, depth: 1024, stride: 1}
-        block3_6: {<<: *bottleneck, shortcut: pool, depth: 1024, stride: 2}
-        block4_1: {<<: *bottleneck, shortcut: conv, depth: 2048, stride: 1}
-        block4_2: {<<: *bottleneck, shortcut: pool, depth: 2048, stride: 1}
-        block4_3: {<<: *bottleneck, shortcut: pool, depth: 2048, stride: 2}
+        _start: &start {<<: *neck, shortcut: conv, stride: 1, padding: 1}
+        _mid: &mid {<<: *neck, shortcut: pool, stride: 1, padding: 1}
+        _end: &end {<<: *neck, shortcut: pool, stride: 2, padding: valid}
+        b11: {<<: *start, depth: 256, neck_depth: 64}
+        b12: {<<: *mid, depth: 256, neck_depth: 64}
+        b13: {<<: *end, depth: 256, neck_depth: 64}
+        b21: {<<: *start, depth: 512, neck_depth: 128}
+        b22: {<<: *mid, depth: 512, neck_depth: 128}
+        b23: {<<: *mid, depth: 512, neck_depth: 128}
+        b24: {<<: *end, depth: 512, neck_depth: 128}
+        b31: {<<: *start, depth: 1024, neck_depth: 256}
+        b32: {<<: *mid, depth: 1024, neck_depth: 256}
+        b33: {<<: *mid, depth: 1024, neck_depth: 256}
+        b34: {<<: *mid, depth: 1024, neck_depth: 256}
+        b35: {<<: *mid, depth: 1024, neck_depth: 256}
+        b36: {<<: *end, depth: 1024, neck_depth: 256}
+        b41: {<<: *start, depth: 2048, neck_depth: 512}
+        b42: {<<: *mid, depth: 2048, neck_depth: 512}
+        b43: {<<: *end, depth: 2048, neck_depth: 512}
         postnorm: {<<: *norm}
-        pool5: {type: average_pool, kernel_size: [7, 7]}
+        pool5: {type: average_pool, kernel_size: 7}
         logits:
             <<: *conv
             kernel_size: 1
@@ -108,9 +110,9 @@ model:
         from: input
         with: [
             conv1, pool1,
-            block1_1, block1_2, block1_3,
-            block2_1, block2_2, block2_3, block2_4,
-            block3_1, block3_2, block3_3, block3_4, block3_5, block3_6,
-            block4_1, block4_2, block4_3,
+            b11, b12, b13,
+            b21, b22, b23, b24,
+            b31, b32, b33, b34, b35, b36,
+            b41, b42, b43,
             postnorm, pool5, logits, squeeze]
         to: output
