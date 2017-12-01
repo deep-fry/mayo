@@ -60,6 +60,10 @@ class Layers(TFNetBase):
         return tf.nn.local_response_normalization(
             tensor, **use_name_not_scope(params))
 
+    def instantiate_batch_normalization(self, node, tensor, params):
+        params['is_training'] = self.is_training
+        return slim.batch_norm(tensor, **params)
+
     def instantiate_squeeze(self, node, tensor, params):
         return tf.squeeze(tensor, **use_name_not_scope(params))
 
@@ -68,3 +72,6 @@ class Layers(TFNetBase):
 
     def instantiate_concat(self, node, tensors, params):
         return tf.concat(tensors, **use_name_not_scope(params))
+
+    def instantiate_add(self, node, tensors, params):
+        return tf.add_n(tensors, name=params['scope'])

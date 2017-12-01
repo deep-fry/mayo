@@ -58,9 +58,12 @@ class ArithTag(YamlScalarTag):
         ast.Sub: operator.sub,
         ast.Mult: operator.mul,
         ast.Div: operator.truediv,
+        ast.FloorDiv: operator.floordiv,
         ast.Pow: operator.pow,
         ast.BitXor: operator.xor,
         ast.USub: operator.neg,
+        ast.Eq: operator.eq,
+        ast.NotEq: operator.ne,
     }
 
     def value(self):
@@ -81,6 +84,21 @@ class ArithTag(YamlScalarTag):
                 return __builtins__[n.id]
             except KeyError:
                 return __import__(n.id)
+        if isinstance(n, ast.Str):
+            return n.s
+        if isinstance(n, ast.Compare):
+            ops = n.ops
+            rhs = n.comparators
+            if len(ops) > 1 or len(rhs) > 1:
+                raise NotImplementedError(
+                    'We support only one comparator for now.')
+            op = self._eval_expr_map[type(ops.pop())]
+            return op(self._eval(n.left), rhs.pop())
+        if isinstance(n, ast.IfExp):
+            if self._eval(n.test):
+                return self._eval(n.body)
+            else:
+                return self._eval(n.orelse)
         if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
             raise TypeError('Unrecognized operator node {}'.format(n))
         op = self._eval_expr_map[type(n.op)]
@@ -160,37 +178,6 @@ class _DotDict(collections.MutableMapping):
     def merge(self, md):
         self._merge(self, md)
 
-    def _eval(self, value):
-        def eval_tag(value):
-            return value.__class__(self._eval(value.content)).value()
-
-        def eval_str(value):
-            regex = r'\$\(([_a-zA-Z][_a-zA-Z0-9\.]*)\)'
-            while True:
-                keys = re.findall(regex, value, re.MULTILINE)
-                if not keys:
-                    break
-                for k in keys:
-                    placeholder = '$({})'.format(k)
-                    try:
-                        v = str(self._root[k])
-                    except KeyError:
-                        raise KeyError(
-                            'Attempting to resolve a non-existent key-path '
-                            'with placeholder {!r}.'.format(placeholder))
-                    value = value.replace(placeholder, v)
-            return value
-
-        def skip_map(value):
-            if not isinstance(value, collections.Mapping):
-                return None
-            if not isinstance(value, _DotDict):
-                return _DotDict(value, self._root, False)
-            return value
-
-        funcs = {YamlScalarTag: eval_tag, str: eval_str}
-        return recursive_apply(value, funcs, skip_map)
-
     @staticmethod
     def _dot_path(dot_path_key, dictionary, setdefault=None):
         def type_error(keyable, key):
@@ -230,9 +217,43 @@ class _DotDict(collections.MutableMapping):
             type_error(keyable, final_key)
         return keyable, final_key
 
+    def _eval(self, value, parent):
+        def eval_tag(value):
+            return value.__class__(self._eval(value.content, parent)).value()
+
+        def eval_str(value):
+            regex = r'\$\((\.?[_a-zA-Z][_a-zA-Z0-9\.]*)\)'
+            while True:
+                keys = re.findall(regex, value, re.MULTILINE)
+                if not keys:
+                    break
+                for k in keys:
+                    placeholder = '$({})'.format(k)
+                    try:
+                        if k.startswith('.'):  # relative path
+                            v = str(parent[k[1:]])
+                        else:  # absolute path
+                            v = str(self._root[k])
+                    except KeyError:
+                        raise KeyError(
+                            'Attempting to resolve a non-existent key-path '
+                            'with placeholder {!r}.'.format(placeholder))
+                    value = value.replace(placeholder, v)
+            return value
+
+        def skip_map(value):
+            if not isinstance(value, collections.Mapping):
+                return None
+            if not isinstance(value, _DotDict):
+                return _DotDict(value, self._root, False)
+            return value
+
+        funcs = {YamlScalarTag: eval_tag, str: eval_str}
+        return recursive_apply(value, funcs, skip_map)
+
     def __getitem__(self, key):
         obj, key = self._dot_path(key, self._mapping)
-        return self._eval(obj[key])
+        return self._eval(obj[key], obj)
     __getattr__ = __getitem__
 
     def __setitem__(self, key, value):
