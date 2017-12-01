@@ -235,7 +235,7 @@ class FloatingPointQuantizer(QuantizerBase):
         mantissa = util.round(mantissa * shift) / shift
         # if the mantissa value gets rounded to >= 2 then we need to divide it
         # by 2 and increment exponent by 1
-        is_out_of_range = tf.greater_equal(mantissa, 2)
+        is_out_of_range = util.greater_equal(mantissa, 2)
         mantissa = util.where(is_out_of_range, mantissa / 2, mantissa)
         exponent = util.where(is_out_of_range, exponent + 1, exponent)
         return sign, exponent, mantissa
@@ -247,13 +247,14 @@ class FloatingPointQuantizer(QuantizerBase):
         """
         if util.is_constant(sign, exponent, mantissa):
             zeros = 0
+            return util.cast(sign, float) * (2.0 ** exponent) * mantissa
         elif util.is_numpy(sign, exponent, mantissa):
             zeros = np.zeros(sign.shape, dtype=np.int32)
         else:
             zeros = tf.zeros(sign.shape, dtype=tf.int32)
         value = util.cast(sign, float) * (2.0 ** exponent) * mantissa
         return util.where(
-            tf.equal(sign, zeros), util.cast(zeros, float), value)
+            util.equal(sign, zeros), util.cast(zeros, float), value)
 
     def _quantize(self, value, exponent_width=None, mantissa_width=None,
             exponent_bias=None):
@@ -269,7 +270,7 @@ class FloatingPointQuantizer(QuantizerBase):
         with tf.control_dependencies([assertion]):
             return value + tf.stop_gradient(quantized - value)
 
-    def compute_exp(self, session, value, exponent_width, mantissa_width,
+    def compute_exp(self, value, exponent_width, mantissa_width,
             overflow_rate):
         '''
         compute a exponent bound based on the overflow rate
@@ -279,22 +280,21 @@ class FloatingPointQuantizer(QuantizerBase):
         for exp in range(-1, max(int(max_exponent), 4)):
             max_value = self._represent(1, exp, max_mantissa)
             overflows = util.logical_or(value < -max_value, value > max_value)
-            if session.run(_overflow_rate(overflows)) <= overflow_rate:
+            if _overflow_rate(overflows) <= overflow_rate:
                 return exp
 
-    def compute_quantization_loss(self, session, value, exponent_width,
+    def compute_quantization_loss(self, value, exponent_width,
             mantissa_width, overflow_rate):
-        max_exponent = self.compute_exp(session, value, exponent_width,
+        max_exponent = self.compute_exp(value, exponent_width,
             mantissa_width, overflow_rate)
         # obtain exponent bias based on the bound
         # max_exponent = bias + exponent
         exponent_bias = max_exponent - 2 ** exponent_width - 1
         quantized = self._quantize(value, exponent_width, mantissa_width,
             exponent_bias)
-        num_elements = tf.cast(tf.size(value), tf.float32)
         # mean squared loss
-        loss = tf.reduce_sum(tf.pow(value - quantized, 2.0)) / num_elements
-        return (session.run(loss), exponent_bias)
+        loss = (value - quantized).mean()
+        return (loss, exponent_bias)
 
     def _info(self, session):
         width = int(self.eval(session, self.width))

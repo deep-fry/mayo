@@ -411,7 +411,7 @@ class GlobalRetrain(RetrainBase):
             biases = []
             exponent_width = width - mantissa_width
             for av in self.associated_vars:
-                tmp, bias = av.compute_quantization_loss(self, av.before,
+                tmp, bias = av.compute_quantization_loss(self.run(av.before),
                     exponent_width, mantissa_width, overflow_rate)
                 # accumulate loss
                 loss += tmp
@@ -424,6 +424,7 @@ class GlobalRetrain(RetrainBase):
         for i, av in enumerate(self.associated_vars):
             self.assign(av.mantissa_width, mantissa_width)
             av.exponent_bias = biases[i]
+        import pdb; pdb.set_trace()
 
     def forward_policy(self, floor_epoch):
         self.save_checkpoint(

@@ -96,6 +96,27 @@ def round(value):
         return tf.round(value)
 
 
+def equal(value1, value2):
+    if is_constant(value1):
+        return value1 == value2
+    if is_numpy(value1):
+        return value1 == value2
+    omap = {'Round': 'Identity'}
+    with tf.get_default_graph().gradient_override_map(omap):
+        return tf.equal(value1, value2)
+
+
+def greater_equal(value1, value2):
+    if is_constant(value1):
+        return value1 >= value2
+    if is_numpy(value1):
+        return value1 >= value2
+    omap = {'Round': 'Identity'}
+    with tf.get_default_graph().gradient_override_map(omap):
+        return tf.greater_equal(value1, value2)
+
+
+
 def abs(value):
     if is_constant(value):
         return abs(value)
