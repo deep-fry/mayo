@@ -424,7 +424,6 @@ class GlobalRetrain(RetrainBase):
         for i, av in enumerate(self.associated_vars):
             self.assign(av.mantissa_width, mantissa_width)
             av.exponent_bias = biases[i]
-        import pdb; pdb.set_trace()
 
     def forward_policy(self, floor_epoch):
         self.save_checkpoint(
