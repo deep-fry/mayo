@@ -112,7 +112,7 @@ class RetrainBase(Train):
                     self.targeting_vars.append(getattr(
                         o.mean_quantizer,
                         info.target))
-                    self.associated_vars.append(o)
+                    self.associated_vars.append(o.mean_quantizer)
                     o = o.quantizer
             self.targeting_vars.append(getattr(o, info.target))
             self.associated_vars.append(o)
@@ -388,6 +388,11 @@ class GlobalRetrain(RetrainBase):
         if isinstance(self.associated_vars[0], FloatingPointQuantizer):
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
+        if isinstance(self.associated_vars[0], Recentralizer) and \
+                isinstance(self.associated_vars[0].quantizer,
+                FloatingPointQuantizer):
+            w = self.info.get(self.targeting_vars[0], 'threshold')
+            self.allocate_exp_mantissa(w)
         if update_flag:
             self.overriders_update()
 
@@ -405,14 +410,23 @@ class GlobalRetrain(RetrainBase):
             the combination that has the least loss compared to full-precision
             weights
         '''
+        log.info("search to allocate exp and mantissa parts")
         biases = losses = []
         for mantissa_width in range(1, int(width)):
             loss = 0
             biases = []
             exponent_width = width - mantissa_width
             for av in self.associated_vars:
-                tmp, bias = av.compute_quantization_loss(self.run(av.before),
-                    exponent_width, mantissa_width, overflow_rate)
+                if isinstance(av, Recentralizer):
+                    av = av.mean_quantizer
+                    means = [av.positives_mean, av.negatives_mean]
+                    tmp, bias = av.compute_quantization_loss(
+                        self.run(means), exponent_width, mantissa_width,
+                        overflow_rate)
+                else:
+                    tmp, bias = av.compute_quantization_loss(
+                        self.run(av.before), exponent_width, mantissa_width,
+                        overflow_rate)
                 # accumulate loss
                 loss += tmp
                 # collect bias
@@ -422,6 +436,8 @@ class GlobalRetrain(RetrainBase):
         _, exp_width, mantissa_width, biases = min(losses,
             key=lambda meta: meta[0])
         for i, av in enumerate(self.associated_vars):
+            if isinstance(av, Recentralizer):
+                av = av.mean_quantizer
             self.assign(av.mantissa_width, mantissa_width)
             av.exponent_bias = biases[i]
 
