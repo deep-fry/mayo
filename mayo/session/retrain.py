@@ -112,7 +112,7 @@ class RetrainBase(Train):
                     self.targeting_vars.append(getattr(
                         o.mean_quantizer,
                         info.target))
-                    self.associated_vars.append(o.mean_quantizer)
+                    self.associated_vars.append(o)
                     o = o.quantizer
             self.targeting_vars.append(getattr(o, info.target))
             self.associated_vars.append(o)
@@ -418,11 +418,11 @@ class GlobalRetrain(RetrainBase):
             exponent_width = width - mantissa_width
             for av in self.associated_vars:
                 if isinstance(av, Recentralizer):
-                    av = av.mean_quantizer
                     means = [av.positives_mean, av.negatives_mean]
+                    av = av.mean_quantizer
                     tmp, bias = av.compute_quantization_loss(
-                        self.run(means), exponent_width, mantissa_width,
-                        overflow_rate)
+                        np.array(self.run(means)), exponent_width,
+                        mantissa_width, overflow_rate)
                 else:
                     tmp, bias = av.compute_quantization_loss(
                         self.run(av.before), exponent_width, mantissa_width,
