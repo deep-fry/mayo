@@ -277,7 +277,7 @@ class FloatingPointQuantizer(QuantizerBase):
         '''
         max_exponent = int(2 ** width)
         for exp in range(max(-max_exponent, -4), max(max_exponent, 4)):
-            max_value = 2 ** max_exponent
+            max_value = 2 ** exp
             overflows = util.logical_or(value < -max_value, value > max_value)
             if _overflow_rate(overflows) <= overflow_rate:
                 return exp
