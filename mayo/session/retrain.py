@@ -417,13 +417,7 @@ class GlobalRetrain(RetrainBase):
             biases = []
             exponent_width = width - mantissa_width
             for av in self.associated_vars:
-                if isinstance(av, Recentralizer):
-                    means = [av.positives_mean, av.negatives_mean]
-                    av = av.mean_quantizer
-                    tmp, bias = av.compute_quantization_loss(
-                        np.array(self.run(means)), exponent_width,
-                        mantissa_width, overflow_rate)
-                else:
+                if not isinstance(av, Recentralizer):
                     tmp, bias = av.compute_quantization_loss(
                         self.run(av.before), exponent_width, mantissa_width,
                         overflow_rate)
@@ -437,9 +431,17 @@ class GlobalRetrain(RetrainBase):
             key=lambda meta: meta[0])
         for i, av in enumerate(self.associated_vars):
             if isinstance(av, Recentralizer):
+                values = self.run(av.before)
+                positives = values > 0
+                negatives = values < 0
+                exp = av.mean_quantizer.compute_mean_exp(positives, negatives,
+                        width, overflow_rate)
                 av = av.mean_quantizer
-            self.assign(av.mantissa_width, mantissa_width)
-            av.exponent_bias = biases[i]
+                self.assign(av.mantissa_width, width - exp)
+                av.exponent_bias = 0
+            else:
+                self.assign(av.mantissa_width, mantissa_width)
+                av.exponent_bias = biases[i]
 
     def forward_policy(self, floor_epoch):
         self.save_checkpoint(

@@ -271,23 +271,29 @@ class FloatingPointQuantizer(QuantizerBase):
         with tf.control_dependencies([assertion]):
             return value + tf.stop_gradient(quantized - value)
 
-    def compute_exp(self, value, exponent_width, mantissa_width,
-            overflow_rate):
+    def compute_exp(self, value, width, overflow_rate):
         '''
         compute a exponent bound based on the overflow rate
         '''
-        max_mantissa = 2 - 2 ** (- mantissa_width)
-        max_exponent = 2 ** exponent_width - 1
-        for exp in range(-1, max(int(max_exponent), 4)):
-            max_value = self._represent(1, exp, max_mantissa)
+        max_exponent = int(2 ** width)
+        for exp in range(max(-max_exponent, -4), max(max_exponent, 4)):
+            max_value = 2 ** max_exponent
             overflows = util.logical_or(value < -max_value, value > max_value)
             if _overflow_rate(overflows) <= overflow_rate:
                 return exp
 
-    def compute_quantization_loss(self, value, exponent_width,
-            mantissa_width, overflow_rate):
+    def compute_mean_exp(self, pos_mean, neg_mean, width, overflow_rate):
+        max_exponent = int(2 ** width)
+        for exp in range(max(-max_exponent, -2), max(max_exponent, 4)):
+            max_value = 2 ** max_exponent
+            if neg_mean > -max_value and pos_mean < max_value:
+                break
+        return exp
+
+    def compute_quantization_loss(self, value, exponent_width, mantissa_width,
+                                  overflow_rate):
         max_exponent = self.compute_exp(value, exponent_width,
-            mantissa_width, overflow_rate)
+                                        overflow_rate)
         # obtain exponent bias based on the bound
         # max_exponent = bias + exponent
         exponent_bias = max_exponent - 2 ** exponent_width + 1
