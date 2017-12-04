@@ -77,7 +77,13 @@ model:
                 - {from: [shortcut, residual], with: [add], to: output}
         # root block
         conv1:
-            {<<: *conv, kernel_size: 7, stride: 2, padding: 3, num_outputs: 64}
+            <<: *conv
+            kernel_size: 7
+            stride: 2
+            padding: 3
+            num_outputs: 64
+            activation_fn: null
+            normalizer_fn: null
         pool1: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
         _start: &start {<<: *neck, shortcut: conv, stride: 1, padding: same}
         _mid: &mid {<<: *neck, shortcut: pool, stride: 1, padding: same}
