@@ -285,7 +285,7 @@ class FloatingPointQuantizer(QuantizerBase):
     def compute_mean_exp(self, pos_mean, neg_mean, width, overflow_rate):
         max_exponent = int(2 ** width)
         for exp in range(max(-max_exponent, -2), max(max_exponent, 4)):
-            max_value = 2 ** max_exponent
+            max_value = 2 ** exp
             if neg_mean > -max_value and pos_mean < max_value:
                 break
         return exp
@@ -317,12 +317,27 @@ class ShiftQuantizer(FloatingPointQuantizer):
         super().__init__(
             width=width, exponent_bias=bias,
             mantissa_width=0, should_update=should_update)
+        self.overflow_rate = overflow_rate
 
     def _quantize(self, value):
         sign, exponent, mantissa = self._decompose(value)
         sign, exponent, mantissa = self._transform(sign, exponent, mantissa)
         # mantissa == 1
         return self._represent(sign, exponent, 1)
+
+    def compute_exp(self, value, session):
+        width = session.run(self.width)
+        max_exponent = int(2 ** width)
+        for exp in range(max(-max_exponent, -2), max(max_exponent, 4)):
+            max_value = 2 ** exp
+            overflows = util.logical_or(value < -max_value, value > max_value)
+            if _overflow_rate(overflows) <= self.overflow_rate:
+                break
+
+    def _update(self, session):
+        log.info('finding a exp bias for shift quantizer using overflow rate')
+        max_exponent = self.compute_exp(session.run(self.before), session)
+        self.exponent_bias = max_exponent - session.run(self.width) + 1
 
 
 class LogQuantizer(QuantizerBase):

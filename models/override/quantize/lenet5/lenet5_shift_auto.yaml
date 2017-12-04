@@ -4,9 +4,9 @@ model.layers:
         weights_overrider:
             # comment this line out if it is an unpruned model
           - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
-          - {type: mayo.override.ShiftQuantizer, bias: -16, width: 4, overflow_rate: 0.01}
+          - {type: mayo.override.ShiftQuantizer, bias: -16, width: 8, overflow_rate: 0.01}
         biases_overrider:
-          - {type: mayo.override.ShiftQuantizer, bias: -16, width: 4, overflow_rate: 0.01}
+          - {type: mayo.override.ShiftQuantizer, bias: -16, width: 8, overflow_rate: 0.01}
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
     logits: {<<: *overrider}
