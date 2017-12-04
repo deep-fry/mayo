@@ -333,6 +333,7 @@ class ShiftQuantizer(FloatingPointQuantizer):
             overflows = util.logical_or(value < -max_value, value > max_value)
             if _overflow_rate(overflows) <= self.overflow_rate:
                 break
+        return exp
 
     def _update(self, session):
         log.info('finding a exp bias for shift quantizer using overflow rate')
