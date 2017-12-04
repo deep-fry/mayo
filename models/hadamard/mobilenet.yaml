@@ -40,15 +40,15 @@ model:
                 depthwise:
                     type: depthwise_separable_convolution
                     <<: *conv
-                    stride: ^stride
+                    stride: ^(stride)
                     depth_multiplier: 1
                     depthwise_regularizer:
                         type: tensorflow.contrib.layers.l2_regularizer
                         scale: 0.00004
                 hadamard:
                     type: hadamard
-                    num_outputs: ^num_outputs
-                    scales: True
+                    num_outputs: ^(num_outputs)
+                    variable_scales: true
             graph:
                 - {from: input, with: [depthwise, hadamard], to: output}
         _dsconv: &dsconv

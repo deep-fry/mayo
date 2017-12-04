@@ -9,9 +9,9 @@ from tensorflow.contrib import slim
 
 from mayo.config import Config
 from mayo.net.graph import Graph, TensorNode, LayerNode, JoinNode
-from mayo.net.util import ParameterTransformer
 from mayo.net.base import NetBase
 from mayo.net.tf import TFNet
+from mayo.net.tf.util import ParameterTransformer
 from mayo.override import FixedPointQuantizer
 
 
@@ -52,7 +52,7 @@ class TestGraph(TestCase):
                 'mod': {
                     'type': 'module',
                     'kwargs': {'value': 1},
-                    'layers': {'inner': {'type': 'pool', 'value': '^value'}},
+                    'layers': {'inner': {'type': 'pool', 'value': '^(value)'}},
                     'graph':
                         {'from': 'input', 'with': 'inner', 'to': 'output'},
                 }
@@ -65,7 +65,7 @@ class TestGraph(TestCase):
             TensorNode('output', []),
         )}
         paths = self._assert_graph_equal(Graph(model), expected_paths)
-        # assert ^value properly replaced
+        # assert ^(value) properly replaced
         self.assertEqual(paths[0][1].params['value'], 1)
 
     def test_convergence(self):
@@ -192,10 +192,10 @@ class TestTransformer(TestCase):
 
 class TestNetBase(TestCase):
     class Base(NetBase):
-        def instantiate_identity(self, tensor, params):
+        def instantiate_identity(self, node, tensor, params):
             return tensor
 
-        def instantiate_concat(self, tensors, params):
+        def instantiate_concat(self, node, tensors, params):
             return tf.concat(tensors, axis=-1)
 
     def test_propagation(self):
@@ -247,7 +247,7 @@ class TestNetBase(TestCase):
 
 class TestTFNet(TestCase):
     class Net(TFNet):
-        def instantiate_variable(self, tensor, params):
+        def instantiate_variable(self, node, tensor, params):
             with tf.variable_scope(params['scope']):
                 return tf.get_variable('var', [], tf.float32)
 

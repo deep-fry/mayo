@@ -1,6 +1,7 @@
 import collections
 
 
+from mayo.util import object_from_params
 from mayo.net.graph import Graph, LayerNode, SplitNode, JoinNode
 
 
@@ -73,5 +74,6 @@ class NetBase(object):
                 node, self._tensors[node], node.params)
 
     def _instantiate_layer(self, node, tensors, params):
-        raise NotImplementedError(
-            'Override this method to instantiate framework specific layer.')
+        func, params = object_from_params(params, self, 'instantiate_')
+        # instantiation
+        return func(node, tensors, params)

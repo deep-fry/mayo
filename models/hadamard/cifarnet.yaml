@@ -35,7 +35,7 @@ model:
                 depthwise:
                     type: depthwise_separable_convolution
                     <<: *conv
-                    stride: ^stride
+                    stride: ^(stride)
                     depth_multiplier: 1
                     depthwise_regularizer:
                         type: tensorflow.contrib.layers.l2_regularizer

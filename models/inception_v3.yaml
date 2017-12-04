@@ -61,7 +61,7 @@ model:
                 c2: {<<: *conv_same, kernel_size: 3, num_outputs: 96}
                 c3: {<<: *conv_same, kernel_size: 3, num_outputs: 96}
                 d1: {type: average_pool, kernel_size: 3, padding: same}
-                d2: {<<: *conv_same, kernel_size: 1, num_outputs: ^d_depth}
+                d2: {<<: *conv_same, kernel_size: 1, num_outputs: ^(d_depth)}
                 concat: &concat {type: concat, axis: 3}
             graph:
                 - {from: input, with: a1, to: a}
@@ -96,20 +96,21 @@ model:
             kwargs: {depth: 128, final_depth: 192}
             layers:
                 _in: &m6_conv
-                    {<<: *conv_same, kernel_size: 1, num_outputs: ^depth}
+                    {<<: *conv_same, kernel_size: 1, num_outputs: ^(depth)}
                 _c1x7: &c1x7 {<<: *m6_conv, kernel_size: [1, 7]}
                 _c7x1: &c7x1 {<<: *m6_conv, kernel_size: [7, 1]}
-                a1: {<<: *m6_conv, num_outputs: ^final_depth}
-                b1: {<<: *conv_same, kernel_size: 1, num_outputs: ^depth}
+                a1: {<<: *m6_conv, num_outputs: ^(final_depth)}
+                b1: {<<: *conv_same, kernel_size: 1, num_outputs: ^(depth)}
                 b2: *c1x7
-                b3: {<<: *c7x1, num_outputs: ^final_depth}
+                b3: {<<: *c7x1, num_outputs: ^(final_depth)}
                 c1: *m6_conv
                 c2: *c7x1
                 c3: *c1x7
                 c4: *c7x1
-                c5: {<<: *c1x7, num_outputs: ^final_depth}
+                c5: {<<: *c1x7, num_outputs: ^(final_depth)}
                 d1: {type: average_pool, kernel_size: 3, padding: same}
-                d2: {<<: *conv_same, kernel_size: 1, num_outputs: ^final_depth}
+                d2: {<<: *conv_same, kernel_size: 1,
+                     num_outputs: ^(final_depth)}
                 concat: *concat
             graph:
                 - {from: input, with: a1, to: a}

@@ -42,12 +42,12 @@ model:
                 depthwise:
                     <<: *conv
                     type: depthwise_convolution
-                    stride: ^stride
+                    stride: ^(stride)
                 pointwise:
                     <<: *conv
                     kernel_size: [1, 1]
                     stride: 1
-                    num_outputs: ^num_outputs
+                    num_outputs: ^(num_outputs)
                     weights_regularizer: *regularizer
             graph: {from: input, with: [depthwise, pointwise], to: output}
         conv0: {<<: *conv, num_outputs: 32}

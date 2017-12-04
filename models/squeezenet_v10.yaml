@@ -50,10 +50,10 @@ model:
             layers:
                 squeeze:
                     <<: *conv
-                    num_outputs: ^squeeze_depth
+                    num_outputs: ^(squeeze_depth)
                 expand1: &expand1
                     <<: *conv
-                    num_outputs: ^expand_depth
+                    num_outputs: ^(expand_depth)
                 expand3: {<<: *expand1, kernel_size: 3}
                 concat:
                     type: concat
