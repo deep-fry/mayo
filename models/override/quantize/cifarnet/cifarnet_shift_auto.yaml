@@ -1,0 +1,12 @@
+---
+model.layers:
+    conv1: &overrider
+        weights_overrider:
+            - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
+            - {type: mayo.override.ShiftQuantizer, width: 16, bias: -16, width: 8, overflow_rate: 0.01}
+        biases_overrider:
+            - {type: mayo.override.ShiftQuantizer, width: 16, bias: -16, width: 8, overflow_rate: 0.01}
+    conv2: {<<: *overrider}
+    fc3: {<<: *overrider}
+    fc4: {<<: *overrider}
+    logits: {<<: *overrider}
