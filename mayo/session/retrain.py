@@ -393,7 +393,7 @@ class GlobalRetrain(RetrainBase):
         if check_floating_point:
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
-        if isinstance(self.associated_vars[0], Recentralizer) and
+        if isinstance(self.associated_vars[0], Recentralizer) and \
             check_floating_point:
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
