@@ -78,10 +78,10 @@ model:
         # root block
         conv1:
             {<<: *conv, kernel_size: 7, stride: 2, padding: 3, num_outputs: 64}
-        pool1: {type: max_pool, kernel_size: 3, stride: 2}
-        _start: &start {<<: *neck, shortcut: conv, stride: 1, padding: 1}
-        _mid: &mid {<<: *neck, shortcut: pool, stride: 1, padding: 1}
-        _end: &end {<<: *neck, shortcut: pool, stride: 2, padding: valid}
+        pool1: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
+        _start: &start {<<: *neck, shortcut: conv, stride: 1, padding: same}
+        _mid: &mid {<<: *neck, shortcut: pool, stride: 1, padding: same}
+        _end: &end {<<: *neck, shortcut: pool, stride: 2, padding: 1}
         b11: {<<: *start, depth: 256, neck_depth: 64}
         b12: {<<: *mid, depth: 256, neck_depth: 64}
         b13: {<<: *end, depth: 256, neck_depth: 64}
@@ -97,12 +97,14 @@ model:
         b36: {<<: *end, depth: 1024, neck_depth: 256}
         b41: {<<: *start, depth: 2048, neck_depth: 512}
         b42: {<<: *mid, depth: 2048, neck_depth: 512}
-        b43: {<<: *end, depth: 2048, neck_depth: 512}
+        # last bottleneck has stride=1
+        b43: {<<: *mid, depth: 2048, neck_depth: 512}
         postnorm: {<<: *norm}
         pool5: {type: average_pool, kernel_size: 7}
         logits:
             <<: *conv
             kernel_size: 1
+            num_outputs: num_classes
             activation_fn: null
             normalizer_fn: null
         squeeze: {type: squeeze, axis: [1, 2]}
