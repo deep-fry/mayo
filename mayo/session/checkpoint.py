@@ -118,6 +118,17 @@ class CheckpointHandler(object):
                 log.warn(msg)
                 continue
             restore_vars.append(v)
+        # variable not restored
+        not_restore_vars = []
+        restore_var_names = [v.name.split(':')[0] for v in restore_vars]
+        for v in var_shape_map:
+            if v not in restore_var_names:
+                not_restore_vars.append(v)
+        if not_restore_vars:
+            log.debug(
+                'Variables in checkpoint but not restored:\n    {}'
+                .format('\n    '.join(not_restore_vars)))
+        # variables missing
         if missing_vars:
             log.warn(
                 'Variables missing in checkpoint:\n    {}'
