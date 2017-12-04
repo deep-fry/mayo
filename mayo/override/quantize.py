@@ -292,8 +292,7 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def compute_quantization_loss(self, value, exponent_width, mantissa_width,
                                   overflow_rate):
-        max_exponent = self.compute_exp(value, exponent_width,
-                                        overflow_rate)
+        max_exponent = self.compute_exp(value, exponent_width, overflow_rate)
         # obtain exponent bias based on the bound
         # max_exponent = bias + exponent
         exponent_bias = max_exponent - 2 ** exponent_width + 1
@@ -338,7 +337,7 @@ class ShiftQuantizer(FloatingPointQuantizer):
     def _update(self, session):
         log.info('finding a exp bias for shift quantizer using overflow rate')
         max_exponent = self.compute_exp(session.run(self.before), session)
-        self.exponent_bias = max_exponent - session.run(self.width) + 1
+        self.exponent_bias = max_exponent - 2 ** session.run(self.width) + 1
 
 
 class LogQuantizer(QuantizerBase):

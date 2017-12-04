@@ -9,6 +9,8 @@ from mayo.log import log
 from mayo.session.train import Train
 from mayo.override.base import OverriderBase, ChainOverrider
 from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
+from mayo.override.quantize import ShiftQuantizer
+
 
 class Info(object):
     def __init__(self, meta_info, session, targeting_vars, associated_vars,
@@ -385,12 +387,14 @@ class GlobalRetrain(RetrainBase):
                     if o.name in av.name:
                         o.should_update = True
                         update_flag = True
-        if isinstance(self.associated_vars[0], FloatingPointQuantizer):
+        check_floating_point = isinstance(self.associated_vars[0],
+            FloatingPointQuantizer) and not isinstance(self.associated_vars[0],
+            ShiftQuantizer)
+        if check_floating_point:
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
-        if isinstance(self.associated_vars[0], Recentralizer) and \
-                isinstance(self.associated_vars[0].quantizer,
-                FloatingPointQuantizer):
+        if isinstance(self.associated_vars[0], Recentralizer) and
+            check_floating_point:
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
         if update_flag:
