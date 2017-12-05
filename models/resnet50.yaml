@@ -6,7 +6,7 @@ dataset:
             height: 299
             width: 299
             channels: 3
-        validate: null
+        validate: {type: central_crop, fraction: 0.875}
         final_cpu:
             - {type: resize, fill: false}
             - {type: linear_map, scale: 2.0, shift: -1.0}
@@ -18,9 +18,9 @@ model:
     layers:
         _conv: &conv
             type: convolution
-            _initializer: &initializer
+            weights_initializer: &initializer
                 type: tensorflow.variance_scaling_initializer
-            _regularizer: &regularizer
+            weights_regularizer: &regularizer
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.0001
             activation_fn: &activator tensorflow.nn.relu
@@ -74,7 +74,7 @@ model:
                 - {from: input, with: norm, to: preact}
                 - {from: preact, with: ^(shortcut)_shortcut, to: shortcut}
                 - {from: preact, with: [conv1, conv2, conv3], to: residual}
-                - {from: [shortcut, residual], with: [add], to: output}
+                - {from: [shortcut, residual], with: add, to: output}
         # root block
         conv1:
             <<: *conv
