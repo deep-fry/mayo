@@ -389,12 +389,10 @@ class GlobalRetrain(RetrainBase):
                         o.should_update = True
                         update_flag = True
         tmp = self.associated_vars[0]
+        # check if it is and only is floating point
         check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
             and not self._check_cls(tmp, ShiftQuantizer)
         if check_floating_point:
-            w = self.info.get(tmp, 'threshold')
-            self.allocate_exp_mantissa(w)
-        if isinstance(tmp, Recentralizer) and check_floating_point:
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
         if self._check_cls(tmp, ShiftQuantizer) and \
@@ -565,7 +563,10 @@ class GlobalRetrain(RetrainBase):
                 self.info.set(tv, 'scale', scale * factor)
             # use new scale
             self.variable_refresh(tv)
-        if isinstance(self.associated_vars[0], FloatingPointQuantizer):
+        tmp = self.associated_vars[0]
+        check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
+            and not self._check_cls(tmp, ShiftQuantizer)
+        if check_floating_point:
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
 

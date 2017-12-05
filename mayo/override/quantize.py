@@ -284,7 +284,7 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def compute_mean_exp(self, pos_mean, neg_mean, width, overflow_rate):
         max_exponent = int(2 ** width)
-        for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
+        for exp in range(max(-max_exponent, -10), max(max_exponent, 4)):
             max_value = 2 ** exp
             if neg_mean > -max_value and pos_mean < max_value:
                 break
