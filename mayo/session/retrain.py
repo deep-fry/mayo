@@ -388,18 +388,30 @@ class GlobalRetrain(RetrainBase):
                     if o.name in av.name:
                         o.should_update = True
                         update_flag = True
-        check_floating_point = isinstance(self.associated_vars[0],
-            FloatingPointQuantizer) and not isinstance(self.associated_vars[0],
-            ShiftQuantizer)
+        tmp = self.associated_vars[0]
+        check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
+            and not isinstance(tmp, ShiftQuantizer)
         if check_floating_point:
+            w = self.info.get(tmp, 'threshold')
+            self.allocate_exp_mantissa(w)
+        if isinstance(tmp, Recentralizer) and check_floating_point:
             w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
-        if isinstance(self.associated_vars[0], Recentralizer) and \
-            check_floating_point:
-            w = self.info.get(self.targeting_vars[0], 'threshold')
-            self.allocate_exp_mantissa(w)
+        if self._check_cls(tmp, ShiftQuantizer) and \
+            isinstance(tmp, Recentralizer):
+            for av in self.associated_vars:
+                av_before = self.run(av.before)
+                self._update_mean_quantizer(av_before, av, w)
         if update_flag:
             self.overriders_update()
+
+    def _check_cls(av, cls):
+        if isinstance(av, cls):
+            return True
+        if isinstance(av, Recentralizer):
+            if isinstance(av.mean_quantizer, cls):
+                return True
+        return False
 
     def allocate_exp_mantissa(self, width, overflow_rate=0.01):
         '''
@@ -439,18 +451,23 @@ class GlobalRetrain(RetrainBase):
             if isinstance(av, Recentralizer):
                 if isinstance(av.mean_quantizer, FloatingPointQuantizer):
                     values = self.run(av.before)
-                    positives = np.mean(values > 0)
-                    negatives = np.mean(values < 0)
-                    exp = av.mean_quantizer.compute_mean_exp(positives,
-                            negatives, width, overflow_rate)
-                    av = av.mean_quantizer
-                    if not isinstance(av, ShiftQuantizer):
-                        self.assign(av.mantissa_width, width - 1)
-                    self.assign(av.exponent_bias, exp)
+                    self._update_mean_quantizer(values, av, width,
+                        overflow_rate)
             else:
                 self.assign(av.mantissa_width, mantissa_width)
                 av.exponent_bias = biases[index]
                 index += 1
+
+    def _update_mean_quantizer(self, values, av, width, overflow_rate=0.01):
+        positives = np.mean(values > 0)
+        negatives = np.mean(values < 0)
+        exp = av.mean_quantizer.compute_mean_exp(positives,
+                negatives, width, overflow_rate)
+        av = av.mean_quantizer
+        # shift quantizer has mantissa zero
+        if not isinstance(av, ShiftQuantizer):
+            self.assign(av.mantissa_width, width - 1)
+        self.assign(av.exponent_bias, exp)
 
     def forward_policy(self, floor_epoch):
         self.save_checkpoint(
