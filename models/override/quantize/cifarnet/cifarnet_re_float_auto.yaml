@@ -4,20 +4,20 @@ model.layers:
         type: mayo.override.Recentralizer
         quantizer:
             type: mayo.override.FloatingPointQuantizer
-            width: 16
-            exponent_bias: -3
-            mantissa_width: 14
+            width: 10
+            exponent_bias: -5
+            mantissa_width: 7
         mean_quantizer:
             type: mayo.override.FloatingPointQuantizer
-            width: 16
-            exponent_bias: -3
-            mantissa_width: 14
+            width: 10
+            exponent_bias: -5
+            mantissa_width: 7
     conv1: &overrider
         weights_overrider:
           - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
           - *recentralizer
         biases_overrider:
-          - {type: mayo.override.FloatingPointQuantizer, width: 16, exponent_bias: -3, mantissa_width: 14}
+          - {type: mayo.override.FloatingPointQuantizer, width: 10, exponent_bias: -5, mantissa_width: 7}
     conv2: {<<: *overrider}
     fc3: {<<: *overrider}
     fc4: {<<: *overrider}

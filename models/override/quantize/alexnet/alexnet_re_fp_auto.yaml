@@ -1,0 +1,25 @@
+---
+model.layers:
+    _recentralizer: &recentralizer
+        type: mayo.override.Recentralizer
+        quantizer:
+            type: mayo.override.FixedPointQuantizer
+            width: 16
+            point: 2
+        mean_quantizer:
+            type: mayo.override.FixedPointQuantizer
+            width: 16
+            point: 2
+    conv1: &overrider
+        weights_overrider:
+          - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
+          - *recentralizer
+        biases_overrider:
+          - {type: mayo.override.FixedPointQuantizer, point: 2, width: 16}
+    conv2: {<<: *overrider}
+    conv3: {<<: *overrider}
+    conv4: {<<: *overrider}
+    conv5: {<<: *overrider}
+    fc6: {<<: *overrider}
+    fc7: {<<: *overrider}
+    logits: {<<: *overrider}
