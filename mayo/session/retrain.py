@@ -390,7 +390,7 @@ class GlobalRetrain(RetrainBase):
                         update_flag = True
         tmp = self.associated_vars[0]
         check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
-            and not isinstance(tmp, ShiftQuantizer)
+            and not self._check_cls(tmp, ShiftQuantizer)
         if check_floating_point:
             w = self.info.get(tmp, 'threshold')
             self.allocate_exp_mantissa(w)
@@ -399,13 +399,15 @@ class GlobalRetrain(RetrainBase):
             self.allocate_exp_mantissa(w)
         if self._check_cls(tmp, ShiftQuantizer) and \
             isinstance(tmp, Recentralizer):
+            w = self.info.get(self.targeting_vars[0], 'threshold')
             for av in self.associated_vars:
-                av_before = self.run(av.before)
-                self._update_mean_quantizer(av_before, av, w)
+                if isinstance(av, Recentralizer):
+                    av_before = self.run(av.before)
+                    self._update_mean_quantizer(av_before, av, w)
         if update_flag:
             self.overriders_update()
 
-    def _check_cls(av, cls):
+    def _check_cls(self, av, cls):
         if isinstance(av, cls):
             return True
         if isinstance(av, Recentralizer):
@@ -455,7 +457,8 @@ class GlobalRetrain(RetrainBase):
                         overflow_rate)
             else:
                 self.assign(av.mantissa_width, mantissa_width)
-                av.exponent_bias = biases[index]
+                self.assign(av.exponent_bias, biases[index])
+                # av.exponent_bias = biases[index]
                 index += 1
 
     def _update_mean_quantizer(self, values, av, width, overflow_rate=0.01):
