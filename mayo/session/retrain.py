@@ -164,6 +164,7 @@ class RetrainBase(Train):
         # init all overriders
         for variable in self.targeting_vars:
             self.variable_init(variable)
+        self.overriders_update()
 
     def once(self):
         train_op = self._train_op
