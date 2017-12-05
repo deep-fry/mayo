@@ -437,14 +437,16 @@ class GlobalRetrain(RetrainBase):
         index = 0
         for av in self.associated_vars:
             if isinstance(av, Recentralizer):
-                values = self.run(av.before)
-                positives = np.mean(values > 0)
-                negatives = np.mean(values < 0)
-                exp = av.mean_quantizer.compute_mean_exp(positives, negatives,
-                        width, overflow_rate)
-                av = av.mean_quantizer
-                self.assign(av.mantissa_width, width - 1)
-                av.exponent_bias = exp
+                if isinstance(av.mean_quantizer, FloatingPointQuantizer):
+                    values = self.run(av.before)
+                    positives = np.mean(values > 0)
+                    negatives = np.mean(values < 0)
+                    exp = av.mean_quantizer.compute_mean_exp(positives,
+                            negatives, width, overflow_rate)
+                    av = av.mean_quantizer
+                    if not isinstance(av, ShiftQuantizer):
+                        self.assign(av.mantissa_width, width - 1)
+                    self.assign(av.exponent_bias, exp)
             else:
                 self.assign(av.mantissa_width, mantissa_width)
                 av.exponent_bias = biases[index]
