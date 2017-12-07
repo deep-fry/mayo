@@ -108,6 +108,10 @@ class RetrainBase(Train):
                 for chained_o in o:
                     if self._check_overrider_type(chained_o, info.type):
                         o = chained_o
+                        break
+                    if self._check_overrider_type(chained_o, Recentralizer):
+                        o = chained_o
+                        break
             if isinstance(o, Recentralizer):
                 if self._check_overrider_type(chained_o, info.type):
                     # a temporary hack
