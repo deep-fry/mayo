@@ -1,0 +1,14 @@
+---
+_import: ../../alexnet.yaml
+model:
+    description: |
+        A variant of alexnet that performs online gating.
+    layers:
+        _gated_conv: &gated_conv
+            type: gated_convolution
+            density: 0.5
+        conv1: {<<: *gated_conv}
+        conv2: {<<: *gated_conv}
+        conv3: {<<: *gated_conv}
+        conv4: {<<: *gated_conv}
+        conv5: {<<: *gated_conv}
