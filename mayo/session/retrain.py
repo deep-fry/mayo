@@ -106,20 +106,19 @@ class RetrainBase(Train):
             # handel chained overrider
             if isinstance(o, ChainOverrider):
                 for chained_o in o:
+                    print(chained_o)
                     if self._check_overrider_type(chained_o, info.type):
                         o = chained_o
                         break
-                    if self._check_overrider_type(chained_o, Recentralizer):
-                        o = chained_o
-                        break
-            if isinstance(o, Recentralizer):
-                if self._check_overrider_type(chained_o, info.type):
-                    # a temporary hack
-                    self.targeting_vars.append(getattr(
-                        o.mean_quantizer,
-                        info.target))
-                    self.associated_vars.append(o)
-                    o = o.quantizer
+                    if isinstance(chained_o, Recentralizer):
+                        if self._check_overrider_type(chained_o.quantizer,
+                                                      info.type):
+                            # a temporary hack
+                            self.targeting_vars.append(getattr(
+                                chained_o.mean_quantizer,
+                                info.target))
+                            self.associated_vars.append(chained_o)
+                            o = chained_o.quantizer
             self.targeting_vars.append(getattr(o, info.target))
             self.associated_vars.append(o)
 
