@@ -109,7 +109,6 @@ class RetrainBase(Train):
                     print(chained_o)
                     if self._check_overrider_type(chained_o, info.type):
                         o = chained_o
-                        break
                     if isinstance(chained_o, Recentralizer):
                         if self._check_overrider_type(chained_o.quantizer,
                                                       info.type):
@@ -255,16 +254,6 @@ class RetrainBase(Train):
             log.debug('key is {} cont is {}'.format(key, self.cont[key]))
             if self.cont[key]:
                 self.priority_list.append(key)
-        log.debug('display layerwise metric')
-        log.debug('{}'.format(d))
-        log.debug('display thresholds')
-        log.debug('{}'.format(thresholds))
-        log.debug('display scales')
-        log.debug('{}'.format(scales))
-        log.debug('display priority list info')
-        log.debug('{}'.format(self.priority_list))
-        log.debug('stored checkpoint')
-        log.debug('{}'.format(self.best_ckpt))
         if self.priority_list == []:
             log.debug('list is empty!!')
         else:
@@ -416,7 +405,7 @@ class GlobalRetrain(RetrainBase):
                 return True
         return False
 
-    def allocate_exp_mantissa(self, width, overflow_rate=0.01):
+    def allocate_exp_mantissa(self, width, overflow_rate=0.0):
         '''
         Description:
             a hack and a specialized method for floating point quantizer.

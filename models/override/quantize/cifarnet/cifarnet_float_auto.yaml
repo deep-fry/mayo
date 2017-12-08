@@ -3,9 +3,9 @@ model.layers:
     conv1: &overrider
         weights_overrider:
             - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
-            - {type: mayo.override.FloatingPointQuantizer, width: 16, exponent_bias: -3, mantissa_width: 14}
+            - {type: mayo.override.FloatingPointQuantizer, width: 16, exponent_bias: -5, mantissa_width: 14}
         biases_overrider:
-            - {type: mayo.override.FloatingPointQuantizer, width: 16, exponent_bias: -3, mantissa_width: 14}
+            - {type: mayo.override.FloatingPointQuantizer, width: 16, exponent_bias: -5, mantissa_width: 14}
     conv2: {<<: *overrider}
     fc3: {<<: *overrider}
     fc4: {<<: *overrider}
