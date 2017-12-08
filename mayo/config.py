@@ -173,6 +173,7 @@ class _DotDict(collections.MutableMapping):
             if d_map and md_map:
                 cls._merge(d_k, md_k)
             else:
+                print(k, md_k)
                 d[k] = md_k
 
     def merge(self, md):
@@ -231,14 +232,22 @@ class _DotDict(collections.MutableMapping):
                     placeholder = '$({})'.format(k)
                     try:
                         if k.startswith('.'):  # relative path
-                            v = str(parent[k[1:]])
+                            v = parent[k[1:]]
                         else:  # absolute path
-                            v = str(self._root[k])
+                            v = self._root[k]
                     except KeyError:
                         raise KeyError(
                             'Attempting to resolve a non-existent key-path '
                             'with placeholder {!r}.'.format(placeholder))
-                    value = value.replace(placeholder, v)
+                    if isinstance(v, collections.Mapping):
+                        if value.replace(placeholder, ''):
+                            raise ValueError(
+                                'Do not know how to replace {!r} where {!r} '
+                                'accesses a mapping.'
+                                .format(value, placeholder))
+                        return v
+                    else:
+                        value = value.replace(placeholder, str(v))
             return value
 
         def skip_map(value):
