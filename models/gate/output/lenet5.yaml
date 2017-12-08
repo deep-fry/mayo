@@ -6,5 +6,6 @@ model:
             type: gated_convolution
             density: 0.5
             online: true
+            trainable: true
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
