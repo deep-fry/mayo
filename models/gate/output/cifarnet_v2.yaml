@@ -1,0 +1,17 @@
+---
+_import: ../../cifarnet_v2.yaml
+model:
+    description: |
+        A variant of cifarnet_v2 that performs online gating.
+    layers:
+        _gated_conv: &gated_conv
+            type: gated_convolution
+            density: 0.5
+        conv0: {<<: *gated_conv}
+        conv1: {<<: *gated_conv}
+        conv2: {<<: *gated_conv}
+        conv3: {<<: *gated_conv}
+        conv4: {<<: *gated_conv}
+        conv5: {<<: *gated_conv}
+        conv6: {<<: *gated_conv}
+        conv7: {<<: *gated_conv}
