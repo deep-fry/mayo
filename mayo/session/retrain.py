@@ -421,7 +421,7 @@ class GlobalRetrain(RetrainBase):
         '''
         log.info("search to allocate exp and mantissa parts")
         biases = losses = []
-        for mantissa_width in range(1, int(width)):
+        for mantissa_width in range(1, int(width) + 1):
             loss = 0
             biases = []
             exponent_width = width - mantissa_width
