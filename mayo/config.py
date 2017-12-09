@@ -173,7 +173,6 @@ class _DotDict(collections.MutableMapping):
             if d_map and md_map:
                 cls._merge(d_k, md_k)
             else:
-                print(k, md_k)
                 d[k] = md_k
 
     def merge(self, md):

@@ -29,7 +29,9 @@ class Layers(TFNetBase):
 
     def _should_pool_nothing(self, params):
         # skip pooling with 1x1 kernel @ stride 1, which is a no-op
-        return params['kernel_size'] in (1, [1, 1]) and params['stride'] == 1
+        kernel = params['kernel_size'] in (1, [1, 1])
+        stride = params.get('stride', 1) == 1
+        return kernel and stride
 
     def instantiate_average_pool(self, node, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
