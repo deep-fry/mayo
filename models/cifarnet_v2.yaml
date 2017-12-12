@@ -16,12 +16,12 @@ model:
     description: |
         A network model for CIFAR-10 training. Aiming for 90%+ accuracy.
         References::
-            http://torch.ch/blog/2015/07/30/cifar.html
-            https://arxiv.org/pdf/1702.03044.pdf
+          https://github.com/MateLabs/All-Conv-Keras/blob/master/allconv.py
+          https://arxiv.org/pdf/1412.6806.pdf
     layers:
         _conv: &conv
             type: convolution
-            padding: valid
+            padding: same
             kernel_size: 3
             weights_initializer: &trunc_norm_init
                 type: tensorflow.truncated_normal_initializer
@@ -32,12 +32,11 @@ model:
                 scale: true
                 decay: 0.9997
                 epsilon: 0.001
-            # activation_fn: null
         _pool: &pool
             type: max_pool
             kernel_size: 3
             stride: 2
-            padding: valid
+            padding: same
         _fc: &fc
             type: fully_connected
             weights_initializer:
@@ -49,30 +48,25 @@ model:
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.004
-        conv0: {<<: *conv, padding: valid, stride: 1, num_outputs: 256}
-        conv1: {<<: *conv, num_outputs: 256}
-        conv2: {<<: *conv, stride: 2, num_outputs: 256}
-        dropout2: {type: dropout, keep_prob: 0.8}
-        conv3: {<<: *conv, num_outputs: 256}
-        conv4: {<<: *conv, num_outputs: 256}
-        conv5: {<<: *conv, stride: 2, num_outputs: 256}
-        dropout5: {type: dropout, keep_prob: 0.8}
-        conv6: {<<: *conv, kernel_size: 3, num_outputs: 256}
-        conv7: {<<: *conv, kernel_size: 2, num_outputs: 256}
-        dropout7: {type: dropout, keep_prob: 0.8}
-        flatten: {type: flatten}
-        logits:
-            <<: *fc
-            num_outputs: num_classes
-            biases_initializer: {type: tensorflow.zeros_initializer}
-            weights_initializer:
-                {<<: *trunc_norm_init, stddev: !arith 1.0 / 192.0}
-            activation_fn: null
+        dropout0: {type: dropout, keep_prob: 0.8}
+        conv0: {<<: *conv, num_outputs: 96}
+        conv1: {<<: *conv, num_outputs: 96}
+        conv2: {<<: *conv, stride: 2, num_outputs: 96, activation_fn: null}
+        dropout2: {type: dropout, keep_prob: 0.5}
+        conv3: {<<: *conv, num_outputs: 192}
+        conv4: {<<: *conv, num_outputs: 192}
+        conv5: {<<: *conv, stride: 2, num_outputs: 192, activation_fn: null}
+        dropout5: {type: dropout, keep_prob: 0.5}
+        conv6: {<<: *conv, num_outputs: 192}
+        conv7: {<<: *conv, kernel_size: 1, padding: valid, num_outputs: 192}
+        conv8: {<<: *conv, kernel_size: 1, padding: valid, num_outputs: 10, activation_fn: null}
+        logits: {type: squeeze, axis: [1, 2]}
+        avgpool: {type: average_pool, kernel_size: 8, stride: 1}
     graph:
         from: input
         with: [
             conv0, conv1, conv2, dropout2,
             conv3, conv4, conv5, dropout5,
-            conv6, conv7, dropout7,
-            flatten, logits]
+            conv6, conv7, conv8, avgpool,
+            logits]
         to: output
