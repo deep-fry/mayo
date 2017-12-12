@@ -196,8 +196,8 @@ class FloatingPointQuantizer(QuantizerBase):
         self.mantissa_width = mantissa_width
         exponent_width = width - mantissa_width
         is_valid = exponent_width >= 0 and mantissa_width >= 0
-        is_valid = is_valid and (not (exponent_width == 0 and
-            mantissa_width == 0))
+        is_valid = is_valid and (
+            not (exponent_width == 0 and mantissa_width == 0))
         if not is_valid:
             raise ValueError(
                 'We expect exponent_width >= 0 and mantissa_width >= 0 '
@@ -246,21 +246,22 @@ class FloatingPointQuantizer(QuantizerBase):
         Represent the value in floating-point using
         sign, exponent and mantissa.
         """
+        value = util.cast(sign, float) * (2.0 ** exponent) * mantissa
         if util.is_constant(sign, exponent, mantissa):
-            zeros = 0
-            return util.cast(sign, float) * (2.0 ** exponent) * mantissa
-        elif util.is_numpy(sign, exponent, mantissa):
+            return value
+        if util.is_numpy(sign, exponent, mantissa):
             zeros = np.zeros(sign.shape, dtype=np.int32)
         else:
             zeros = tf.zeros(sign.shape, dtype=tf.int32)
-        value = util.cast(sign, float) * (2.0 ** exponent) * mantissa
-        return util.where(
-            util.equal(sign, zeros), util.cast(zeros, float), value)
+        is_zero = util.equal(sign, zeros)
+        return util.where(is_zero, util.cast(zeros, float), value)
 
-    def _quantize(self, value, exponent_width=None, mantissa_width=None,
+    def _quantize(
+            self, value, exponent_width=None, mantissa_width=None,
             exponent_bias=None):
         sign, exponent, mantissa = self._decompose(value, exponent_bias)
-        sign, exponent, mantissa = self._transform(sign, exponent, mantissa,
+        sign, exponent, mantissa = self._transform(
+            sign, exponent, mantissa,
             exponent_width, mantissa_width, exponent_bias)
         return self._represent(sign, exponent, mantissa)
 
@@ -272,9 +273,7 @@ class FloatingPointQuantizer(QuantizerBase):
             return value + tf.stop_gradient(quantized - value)
 
     def compute_exp(self, value, width, overflow_rate):
-        '''
-        compute a exponent bound based on the overflow rate
-        '''
+        """ Compute an exponent bound based on the overflow rate.  """
         max_exponent = int(2 ** width)
         for exp in range(max(-max_exponent, -4), max(max_exponent, 4)):
             max_value = 2 ** exp
@@ -290,14 +289,14 @@ class FloatingPointQuantizer(QuantizerBase):
                 break
         return exp
 
-    def compute_quantization_loss(self, value, exponent_width, mantissa_width,
-                                  overflow_rate):
+    def compute_quantization_loss(
+            self, value, exponent_width, mantissa_width, overflow_rate):
         max_exponent = self.compute_exp(value, exponent_width, overflow_rate)
         # obtain exponent bias based on the bound
         # max_exponent = bias + exponent
         exponent_bias = max_exponent - 2 ** exponent_width + 1
-        quantized = self._quantize(value, exponent_width, mantissa_width,
-            exponent_bias)
+        quantized = self._quantize(
+            value, exponent_width, mantissa_width, exponent_bias)
         # mean squared loss
         loss = ((value - quantized) ** 2).mean()
         return (loss, exponent_bias)
@@ -306,8 +305,9 @@ class FloatingPointQuantizer(QuantizerBase):
         width = int(self.eval(session, self.width))
         mantissa_width = int(self.eval(session, self.mantissa_width))
         exponent_bias = int(self.eval(session, self.exponent_bias))
-        return self._info_tuple(width=width, mantissa_width=mantissa_width,
-                                exponent_bias=exponent_bias)
+        return self._info_tuple(
+            width=width, mantissa_width=mantissa_width,
+            exponent_bias=exponent_bias)
 
 
 class ShiftQuantizer(FloatingPointQuantizer):
@@ -453,9 +453,8 @@ class Recentralizer(OverriderBase):
         positives = value > mean
         self.positives = positives
         self.positives_mean = util.mean(value[util.where(positives)])
-        negatives = util.logical_not(positives)
-        negatives_with_non_zeros = util.logical_and(negatives, value != 0)
-        self.negatives_mean = util.mean(value[util.where(negatives_with_non_zeros)])
+        negatives = util.logical_and(util.logical_not(positives), value != 0)
+        self.negatives_mean = util.mean(value[util.where(negatives)])
 
     def _info(self, session):
         info = self.quantizer.info(session)._asdict()
