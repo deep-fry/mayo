@@ -6,78 +6,16 @@ import pickle
 import operator
 
 from mayo.log import log
+from mayo.session.util import Info
 from mayo.session.train import Train
 from mayo.override.base import OverriderBase, ChainOverrider
 from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
 from mayo.override.quantize import ShiftQuantizer
 
 
-class Info(object):
-    def __init__(self, meta_info, session, targeting_vars, associated_vars,
-        run_status):
-        self.scales = {}
-        self.min_scales = {}
-        self.scale_update_factors = {}
-        self.start_ths = {}
-        self.ths = {}
-        self.max_ths = {}
-
-        # now only supports retraining on one overrider
-        self.meta = meta_info
-        self.targeting_vars = targeting_vars
-        self.associated_vars = associated_vars
-
-        for target in targeting_vars:
-            name = target.name
-            self.scales[name] = meta_info.range['scale']
-            self.min_scales[name] = meta_info.range['min_scale']
-            self.scale_update_factors[name] = \
-                meta_info.range['scale_update_factor']
-
-            if run_status == 'continue':
-                th = session.run(target)
-                self.ths[name] = th
-                self.start_ths[name] = th
-                log.info('{} is continuing on {}.'.format(name, th))
-            else:
-                self.ths[name] = meta_info.range['from']
-                self.start_ths[name] = meta_info.range['from']
-            self.max_ths[name] = meta_info.range['to']
-        if self.scales == {}:
-            raise ValueError(
-                '{} is not found in overrider definitions, '
-                'but has been specified as a target.'.format(meta_info.type))
-
-    def get(self, variable, info_type):
-        name = variable.name
-        if info_type == 'end_threshold':
-            return self.max_ths[name]
-        if info_type == 'end_scale':
-            return self.min_scales[name]
-        if info_type == 'threshold':
-            return self.ths[name]
-        if info_type == 'start_threshold':
-            return self.start_ths[name]
-        if info_type == 'scale':
-            return self.scales[name]
-        if info_type == 'scale_factor':
-            return self.scale_update_factors[name]
-        raise ValueError('{} is not a collected info key.'.format(info_type))
-
-    def set(self, variable, info_type, value):
-        name = variable.name
-        if info_type == 'threshold':
-            self.ths[name] = value
-        elif info_type == 'scale':
-            self.scales[name] = value
-        else:
-            raise ValueError(
-                '{} is not a collected info key.'.format(info_type))
-
-
 class RetrainBase(Train):
     def retrain(self):
-        log.debug('Retraining start.')
+        log.debug('Retraining starts.')
         try:
             self._init_retrain()
             while self._retrain_iteration():
@@ -89,6 +27,45 @@ class RetrainBase(Train):
                 countdown = save.get('countdown', 0)
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
+
+    def _init_retrain(self):
+        self.retrain_mode = self.config.retrain.retrain_mode
+        self._init_scales()
+        self._reset_stats()
+
+        self.profile_associated_vars(start=True)
+        self.profile_for_one_epoch()
+        # init all overriders
+        for variable in self.targeting_vars:
+            self.variable_init(variable)
+        self.overriders_update()
+
+    def _retrain_iteration(self):
+        system = self.config.system
+        loss, acc, epoch = self.once()
+        self._update_stats(loss, acc)
+        summary_delta = self.change.delta('summary.epoch', epoch)
+
+        if system.summary.save and summary_delta >= 0.1:
+            self._save_summary(epoch)
+        floor_epoch = math.floor(epoch)
+        cp_interval = system.checkpoint.get('save.interval', 0)
+
+        # if epoch > 0.1:
+        if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
+            self._avg_stats()
+            if self.acc_avg >= self.acc_base:
+                return self.forward_policy(floor_epoch)
+
+            iter_max_epoch = self.config.retrain.iter_max_epoch
+
+            # current setup exceeds max epoches, retrieve backwards
+            if epoch >= iter_max_epoch and epoch > 0:
+                self.retrain_cnt += 1
+                self.reset_num_epochs()
+                self.log_thresholds(self.loss_avg, self.acc_avg)
+                return self.backward_policy()
+        return True
 
     def _check_overrider_type(self, overrider, o_type):
         o_name = overrider.__class__.__name__
@@ -143,6 +120,11 @@ class RetrainBase(Train):
             pickle.dump([nodes, ops], f)
 
     def _init_scales(self):
+        self.log = {}
+        self.retrain_cnt = 0
+        self.target_layer = None
+        self.loss_avg = None
+        self.best_ckpt = None
         info = self.config.retrain.parameters
         self.targeting_vars = []
         self.associated_vars = []
@@ -155,19 +137,6 @@ class RetrainBase(Train):
         self.info = Info(info, self.tf_session, self.targeting_vars,
             self.associated_vars, run_status)
 
-    def _init_retrain(self):
-        self.retrain_mode = self.config.retrain.retrain_mode
-        self._init_scales()
-        self._reset_stats()
-        self._reset_vars()
-
-        self.profile_associated_vars(start=True)
-        self.profile_for_one_epoch()
-        # init all overriders
-        for variable in self.targeting_vars:
-            self.variable_init(variable)
-        self.overriders_update()
-
     def once(self):
         train_op = self._train_op
         if self.config.retrain.get('eval_only', False):
@@ -178,33 +147,6 @@ class RetrainBase(Train):
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         return (loss, acc, num_epochs)
-
-    def _retrain_iteration(self):
-        system = self.config.system
-        loss, acc, epoch = self.once()
-        self._update_stats(loss, acc)
-        summary_delta = self.change.delta('summary.epoch', epoch)
-
-        if system.summary.save and summary_delta >= 0.1:
-            self._save_summary(epoch)
-        floor_epoch = math.floor(epoch)
-        cp_interval = system.checkpoint.get('save.interval', 0)
-
-        # if epoch > 0.1:
-        if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
-            self._avg_stats()
-            if self.acc_avg >= self.acc_base:
-                return self.forward_policy(floor_epoch)
-
-            iter_max_epoch = self.config.retrain.iter_max_epoch
-
-            # current setup exceeds max epoches, retrieve backwards
-            if epoch >= iter_max_epoch and epoch > 0:
-                self.retrain_cnt += 1
-                self.reset_num_epochs()
-                self.log_thresholds(self.loss_avg, self.acc_avg)
-                return self.backward_policy()
-        return True
 
     def backward_policy(self):
         raise NotImplementedError(
@@ -224,19 +166,24 @@ class RetrainBase(Train):
                 return self.info.get(tv, 'scale')
 
     def profile_associated_vars(self, start=False):
+        '''
+        1. profile the associated vars and determine a priority list
+        2. produce a cont dict to determine which targeting vars continues on
+        retraining
+        '''
         self.priority_list = []
         if start:
-            name = self.config.system.checkpoint.load
-            self.best_ckpt = name
+            self.best_ckpt = self.config.system.checkpoint.load
             self.cont = {}
+            # if yaml exists, load it and compute self.cont
             if self.config.retrain.get('cont_list'):
-                # if yaml exists, load it and compute self.cont
                 doct_cont = self.config.retrain.cont_list
                 for variable in self.targeting_vars:
                     if doct_cont.get(variable.name):
                         self.cont[variable.name] = True
                     else:
                         self.cont[variable.name] = False
+            # yaml does not exist, initialize to true by default
             else:
                 for variable in self.targeting_vars:
                     name = variable.name
@@ -274,10 +221,10 @@ class RetrainBase(Train):
         return
 
     def profile_for_one_epoch(self):
-        log.info('Start profiling for one epoch')
         epoch = 0
         self._reset_stats()
         self.reset_num_epochs()
+
         if self.config.retrain.get('train_acc_base'):
             # if acc is hand coded in yaml
             self.acc_base = self.config.retrain.train_acc_base
@@ -288,6 +235,7 @@ class RetrainBase(Train):
                 self.loss_base = self.config.retrain.loss_base
             self._prepare_yaml(False)
             return
+
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
         imgs_seen = self._train_op['imgs_seen']
@@ -299,13 +247,11 @@ class RetrainBase(Train):
             self.step += 1
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
+
+        log.info('profiled baseline, loss is {}, acc is {}'.format(
+            self.loss_base, self.acc_base))
         self._reset_stats()
         self.reset_num_epochs()
-        log.info('profiled baseline, loss is {}, acc is {}'.format(
-            self.loss_base,
-            self.acc_base,
-        ))
-        self._reset_stats()
         self._prepare_yaml(True)
 
     def _metric_clac(self, variable):
@@ -344,14 +290,6 @@ class RetrainBase(Train):
         self.loss_total = 0
         self.acc_total = 0
 
-    def _reset_vars(self):
-        self.log = {}
-        self.retrain_cnt = 0
-
-        self.target_layer = None
-        self.loss_avg = None
-        self.best_ckpt = None
-
     def variables_refresh(self):
         raise NotImplementedError(
             'Method to refresh overriders is not implemented.')
@@ -375,21 +313,20 @@ class GlobalRetrain(RetrainBase):
             if isinstance(av, OverriderBase):
                 av.should_update = True
                 update_flag = True
-            if self.config.retrain.parameters.get('update_overrider'):
-                for o in self.nets[0].overriders:
-                    if o.name in av.name:
-                        o.should_update = True
-                        update_flag = True
+            # if self.config.retrain.parameters.get('update_overrider'):
+            #     for o in self.nets[0].overriders:
+            #         if o.name in av.name:
+            #             o.should_update = True
+            #             update_flag = True
         tmp = self.associated_vars[0]
         # check if it is and only is floating point
         check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
             and not self._check_cls(tmp, ShiftQuantizer)
+        w = self.info.get(self.targeting_vars[0], 'threshold')
         if check_floating_point:
-            w = self.info.get(self.targeting_vars[0], 'threshold')
             self.allocate_exp_mantissa(w)
         if self._check_cls(tmp, ShiftQuantizer) and \
             isinstance(tmp, Recentralizer):
-            w = self.info.get(self.targeting_vars[0], 'threshold')
             for av in self.associated_vars:
                 if isinstance(av, Recentralizer):
                     av_before = self.run(av.before)
@@ -421,7 +358,7 @@ class GlobalRetrain(RetrainBase):
         '''
         log.info("search to allocate exp and mantissa parts")
         biases = losses = []
-        for mantissa_width in range(1, int(width) + 1):
+        for mantissa_width in range(0, int(width) + 1):
             loss = 0
             biases = []
             exponent_width = width - mantissa_width
@@ -444,11 +381,10 @@ class GlobalRetrain(RetrainBase):
                 if isinstance(av.mean_quantizer, FloatingPointQuantizer):
                     values = self.run(av.before)
                     self._update_mean_quantizer(values, av, width,
-                        overflow_rate)
+                                                overflow_rate)
             else:
                 self.assign(av.mantissa_width, mantissa_width)
                 self.assign(av.exponent_bias, biases[index])
-                # av.exponent_bias = biases[index]
                 index += 1
 
     def _update_mean_quantizer(self, values, av, width, overflow_rate=0.01):
@@ -463,10 +399,9 @@ class GlobalRetrain(RetrainBase):
         self.assign(av.exponent_bias, exp)
 
     def forward_policy(self, floor_epoch):
-        self.save_checkpoint(
-            'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
-        self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
+        self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
+        self.save_checkpoint(self.best_ckpt)
         self._cp_epoch = floor_epoch
         self.retrain_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
@@ -577,8 +512,8 @@ class LayerwiseRetrain(RetrainBase):
         log.debug('Targeting on {}...'.format(self.target_layer))
         log.debug('Log: {}'.format(self.log))
         self.save_checkpoint(
-            'th-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
-        self.best_ckpt = 'th-' + str(self.retrain_cnt) + '-' \
+            'retrain-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
         self._cp_epoch = floor_epoch
         self.retrain_cnt += 1
