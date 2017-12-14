@@ -293,8 +293,8 @@ class FloatingPointQuantizer(QuantizerBase):
             self, value, exponent_width, mantissa_width, overflow_rate):
         max_exponent = self.compute_exp(value, exponent_width, overflow_rate)
         # obtain exponent bias based on the bound
-        # max_exponent = bias + exponent
-        exponent_bias = max_exponent - 2 ** exponent_width + 1
+        # max_exponent = exponent - bias, bias >= 0
+        exponent_bias = 2 ** exponent_width - 1 - max_exponent
         quantized = self._quantize(
             value, exponent_width, mantissa_width, exponent_bias)
         # mean squared loss

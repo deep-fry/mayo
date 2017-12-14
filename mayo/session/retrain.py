@@ -395,7 +395,7 @@ class GlobalRetrain(RetrainBase):
         av = av.mean_quantizer
         # shift quantizer has mantissa zero
         if not isinstance(av, ShiftQuantizer):
-            self.assign(av.mantissa_width, width - 1)
+            self.assign(av.mantissa_width, width)
         self.assign(av.exponent_bias, exp)
 
     def forward_policy(self, floor_epoch):
