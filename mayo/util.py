@@ -306,6 +306,17 @@ class Table(collections.Sequence):
         ruled_table.append(rule)
         return '\n'.join(ruled_table)
 
+    def csv(self):
+        rows = [', '.join(self._headers)]
+        for r in self._rows:
+            row = []
+            for v in r:
+                if isinstance(v, Percent):
+                    v = float(v)
+                row.append(str(v))
+            rows.append(', '.join(row))
+        return '\n'.join(rows)
+
 
 def unique(items):
     found = set()
