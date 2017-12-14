@@ -1,9 +1,0 @@
-retrain:
-    mode: auto
-    name: width
-    bias: True
-    scale: 1
-    min_scale: 1
-    scale_update_factor: 0.5
-    iter_max_epoch: 40
-    tolerance: 0.005

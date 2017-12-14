@@ -7,5 +7,12 @@ model:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: 0.5
+            trainable: true
+        conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}
+        conv3: {<<: *gated_conv}
+        conv4: {<<: *gated_conv}
+        conv5: {<<: *gated_conv}
+        conv6: {<<: *gated_conv}
+        conv7: {<<: *gated_conv}

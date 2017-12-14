@@ -1,9 +1,0 @@
-retrain:
-    mode: auto
-    bias: False
-    name: alpha
-    scale: 0.2
-    min_scale: 0.01
-    scale_update_factor: 0.5
-    iter_max_epoch: 30
-    tolerance: 0.03
