@@ -141,7 +141,7 @@ class DGQuantizer(DynamicFixedPointQuantizerBase):
     def _update_policy(self, tensor, session):
         """ simple brute-force, optimal result.  """
         w = session.run(self.width)
-        for p in range(w + 1):
+        for p in range(-w, w + 1):
             rate = self._quantize(tensor, point=p, compute_overflow_rate=True)
             rate = session.run(rate)
             if rate <= self.overflow_rate:
