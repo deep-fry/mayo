@@ -1,9 +1,13 @@
 ---
 model.layers:
-    conv1: &overrider
+    conv0: &overrider
         weights_overrider:
             type: mayo.override.DynamicNetworkSurgeryPruner
+    conv1: {<<: *overrider}
     conv2: {<<: *overrider}
-    fc3: {<<: *overrider}
-    fc4: {<<: *overrider}
+    conv3: {<<: *overrider}
+    conv4: {<<: *overrider}
+    conv5: {<<: *overrider}
+    conv6: {<<: *overrider}
+    conv7: {<<: *overrider}
     logits: {<<: *overrider}
