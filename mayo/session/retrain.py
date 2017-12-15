@@ -395,8 +395,14 @@ class GlobalRetrain(RetrainBase):
         av = av.mean_quantizer
         # shift quantizer has mantissa zero
         if not isinstance(av, ShiftQuantizer):
-            self.assign(av.mantissa_width, width)
-        self.assign(av.exponent_bias, exp)
+            if exp > 0:
+                self.assign(av.mantissa_width, math.ceil(math.log(exp, 2)))
+            else:
+                self.assign(av.mantissa_width, width)
+        if exp < 0:
+            self.assign(av.exponent_bias, exp)
+        else:
+            self.assign(av.exponent_bias, 0)
 
     def forward_policy(self, floor_epoch):
         self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
@@ -436,13 +442,11 @@ class GlobalRetrain(RetrainBase):
         if scale >= 0:
             scale_check = self._fetch_scale() > end_scale
             threshold_check = end_threshold > threshold
-            run = scale_check and threshold_check
         else:
             scale_check = self._fetch_scale() < end_scale
             threshold_check = end_threshold < threshold
-            run = scale_check and threshold_check
 
-        if run:
+        if scale_check and threshold_check:
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()

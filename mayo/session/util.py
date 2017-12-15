@@ -1,5 +1,8 @@
 from mayo.log import log
 
+class target(object):
+    def __init__(self, target_var, associate_var, session):
+        
 
 class Info(object):
     def __init__(self, meta_info, session, targeting_vars, associated_vars,

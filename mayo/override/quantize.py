@@ -337,7 +337,7 @@ class ShiftQuantizer(FloatingPointQuantizer):
     def _update(self, session):
         log.info('finding a exp bias for shift quantizer using overflow rate')
         max_exponent = self.compute_exp(session.run(self.before), session)
-        self.exponent_bias = max_exponent - 2 ** session.run(self.width) + 1
+        self.exponent_bias = 2 ** session.run(self.width) - 1 - max_exponent
 
 
 class LogQuantizer(QuantizerBase):
