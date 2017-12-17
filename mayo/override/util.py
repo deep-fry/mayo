@@ -12,7 +12,8 @@ def is_constant(*args):
 def is_numpy(*args):
     if is_constant(*args):
         return False
-    return all(isinstance(a, (bool, int, float, np.ndarray)) for a in args)
+    return all(isinstance(
+        a, (bool, int, float, np.ndarray, np.float32, np.int32)) for a in args)
 
 
 def is_tensor(*args):

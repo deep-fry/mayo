@@ -14,7 +14,7 @@ from mayo.override.quantize import ShiftQuantizer
 
 class Info(object):
     def __init__(self, meta_info, session, targeting_vars, associated_vars,
-        run_status):
+            run_status):
         self.scales = {}
         self.min_scales = {}
         self.scale_update_factors = {}
@@ -152,8 +152,9 @@ class RetrainBase(Train):
         else:
             self._fetch_as_variables(info)
         run_status = self.config.retrain.run_status
-        self.info = Info(info, self.tf_session, self.targeting_vars,
-            self.associated_vars, run_status)
+        self.info = Info(
+            info, self.tf_session, self.targeting_vars, self.associated_vars,
+            run_status)
 
     def _init_retrain(self):
         self.retrain_mode = self.config.retrain.retrain_mode
@@ -436,15 +437,15 @@ class GlobalRetrain(RetrainBase):
                     biases.append(bias)
             losses.append((loss, exponent_width, mantissa_width, biases))
         # find smallest loss
-        _, exp_width, mantissa_width, biases = min(losses,
-            key=lambda meta: meta[0])
+        _, exp_width, mantissa_width, biases = min(
+            losses, key=lambda meta: meta[0])
         index = 0
         for av in self.associated_vars:
             if isinstance(av, Recentralizer):
                 if isinstance(av.mean_quantizer, FloatingPointQuantizer):
                     values = self.run(av.before)
-                    self._update_mean_quantizer(values, av, width,
-                        overflow_rate)
+                    self._update_mean_quantizer(
+                        values, av, width, overflow_rate)
             else:
                 self.assign(av.mantissa_width, mantissa_width)
                 self.assign(av.exponent_bias, biases[index])
@@ -454,8 +455,8 @@ class GlobalRetrain(RetrainBase):
     def _update_mean_quantizer(self, values, av, width, overflow_rate=0.01):
         positives = np.mean(values > 0)
         negatives = np.mean(values < 0)
-        exp = av.mean_quantizer.compute_mean_exp(positives,
-                negatives, width, overflow_rate)
+        exp = av.mean_quantizer.compute_mean_exp(
+            positives, negatives, width, overflow_rate)
         av = av.mean_quantizer
         # shift quantizer has mantissa zero
         if not isinstance(av, ShiftQuantizer):

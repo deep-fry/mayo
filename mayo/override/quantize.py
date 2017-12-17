@@ -142,8 +142,9 @@ class DGQuantizer(DynamicFixedPointQuantizerBase):
         """ simple brute-force, optimal result.  """
         w = session.run(self.width)
         for p in range(-w, w + 1):
-            rate = self._quantize(tensor, point=p, compute_overflow_rate=True)
-            rate = session.run(rate)
+            rate = self._quantize(
+                tensor, point=p, width=w, compute_overflow_rate=True)
+            tmp_width = w
             if rate <= self.overflow_rate:
                 return p
         log.warn(
@@ -442,8 +443,6 @@ class Recentralizer(OverriderBase):
         return value
 
     def _update(self, session):
-        # update internal quantizer
-        self.quantizer.update(session)
         # update positives mask and mean values
         value = session.run(self.before)
         # divide them into two groups
@@ -455,6 +454,8 @@ class Recentralizer(OverriderBase):
         self.positives_mean = util.mean(value[util.where(positives)])
         negatives = util.logical_and(util.logical_not(positives), value != 0)
         self.negatives_mean = util.mean(value[util.where(negatives)])
+        # update internal quantizer
+        self.quantizer.update(session)
 
     def _info(self, session):
         info = self.quantizer.info(session)._asdict()
