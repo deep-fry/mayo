@@ -6,7 +6,7 @@ import pickle
 import operator
 
 from mayo.log import log
-from mayo.session.util import Info
+from mayo.session.util import Info, Targets
 from mayo.session.train import Train
 from mayo.override.base import OverriderBase, ChainOverrider
 from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
@@ -36,7 +36,7 @@ class RetrainBase(Train):
         self.profile_associated_vars(start=True)
         self.profile_for_one_epoch()
         # init all overriders
-        for variable in self.targeting_vars:
+        for variable in self.targets.show_targets():
             self.variable_init(variable)
         self.overriders_update()
 
@@ -67,46 +67,25 @@ class RetrainBase(Train):
                 return self.backward_policy()
         return True
 
-    def _check_overrider_type(self, overrider, o_type):
-        o_name = overrider.__class__.__name__
-        if isinstance(o_type, list):
-            for ot in o_type:
-                if o_name in ot:
-                    return True
-        if o_name in o_type:
-            return True
-        return False
-
     def _fetch_as_overriders(self, info):
+        self.targets = Targets(info)
         for o in self.nets[0].overriders:
-            # fetch the targeting variables
-            # handel chained overrider
-            if isinstance(o, ChainOverrider):
-                for chained_o in o:
-                    print(chained_o)
-                    if self._check_overrider_type(chained_o, info.type):
-                        o = chained_o
-                    if isinstance(chained_o, Recentralizer):
-                        if self._check_overrider_type(chained_o.quantizer,
-                                                      info.type):
-                            # a temporary hack
-                            self.targeting_vars.append(getattr(
-                                chained_o.mean_quantizer,
-                                info.target))
-                            self.associated_vars.append(chained_o)
-                            o = chained_o.quantizer
-            self.targeting_vars.append(getattr(o, info.target))
-            self.associated_vars.append(o)
+            self.targets.add_overrider(o)
 
     def _fetch_as_variables(self, info):
-        for name in info.target:
+        self.targets = Targets(info)
+        targeting_vars = []
+        associated_vars = []
+        for name in info.targets:
             for item in self.global_variables():
                 if name in item.name:
-                    self.targeting_vars.append(item)
+                    targeting_vars.append(item)
         for name in info.associated:
             for item in self.global_variables():
                 if name in item.name:
-                    self.associated_vars.append(item)
+                    associated_vars.append(item)
+        for zipped in zip(targeting_vars, associated_vars):
+            self.targets.add_target(*zipped)
 
     def _node_logging(self, write_to_files):
         if not hasattr(self, 'writing_cnt'):
@@ -126,16 +105,14 @@ class RetrainBase(Train):
         self.loss_avg = None
         self.best_ckpt = None
         info = self.config.retrain.parameters
-        self.targeting_vars = []
-        self.associated_vars = []
         # define initial scale
         if self.retrain_mode == 'overriders':
             self._fetch_as_overriders(info)
         else:
             self._fetch_as_variables(info)
         run_status = self.config.retrain.run_status
-        self.info = Info(info, self.tf_session, self.targeting_vars,
-            self.associated_vars, run_status)
+        self.info = Info(
+            info, self.tf_session, self.targets.show_targets(), run_status)
 
     def once(self):
         train_op = self._train_op
@@ -178,20 +155,20 @@ class RetrainBase(Train):
             # if yaml exists, load it and compute self.cont
             if self.config.retrain.get('cont_list'):
                 doct_cont = self.config.retrain.cont_list
-                for variable in self.targeting_vars:
+                for variable in self.targets.show_targets():
                     if doct_cont.get(variable.name):
                         self.cont[variable.name] = True
                     else:
                         self.cont[variable.name] = False
             # yaml does not exist, initialize to true by default
             else:
-                for variable in self.targeting_vars:
+                for variable in self.targets.show_targets():
                     name = variable.name
                     self.cont[name] = True
         d = {}
         thresholds = {}
         scales = {}
-        for tv, av in zip(self.targeting_vars, self.associated_vars):
+        for (tv, av) in self.targets.target_iterator():
             name = tv.name
             d[name] = self._metric_clac(av)
             thresholds[name] = self.info.get(tv, 'threshold')

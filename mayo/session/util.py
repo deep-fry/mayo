@@ -1,12 +1,92 @@
-from mayo.log import log
+import tensorflow as tf
+import operator
+import numpy as np
 
-class target(object):
-    def __init__(self, target_var, associate_var, session):
-        
+from mayo.log import log
+from mayo.override.base import OverriderBase, ChainOverrider
+from mayo.override.quantize import Recentralizer
+
+
+class Targets(object):
+    def __init__(self, info):
+        self.info = info
+        self.members = []
+
+    def _check_type(self, overrider):
+        # pin type, !! does not check chained overrider!!
+        o_type = self.info.type
+        # check recentralizer
+        if hasattr(overrider, 'quantizer'):
+            o_name = overrider.quantizer.__class__.__name__
+        else:
+            o_name = overrider.__class__.__name__
+        if o_name in o_type:
+            return True
+        return False
+
+    def _add_chain_overrider(self, element):
+        for chained in element:
+            if self._check_type(chained):
+                self._instantiate_target(chained)
+
+    def _instantiate_target(self, element):
+        target = self.info.target
+        if isinstance(element, Recentralizer):
+            tv = getattr(element.mean_quantizer, target)
+            self.members.append(Target(tv, element))
+            element = element.quantizer
+        tv = getattr(element, target)
+        self.members.append(Target(tv, element))
+
+    def add_overrider(self, element):
+        if isinstance(element, ChainOverrider):
+            self._add_chain_overrider(element)
+        else:
+            self._instantiate_target(element)
+
+    def add_target(self, tv, element):
+        self.members.append(Target(tv, element))
+
+    def show_targets(self):
+        return [item.tv for item in self.members]
+
+    def show_associates(self):
+        return [item.av for item in self.members]
+
+    def target_iterator(self):
+        for item in self.members:
+            yield (item.tv, item.av)
+
+
+class Target(object):
+    def __init__(self, target_var, associate_var):
+        self.tv = target_var
+        self.av = associate_var
+
+    def metric(self, session):
+        return self._metric_clac(self.av, session)
+
+    def _metric_clac(self, variable, session):
+        if isinstance(variable, (tf.Variable, tf.Tensor)):
+            return session.run(variable).size
+        if isinstance(variable, ChainOverrider):
+            chained_vars = [self._metric_calc(v) for v in variable]
+            metric_value = reduce(operator.mul, chained_vars)
+        if isinstance(variable, OverriderBase):
+            if hasattr(variable, 'width'):
+                return session.run(variable.width)
+            if hasattr(variable, 'mask'):
+                density = np.count_nonzero(session.run(variable.mask)) / \
+                    float(session.run(variable.after).size)
+                return density
+            else:
+                metric_value = 1
+        # normal tensor value should have been returned
+        return metric_value * session.run(variable.after).size
+
 
 class Info(object):
-    def __init__(self, meta_info, session, targeting_vars, associated_vars,
-        run_status):
+    def __init__(self, meta_info, session, targeting_vars, run_status):
         self.scales = {}
         self.min_scales = {}
         self.scale_update_factors = {}
@@ -16,8 +96,6 @@ class Info(object):
 
         # now only supports retraining on one overrider
         self.meta = meta_info
-        self.targeting_vars = targeting_vars
-        self.associated_vars = associated_vars
 
         for target in targeting_vars:
             name = target.name
