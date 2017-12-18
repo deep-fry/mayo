@@ -129,17 +129,13 @@ class Graph(object):
         self._validate()
 
     def add_edge(self, from_node, to_node):
-        def validate_multi_edges(node):
-            if not isinstance(node, JoinNode):
-                if len(node.predecessors) > 1:
-                    raise EdgeError(
-                        'Node {!r} is not a JoinNode but has multiple inputs.')
+        self.nx_graph.add_edge(from_node, to_node)
         if from_node == to_node:
             raise ValueError('Self-loop is not allowed.')
-        rv = self.nx_graph.add_edge(from_node, to_node)
-        validate_multi_edges(from_node)
-        validate_multi_edges(to_node)
-        return rv
+        if not isinstance(to_node, JoinNode) and len(to_node.predecessors) > 1:
+            raise EdgeError(
+                'Node {!r} is not a JoinNode but has multiple inputs.'
+                .format(to_node))
 
     def input_nodes(self):
         return self._filter_nodes(lambda n: not n.predecessors)

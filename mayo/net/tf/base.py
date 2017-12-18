@@ -4,7 +4,7 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import memoize_method, Table, ensure_list, object_from_params
+from mayo.util import memoize_method, Table, object_from_params
 from mayo.net.base import NetBase
 from mayo.net.tf.util import ParameterTransformer
 
@@ -48,13 +48,6 @@ class TFNetBase(NetBase):
     def overriders(self):
         return self._transformer.overriders
 
-    def layers(self):
-        layers = {}
-        for n in self._graph.layer_nodes():
-            name = '{}/{}'.format('/'.join(n.module), n.name)
-            layers[name] = self._tensors[n]
-        return layers
-
     @memoize_method
     def loss(self):
         logits = self.logits()
@@ -87,6 +80,7 @@ class TFNetBase(NetBase):
         return acc
 
     def info(self):
+        info_dict = super().info()
         # trainable table
         trainable_vars = tf.trainable_variables()
         trainable = Table(['trainable', 'shape'])
@@ -95,25 +89,14 @@ class TFNetBase(NetBase):
             'count', lambda row: trainable[row, 'shape'].num_elements())
         trainable.set_footer(
             ['', '    total:', sum(trainable.get_column('count'))])
-
+        info_dict['trainables'] = trainable
         # nontrainable table
         nontrainable = Table(['nontrainable', 'shape'])
         for var in tf.global_variables():
             if var not in trainable_vars:
                 nontrainable.add_row((var, var.shape))
-
-        # layers
-        layer_info = Table(['layer', 'shape'])
-        for name, tensors in self.layers().items():
-            tensors = ensure_list(tensors)
-            for tensor in tensors:
-                layer_info.add_row((name, tensor.shape))
-
-        return {
-            'trainables': trainable,
-            'nontrainables': nontrainable,
-            'layers': layer_info,
-        }
+        info_dict['nontrainables'] = nontrainable
+        return info_dict
 
     def _params_to_text(self, params):
         arguments = []
