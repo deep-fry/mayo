@@ -57,6 +57,27 @@ class Targets(object):
         for item in self.members:
             yield (item.tv, item.av)
 
+    def update_targets(self, action, mode='tv'):
+        if mode == 'all':
+            for item in self.members:
+                action(item.tv)
+                action(item.av)
+        else:
+            for item in self.members:
+                action(getattr(item, mode))
+
+    def change_property(self, attr, value, mode='tv'):
+        '''
+        args:
+            p_name: name of the targeting attribute
+            value: the new value
+        '''
+        for item in self.members:
+            setattr(getattr(item, mode), attr, value)
+
+    def sort_targets(self, session):
+        self.members = sorted(self.members, key=lambda x: x.metric(session))
+
 
 class Target(object):
     def __init__(self, target_var, associate_var):

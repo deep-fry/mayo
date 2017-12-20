@@ -138,11 +138,12 @@ class RetrainBase(Train):
             'Method of logging threholds is not implemented.')
 
     def _fetch_scale(self):
-        for tv in self.targeting_vars:
+        for tv in self.targets.show_targets():
             if tv.name == self.target_layer:
                 return self.info.get(tv, 'scale')
 
     def profile_associated_vars(self, start=False):
+        import pdb; pdb.set_trace()
         '''
         1. profile the associated vars and determine a priority list
         2. produce a cont dict to determine which targeting vars continues on
@@ -285,16 +286,11 @@ class RetrainBase(Train):
 class GlobalRetrain(RetrainBase):
     def variables_refresh(self):
         update_flag = False
-        for tv, av in zip(self.targeting_vars, self.associated_vars):
+        for tv, av in self.targets.target_iterator():
             self.variable_refresh(tv)
             if isinstance(av, OverriderBase):
                 av.should_update = True
                 update_flag = True
-            # if self.config.retrain.parameters.get('update_overrider'):
-            #     for o in self.nets[0].overriders:
-            #         if o.name in av.name:
-            #             o.should_update = True
-            #             update_flag = True
         tmp = self.associated_vars[0]
         # check if it is and only is floating point
         check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
