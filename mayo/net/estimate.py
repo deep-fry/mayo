@@ -9,11 +9,11 @@ from mayo.net.graph import LayerNode
 class ResourceEstimator(object):
     def __init__(self, net):
         super().__init__()
-        self.statistics = self._estimate(net)
+        self.net = net
 
-    def _estimate(self, net):
+    def estimate(self, info):
         statistics = {}
-        for n in net._graph.topological_order():
+        for n in self.net._graph.topological_order():
             if not isinstance(n, LayerNode):
                 continue
             try:
@@ -22,10 +22,10 @@ class ResourceEstimator(object):
                 statistics[n] = None
                 continue
             # tensors
-            inputs = [net._tensors[p] for p in n.predecessors]
+            inputs = [self.net._tensors[p] for p in n.predecessors]
             if len(inputs) == 1:
                 inputs = inputs[0]
-            outputs = net._tensors[n]
+            outputs = self.net._tensors[n]
             statistics[n] = func(n, inputs, outputs, params)
         total = {}
         for n, stat in statistics.items():

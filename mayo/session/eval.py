@@ -54,7 +54,6 @@ class EvaluateBase(Session):
                 self.register_update('eval', Percent(total / num_examples))
                 self.register_update('top1', top1_acc)
                 self.register_update('top5', top5_acc)
-                self._register_overrider('mayo.overrider.gates')
                 step += 1
         except KeyboardInterrupt as e:
             log.info('Evaluation aborted.')
@@ -65,18 +64,6 @@ class EvaluateBase(Session):
             log.info('    top1: {}, top5: {} [{} images]'.format(
                 top1_acc, top5_acc, total))
             return top1_acc, top5_acc
-
-    def _register_overrider(self, collection):
-        # a hack
-        gates = tf.get_collection(collection)
-        if not gates:
-            return
-        valid = tf.add_n([tf.reduce_sum(g) for g in gates])
-        total = sum(g.shape.num_elements() for g in gates)
-        density = valid / total
-        density_formatter = lambda d: Percent(
-            self.change.moving_metrics('density', d, std=False))
-        self.register_update('density', density, density_formatter)
 
     def eval_all(self):
         log.info('Evaluating all checkpoints...')

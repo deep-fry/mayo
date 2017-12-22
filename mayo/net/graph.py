@@ -119,6 +119,7 @@ class EdgeError(GraphError):
 
 
 class Graph(object):
+    """ Converts model description into a graph.  """
     def __init__(self, model):
         super().__init__()
         self.nx_graph = nx.OrderedMultiDiGraph()

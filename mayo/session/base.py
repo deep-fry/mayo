@@ -79,8 +79,6 @@ class Session(object, metaclass=SessionMeta):
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.nets = self._instantiate_nets()
-        self._to_update_op = collections.OrderedDict()
-        self._to_update_formatter = {}
 
     def __del__(self):
         log.debug('Finishing...')
@@ -244,37 +242,23 @@ class Session(object, metaclass=SessionMeta):
         for o in self.nets[0].overriders:
             o.assign_parameters(self)
 
-    def register_update(self, message, tensor, formatter=None):
-        """
-        Register message and tensor to print in progress update
-        at each self.run().
-        """
-        self._to_update_op[message] = tensor
-        self._to_update_formatter[message] = formatter
-
     @memoize_property
     def num_examples_per_epoch(self):
         return self.config.dataset.num_examples_per_epoch[self.mode]
+
+    def register_statistic(self, name, tensor, function, collection=None):
+        self.nets[0].register_statistic(name, tensor, function, collection)
 
     def _update_progress(self, to_update):
         if not to_update:
             return
         info = []
         for key, value in to_update.items():
-            formatter = self._to_update_formatter[key]
-            if formatter:
-                value = formatter(value)
             info.append('{}: {}'.format(key, value))
         # performance
-        epoch = to_update.get('epoch')
         interval = self.change.delta('step.duration', time.time())
         if interval != 0:
-            if epoch:
-                imgs = epoch * self.num_examples_per_epoch
-                imgs_per_step = self.change.delta('step.images', imgs)
-            else:
-                imgs_per_step = self.batch_size
-            imgs_per_sec = imgs_per_step / float(interval)
+            imgs_per_sec = self.batch_size / float(interval)
             imgs_per_sec = self.change.moving_metrics(
                 'step.imgs_per_sec', imgs_per_sec, std=False)
             info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
@@ -298,24 +282,20 @@ class Session(object, metaclass=SessionMeta):
         # assign overrider hyperparameters
         self._overrider_assign_parameters()
 
-        # extra statistics to print in progress update
-        update_funcs = self.nets[0].update_functions
-        if update_funcs:
-            for collection in list(update_funcs):
-                func = update_funcs.pop(collection)
-                func(self, collection)
+        # extra statistics to consider
+        statistics = self.nets[0].statistic_collections
 
         # session run
-        filtered_to_update_op = {
-            k: v for k, v in self._to_update_op.items()
-            if isinstance(v, (tf.Tensor, tf.Variable))}
-        results, to_update = self.raw_run(
-            (ops, filtered_to_update_op), **kwargs)
+        results, statistics = self.raw_run((ops, statistics), **kwargs)
 
         # progress update
         if update_progress:
-            to_update = dict(self._to_update_op, **to_update)
-            self._update_progress(to_update)
+            statistic_functions = self.nets[0].statistic_functions
+            formatted_statistics = {}
+            for name, stats in statistics.items():
+                func = statistic_functions[name]
+                formatted_statistics[name] = func(stats)
+            self._update_progress(formatted_statistics)
 
         return results
 

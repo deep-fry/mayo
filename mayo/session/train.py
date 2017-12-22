@@ -108,12 +108,12 @@ class Train(Session):
             log.debug('Current learning rate is {}.'.format(lr))
 
         # register progress update statistics
-        self.register_update(
+        self.register_statistic(
             'epoch', self.num_epochs, lambda epoch: '{:.2f}'.format(epoch))
         accuracy_formatter = lambda acc: Percent(
             self.change.moving_metrics('accuracy', acc, std=False))
-        self.register_update('loss', self.loss, self._loss_formatter)
-        self.register_update('accuarcy', self.accuracy, accuracy_formatter)
+        self.register_statistic('loss', self.loss, self._loss_formatter)
+        self.register_statistic('accuarcy', self.accuracy, accuracy_formatter)
 
     @memoize_property
     def _summary_writer(self):
