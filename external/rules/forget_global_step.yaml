@@ -1,5 +1,0 @@
-# This conversion rule can make a checkpoint forget its `global_step`, useful
-# when you want to continue training but with a fresh learning_rate.
----
-rename:
-    global_step: null

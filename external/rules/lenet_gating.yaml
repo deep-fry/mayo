@@ -1,8 +1,0 @@
-# Rules to import original model to gatied model.
----
-rename:
-    conv0: gate0/conv
-    conv1: gate1/conv
-    lenet5: lenet5_gate
-    imgs_seen: null
-    global_step: null

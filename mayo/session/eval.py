@@ -84,10 +84,11 @@ class EvaluateBase(Session):
         epochs_to_eval = ', '.join(str(e) for e in epochs)
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
         results = Table(('Epoch', 'Top 1', 'Top 5'))
+        interval = self.config.get('eval.interval', 1)
         # ensures imgs_seen initialized and loaded
         epochs_op = self.num_epochs
         try:
-            for e in epochs:
+            for e in epochs[::interval]:
                 with log.demote():
                     top1, top5 = self.eval(e, keyboard_interrupt=False)
                 top1, top5 = Percent(top1), Percent(top5)
@@ -96,7 +97,7 @@ class EvaluateBase(Session):
                 log.info('epoch: {}, top1: {}, top5: {}'.format(*row))
         except KeyboardInterrupt:
             pass
-        return results.format()
+        return results
 
 
 class Evaluate(EvaluateBase):

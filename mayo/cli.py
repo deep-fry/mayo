@@ -226,7 +226,12 @@ Arguments:
 
     def cli_eval_all(self):
         """Evaluates all checkpoints for accuracy.  """
-        print(self._get_session('validate').eval_all())
+        result = self._get_session('validate').eval_all()
+        file_name = 'eval_all.csv'
+        with open(file_name, 'w') as f:
+            f.write(result.csv())
+        log.info(
+            'Evaluation results saved in {!r}.'.format(file_name))
 
     def cli_overriders_update(self):
         """Updates variable overriders in the training session.  """

@@ -6,7 +6,8 @@ model.layers:
             alpha: -3
     conv1: &depsep
         layers:
-            depthwise: {<<: *overrider, alpha: -3}
+            depthwise: {<<: *overrider}
+            pointwise: {<<: *overrider, should_update: false}
     conv2: {<<: *depsep}
     conv3: {<<: *depsep}
     conv4: {<<: *depsep}
