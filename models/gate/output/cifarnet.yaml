@@ -8,6 +8,7 @@ model:
             type: gated_convolution
             density: 0.5
             trainable: true
+            should_gate: true
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}

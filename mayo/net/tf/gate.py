@@ -129,6 +129,7 @@ class GateLayers(object):
     def instantiate_gated_convolution(self, node, tensor, params):
         online = params.pop('online', False)
         density = params.pop('density')
+        should_gate = params.pop('should_gate', True)
         activation_fn = params.get('activation_fn', tf.nn.relu)
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
@@ -138,6 +139,8 @@ class GateLayers(object):
             params['scope'])
         # register gate sparsity for printing
         self.register_update('mayo.gates', gate, _sparsity)
+        if not should_gate:
+            return output
         # actual gating
         gate = tf.stop_gradient(tf.cast(gate, tf.float32))
         return output * gate
@@ -150,4 +153,7 @@ class GateLayers(object):
         self.register_update('mayo.gates', gate, _sparsity)
         # actual gating
         gate = tf.stop_gradient(tf.cast(gate, tf.float32))
+        if not params['should_gate']:
+            with tf.control_dependencies([gate]):
+                return tensor
         return tensor * gate

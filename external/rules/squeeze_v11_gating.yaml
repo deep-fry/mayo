@@ -1,6 +1,0 @@
-# Rules to import original model to gatied model.
----
-rename:
-    squeezenet_v11: squeezenet_v11_gate
-    imgs_seen: null
-    global_step: null
