@@ -5,6 +5,6 @@ retrain:
     retrain_mode: overriders
     run_status: normal
     parameters:
-        type: [mayo.override.Recentralizer, mayo.overrde.ShiftQuantizer]
+        type: [mayo.override.Recentralizer, mayo.override.ShiftQuantizer]
         target: width
         range: {from: 10, to: 1, scale: -1, min_scale: -1, scale_update_factor: 0.5}

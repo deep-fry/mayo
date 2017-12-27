@@ -6,7 +6,7 @@ import pickle
 import operator
 
 from mayo.log import log
-from mayo.session.util import Info, Targets
+from mayo.session.util import Targets
 from mayo.session.train import Train
 from mayo.override.base import OverriderBase, ChainOverrider
 from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
@@ -32,11 +32,13 @@ class RetrainBase(Train):
         self.retrain_mode = self.config.retrain.retrain_mode
         self._init_scales()
         self._reset_stats()
+        self.targets.init_targets(
+            self, self.config.retrain.run_status == 'normal')
 
         self.profile_associated_vars(start=True)
         self.profile_for_one_epoch()
         # init all overriders
-        for variable in self.targets.show_targets():
+        for variable in self.targets.members:
             self.variable_init(variable)
         self.overriders_update()
 
@@ -51,20 +53,25 @@ class RetrainBase(Train):
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
 
-        # if epoch > 0.1:
-        if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
+        if epoch > 0.1:
+        # if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self._avg_stats()
             if self.acc_avg >= self.acc_base:
+                print(self.acc_avg)
                 return self.forward_policy(floor_epoch)
 
             iter_max_epoch = self.config.retrain.iter_max_epoch
 
             # current setup exceeds max epoches, retrieve backwards
-            if epoch >= iter_max_epoch and epoch > 0:
+            # if epoch >= iter_max_epoch and epoch > 0:
+            # import pdb; pdb.set_trace()
+            if epoch > 0.11:
                 self.retrain_cnt += 1
                 self.reset_num_epochs()
                 self.log_thresholds(self.loss_avg, self.acc_avg)
-                return self.backward_policy()
+                tmp = self.backward_policy()
+                return tmp
+                # return self.backward_policy()
         return True
 
     def _fetch_as_overriders(self, info):
@@ -110,9 +117,9 @@ class RetrainBase(Train):
             self._fetch_as_overriders(info)
         else:
             self._fetch_as_variables(info)
-        run_status = self.config.retrain.run_status
-        self.info = Info(
-            info, self.tf_session, self.targets.show_targets(), run_status)
+        # run_status = self.config.retrain.run_status
+        # self.info = Info(
+        #     info, self.tf_session, self.targets.show_targets(), run_status)
 
     def once(self):
         train_op = self._train_op
@@ -138,51 +145,27 @@ class RetrainBase(Train):
             'Method of logging threholds is not implemented.')
 
     def _fetch_scale(self):
-        for tv in self.targets.show_targets():
-            if tv.name == self.target_layer:
-                return self.info.get(tv, 'scale')
+        for item in self.targets.members:
+            if item.name == self.target_layer.name:
+                return item.scale
 
     def profile_associated_vars(self, start=False):
-        import pdb; pdb.set_trace()
         '''
         1. profile the associated vars and determine a priority list
-        2. produce a cont dict to determine which targeting vars continues on
+        2. produce a cont list to determine which targeting vars continues on
         retraining
         '''
-        self.priority_list = []
         if start:
             self.best_ckpt = self.config.system.checkpoint.load
-            self.cont = {}
             # if yaml exists, load it and compute self.cont
             if self.config.retrain.get('cont_list'):
                 doct_cont = self.config.retrain.cont_list
-                for variable in self.targets.show_targets():
-                    if doct_cont.get(variable.name):
-                        self.cont[variable.name] = True
-                    else:
-                        self.cont[variable.name] = False
+                self.targets.cont_list(doct_cont)
             # yaml does not exist, initialize to true by default
             else:
-                for variable in self.targets.show_targets():
-                    name = variable.name
-                    self.cont[name] = True
-        d = {}
-        thresholds = {}
-        scales = {}
-        for (tv, av) in self.targets.target_iterator():
-            name = tv.name
-            d[name] = self._metric_clac(av)
-            thresholds[name] = self.info.get(tv, 'threshold')
-            scales[name] = self.info.get(tv, 'scale')
-
-        for key in sorted(d, key=d.get):
-            log.debug('key is {} cont is {}'.format(key, self.cont[key]))
-            if self.cont[key]:
-                self.priority_list.append(key)
-        if self.priority_list == []:
-            log.debug('list is empty!!')
-        else:
-            self.target_layer = self.priority_list.pop()
+                self.targets.cont_list()
+        # pick next target
+        self.target_layer = self.targets.pick_layer(self, start)
 
     def _prepare_yaml(self, write):
         name = self.config.model.name
@@ -232,27 +215,6 @@ class RetrainBase(Train):
         self.reset_num_epochs()
         self._prepare_yaml(True)
 
-    def _metric_clac(self, variable):
-        if isinstance(variable, (tf.Variable, tf.Tensor)):
-            return self.run(variable).size
-        if isinstance(variable, ChainOverrider):
-            chained_vars = [self._find_metric(v) for v in variable]
-            metric_value = reduce(operator.mul, chained_vars)
-        if isinstance(variable, OverriderBase):
-            metric_value = self._find_metric(variable)
-        # normal tensor value should have been returned
-        return metric_value * self.run(variable.after).size
-
-    def _find_metric(self, value):
-        if hasattr(value, 'width'):
-            return self.run(value.width)
-        if hasattr(value, 'mask'):
-            density = np.count_nonzero(self.run(value.mask)) / \
-                float(self.run(value.after).size)
-            return density
-        else:
-            return self.run(value.after).size
-
     def _avg_stats(self):
         self.loss_avg = self.loss_total / float(self.step)
         self.acc_avg = self.acc_total / float(self.step)
@@ -272,38 +234,69 @@ class RetrainBase(Train):
         raise NotImplementedError(
             'Method to refresh overriders is not implemented.')
 
-    def variable_init(self, v):
-        threshold = self.info.get(v, 'threshold')
-        self.assign(v, threshold)
+    def variable_init(self, target):
+        variables = target.tv
+        thresholds = target.thresholds
+        for v, t in zip(variables, thresholds):
+            self.assign(v, t)
 
-    def variable_refresh(self, v):
-        threshold = self.info.get(v, 'threshold')
-        scale = self.info.get(v, 'scale')
-        self.info.set(v, 'threshold', threshold + scale)
-        self.assign(v, threshold + scale)
+    def variable_refresh(self, target):
+        variables = target.tv
+        scale = target.scale
+        target.thresholds = [tmp + scale for tmp in target.thresholds]
+        for v, t in zip(variables, target.thresholds):
+            self.assign(v, t)
 
 
 class GlobalRetrain(RetrainBase):
+    def forward_policy(self, floor_epoch):
+        self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
+            + str(floor_epoch)
+        self.save_checkpoint(self.best_ckpt)
+        self._cp_epoch = floor_epoch
+        self.retrain_cnt += 1
+        self.log_thresholds(self.loss_avg, self.acc_avg)
+        self.profile_associated_vars()
+        self.variables_refresh()
+        self.reset_num_epochs()
+        threshold = self.targets.members[0].thresholds[0]
+        log.info('update threshold to {}, working on {}'.format(
+            threshold, self.target_layer))
+        return True
+
+    def log_thresholds(self, loss, acc):
+        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
+        for tv in self.targets.members:
+            value = tv.thresholds
+            if prev_loss is None:
+                self.log[tv.name] = (value, loss, acc)
+            else:
+                if acc > self.acc_base:
+                    self.log[self.target_layer] = (value, loss, acc)
+
     def variables_refresh(self):
         update_flag = False
-        for tv, av in self.targets.target_iterator():
-            self.variable_refresh(tv)
-            if isinstance(av, OverriderBase):
-                av.should_update = True
+        for item in self.targets.members:
+            self.variable_refresh(item)
+            if isinstance(item.av, OverriderBase):
+                item.av.should_update = True
                 update_flag = True
-        tmp = self.associated_vars[0]
+        tmp = self.targets.show_associates()[0]
         # check if it is and only is floating point
-        check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
-            and not self._check_cls(tmp, ShiftQuantizer)
-        w = self.info.get(self.targeting_vars[0], 'threshold')
-        if check_floating_point:
+        check_shift = self._check_cls(tmp, ShiftQuantizer)
+        check_float = self._check_cls(tmp, FloatingPointQuantizer) \
+            and not check_shift
+        # in global retrain, thresholds are globally the same
+        w = self.targets.members[0].thresholds[0]
+        if check_float:
             self.allocate_exp_mantissa(w)
-        if self._check_cls(tmp, ShiftQuantizer) and \
-            isinstance(tmp, Recentralizer):
-            for av in self.associated_vars:
-                if isinstance(av, Recentralizer):
-                    av_before = self.run(av.before)
-                    self._update_mean_quantizer(av_before, av, w)
+        if check_shift:
+            for item in self.targets.members:
+                av_before = self.run(item.av.before)
+                av_before = av_before[av_before != 0]
+                if item.mean_quantizer:
+                    raise ValueError('Mean quantizer not defined!')
+                self._update_mean_quantizer(av_before, item.mean_quantizer, w)
         if update_flag:
             self.overriders_update()
 
@@ -311,7 +304,7 @@ class GlobalRetrain(RetrainBase):
         if isinstance(av, cls):
             return True
         if isinstance(av, Recentralizer):
-            if isinstance(av.mean_quantizer, cls):
+            if isinstance(av.quantizer, cls):
                 return True
         return False
 
@@ -335,105 +328,84 @@ class GlobalRetrain(RetrainBase):
             loss = 0
             biases = []
             exponent_width = width - mantissa_width
-            for av in self.associated_vars:
-                if not isinstance(av, Recentralizer):
-                    tmp, bias = av.compute_quantization_loss(
-                        self.run(av.before), exponent_width, mantissa_width,
-                        overflow_rate)
-                    # accumulate loss
-                    loss += tmp
-                    # collect bias
-                    biases.append(bias)
+            for item in self.targets.members:
+                org_matrix = self.run(item.av.before)
+                tmp, bias = item.av.compute_quantization_loss(
+                    org_matrix[org_matrix != 0], exponent_width,
+                    mantissa_width, overflow_rate)
+                # accumulate loss
+                loss += tmp
+                # collect bias
+                biases.append(bias)
             losses.append((loss, exponent_width, mantissa_width, biases))
         # find smallest loss
-        _, exp_width, mantissa_width, biases = min(losses,
-            key=lambda meta: meta[0])
+        _, exp_width, mantissa_width, biases = min(
+            losses, key=lambda meta: meta[0])
         index = 0
-        for av in self.associated_vars:
-            if isinstance(av, Recentralizer):
-                if isinstance(av.mean_quantizer, FloatingPointQuantizer):
-                    values = self.run(av.before)
-                    self._update_mean_quantizer(values, av, width,
-                                                overflow_rate)
-            else:
-                self.assign(av.mantissa_width, mantissa_width)
-                self.assign(av.exponent_bias, biases[index])
-                index += 1
+        for item in self.targets.members:
+            values = self.run(item.av.before)
+            self._update_mean_quantizer(
+                values[values != 0], item.mean_quantizer, width, overflow_rate)
+            self.assign(item.quantizer.mantissa_width, mantissa_width)
+            self.assign(item.quantizer.exponent_bias, biases[index])
+            self.assign(item.bias_quantizer.mantissa_width, mantissa_width)
+            self.assign(item.bias_quantizer.exponent_bias, biases[index])
+            index += 1
 
-    def _update_mean_quantizer(self, values, av, width, overflow_rate=0.01):
-        positives = np.mean(values > 0)
-        negatives = np.mean(values < 0)
-        exp = av.mean_quantizer.compute_mean_exp(positives,
-                negatives, width, overflow_rate)
-        av = av.mean_quantizer
+    def _compute_mean_exp(self, pos_mean, neg_mean, width, overflow_rate):
+        max_exponent = int(2 ** width)
+        for exp in range(min(-max_exponent, -10), max(max_exponent, 4)):
+            max_value = 2 ** (exp + 1)
+            if neg_mean > -max_value and pos_mean < max_value:
+                break
+        return exp
+
+    def _update_mean_quantizer(
+            self, values, variable, width, overflow_rate=0.01):
+        positives = np.mean(values[values > 0])
+        negatives = np.mean(values[values < 0])
+        exp = self._compute_mean_exp(
+            positives, negatives, width, overflow_rate)
         # shift quantizer has mantissa zero
-        if not isinstance(av, ShiftQuantizer):
+        if not isinstance(variable, ShiftQuantizer):
             if exp > 0:
-                self.assign(av.mantissa_width, math.ceil(math.log(exp, 2)))
+                self.assign(
+                    variable.mantissa_width,
+                    width - math.ceil(math.log(exp, 2)))
             else:
-                self.assign(av.mantissa_width, width)
+                self.assign(variable.mantissa_width, width)
         if exp < 0:
-            self.assign(av.exponent_bias, exp)
+            self.assign(variable.exponent_bias, -exp)
         else:
-            self.assign(av.exponent_bias, 0)
-
-    def forward_policy(self, floor_epoch):
-        self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
-            + str(floor_epoch)
-        self.save_checkpoint(self.best_ckpt)
-        self._cp_epoch = floor_epoch
-        self.retrain_cnt += 1
-        self.log_thresholds(self.loss_avg, self.acc_avg)
-        self.profile_associated_vars()
-        self.variables_refresh()
-        self.reset_num_epochs()
-        for tv in self.targeting_vars:
-            if tv.name == self.target_layer:
-                threshold = self.info.get(tv, 'threshold')
-                log.info('update threshold to {}, working on {}'.format(
-                    threshold, self.target_layer))
-        return True
-
-    def log_thresholds(self, loss, acc):
-        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
-        for tv in self.targeting_vars:
-            name = tv.name
-            value = self.info.get(tv, 'threshold')
-            if prev_loss is None:
-                self.log[name] = (value, loss, acc)
-            else:
-                if acc > self.acc_base:
-                    self.log[self.target_layer] = (value, loss, acc)
+            self.assign(variable.exponent_bias, 0)
 
     def backward_policy(self):
         # if did not reach min scale
-        tmp_tv = self.targeting_vars[0]
-        end_scale = self.info.get(tmp_tv, 'end_scale')
-        scale = self.info.get(tmp_tv, 'scale')
-        end_threshold = self.info.get(tmp_tv, 'end_threshold')
-        threshold = self.info.get(tmp_tv, 'threshold')
-        if scale >= 0:
-            scale_check = self._fetch_scale() > end_scale
-            threshold_check = end_threshold > threshold
+        tmp_tv = self.targets.members[0]
+        if tmp_tv.scale >= 0:
+            scale_check = self._fetch_scale() > tmp_tv.min_scale
+            threshold_check = tmp_tv.end_thresholds[0] > tmp_tv.thresholds[0]
         else:
-            scale_check = self._fetch_scale() < end_scale
-            threshold_check = end_threshold < threshold
+            scale_check = self._fetch_scale() < tmp_tv.min_scale
+            threshold_check = tmp_tv.end_thresholds[0] < tmp_tv.thresholds[0]
 
         if scale_check and threshold_check:
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
+            # TODO change decrease scale
             self._decrease_scale()
-            thresholds = self.info.get(tmp_tv, 'threshold')
             log.info(
                 'Decreasing scale to {}, threshold is {}...'
-                .format(self._fetch_scale(), thresholds))
+                .format(self._fetch_scale(), tmp_tv.thresholds[0]))
             self.reset_num_epochs()
+            print('quiting backward policy with returning true')
+            import pdb; pdb.set_trace()
             return True
         # stop if reach min scale
         else:
-            self.cont[self.target_layer] = False
-            thresholds = self.info.get(tmp_tv, 'threshold')
-            scale = self.info.get(tmp_tv, 'scale')
+            self.targets.cont = []
+            thresholds = tmp_tv.thresholds[0]
+            scale = tmp_tv.scale
             log.info(
                 'All layers done, final threshold is {}'
                 .format(thresholds - scale))
@@ -445,44 +417,49 @@ class GlobalRetrain(RetrainBase):
                 'Overrider is done, model stored at {}.'
                 .format(self.best_ckpt))
             self.reset_num_epochs()
+            print('quiting backward policy with returning false')
+            import pdb; pdb.set_trace()
             return False
 
     def _decrease_scale(self):
         # decrease scale factor, for quantizer, this factor might be 1
-        for tv in self.targeting_vars:
+        for item in self.targets.members:
             # roll back on thresholds
-            threshold = self.info.get(tv, 'threshold')
-            scale = self.info.get(tv, 'scale')
-            if threshold == self.info.get(tv, 'start_threshold'):
+            threshold = item.thresholds[0]
+            scale = item.scale
+            if threshold == item.start_threshold:
                 raise ValueError(
-                    'Threshold failed on starting point, consider '
-                    'changing your starting point.')
+                    'Thresholds failed on starting point, consider '
+                    'changing starting point.')
             else:
-                self.info.set(tv, 'threshold', threshold - scale)
+                item.thresholds = [
+                    threshold - scale for threshold in item.thresholds]
             # decrease scale
-            factor = self.info.get(tv, 'scale_factor')
             if isinstance(scale, int) and isinstance(threshold, int):
-                self.info.set(tv, 'scale', int(scale * factor))
+                item.scale = int(item.scale * item.update_factor)
             else:
-                self.info.set(tv, 'scale', scale * factor)
-            # use new scale
-            self.variable_refresh(tv)
-        tmp = self.associated_vars[0]
+                item.scale = int(item.scale * item.update_factor)
+        tmp = self.targets.members[0].av
         check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
             and not self._check_cls(tmp, ShiftQuantizer)
+        for item in self.targets.members:
+            # use new scale
+            self.variable_refresh(item)
         if check_floating_point:
-            w = self.info.get(self.targeting_vars[0], 'threshold')
+            w = self.targets.members[0].thresholds[0]
             self.allocate_exp_mantissa(w)
+        self.overriders_update()
 
 
 class LayerwiseRetrain(RetrainBase):
     def variables_refresh(self):
-        for tv, av in zip(self.targeting_vars, self.associated_vars):
-            if tv.name == self.target_layer:
-                self.variable_refresh(tv)
-                if isinstance(av, OverriderBase):
-                    av.should_update = True
-        if isinstance(av, OverriderBase):
+        for item in self.targets.members:
+            if item.name == self.target_layer:
+                for tv in item.tv:
+                    self.variable_refresh(tv)
+                if isinstance(item.av, OverriderBase):
+                    item.av.should_update = True
+        if isinstance(item.av, OverriderBase):
             self.overriders_update()
 
     def forward_policy(self, floor_epoch):
@@ -547,10 +524,12 @@ class LayerwiseRetrain(RetrainBase):
                     .format(self._fetch_scale(), self.target_layer))
             else:
                 # threshold roll back
-                threshold = self.info.get(recorded, 'threshold')
-                scale = self.info.get(recorded, 'scale')
-                self.info.set(recorded, 'threshold', threshold - scale)
+                for item in self.targets:
+                    item.thresholds = [threshold - item.scale for threshold in
+                                       item.thresholds]
                 self.cont[self.target_layer] = False
+                self.targets.cont = [tmp for tmp in self.targets.cont if
+                                     tmp != self.target_layer]
                 # fetch a new layer to retrain
                 self.profile_associated_vars()
                 self.variables_refresh()
@@ -570,7 +549,7 @@ class LayerwiseRetrain(RetrainBase):
 
     def _decrease_scale(self):
         # decrease scale factor, for quantizer, this factor might be 1
-        for tv in self.targeting_vars:
+        for tv in self.targets.show_targets():
             if tv.name == self.target_layer:
                 # threshold roll back
                 threshold = self.info.get(tv, 'threshold')

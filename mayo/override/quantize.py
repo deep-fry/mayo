@@ -79,8 +79,11 @@ class FixedPointQuantizer(QuantizerBase):
         if width is not None:
             max_value = util.cast(2 ** (width - 1), float)
             if compute_overflow_rate:
+                import pdb; pdb.set_trace()
+                overflow_value = value[value != 0]
                 overflows = util.logical_or(
-                    value < -max_value, value > max_value - 1)
+                    overflow_value < -max_value,
+                    overflow_value > max_value - 1)
                 return _overflow_rate(overflows)
             value = util.clip_by_value(value, -max_value, max_value - 1)
         # revert bit-shift earlier
@@ -211,7 +214,7 @@ class FloatingPointQuantizer(QuantizerBase):
         if exponent_bias is None:
             exponent_bias = self.exponent_bias
         # smallest non-zero floating point
-        descriminator = (2 ** exponent_bias) / 2
+        descriminator = (2 ** (-exponent_bias)) / 2
         sign = util.cast(value > descriminator, int)
         sign -= util.cast(value < -descriminator, int)
         value = util.abs(value)
@@ -229,8 +232,8 @@ class FloatingPointQuantizer(QuantizerBase):
         if mantissa_width is None:
             mantissa_width = self.mantissa_width
         """ Clip exponent and quantize mantissa.  """
-        exponent_min = exponent_bias
-        exponent_max = exponent_min + 2 ** exponent_width - 1
+        exponent_min = -exponent_bias
+        exponent_max = 2 ** exponent_width - 1 - exponent_bias
         exponent = util.clip_by_value(exponent, exponent_min, exponent_max)
         shift = util.cast(2 ** mantissa_width, float)
         mantissa = util.round(mantissa * shift) / shift
@@ -275,19 +278,12 @@ class FloatingPointQuantizer(QuantizerBase):
     def compute_exp(self, value, width, overflow_rate):
         """ Compute an exponent bound based on the overflow rate.  """
         max_exponent = int(2 ** width)
-        for exp in range(max(-max_exponent, -4), max(max_exponent, 4)):
-            max_value = 2 ** exp
+        for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
+            max_value = 2 ** (exp + 1)
             overflows = util.logical_or(value < -max_value, value > max_value)
             if _overflow_rate(overflows) <= overflow_rate:
                 return exp
-
-    def compute_mean_exp(self, pos_mean, neg_mean, width, overflow_rate):
-        max_exponent = int(2 ** width)
-        for exp in range(max(-max_exponent, -10), max(max_exponent, 4)):
-            max_value = 2 ** exp
-            if neg_mean > -max_value and pos_mean < max_value:
-                break
-        return exp
+        return 0
 
     def compute_quantization_loss(
             self, value, exponent_width, mantissa_width, overflow_rate):

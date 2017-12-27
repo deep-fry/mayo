@@ -4,10 +4,10 @@ model.layers:
         type: mayo.override.Recentralizer
         quantizer:
             type: mayo.override.FixedPointQuantizer
-            width: 10
+            width: 16
         mean_quantizer:
             type: mayo.override.FixedPointQuantizer
-            width: 10
+            width: 16
     conv0: &overrider
         weights_overrider:
           - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}

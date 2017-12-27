@@ -7,4 +7,4 @@ retrain:
     parameters:
         type: mayo.override.FixedPointQuantizer
         target: width
-        range: {from: 16, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}
+        range: {from: 8, to: 1, scale: -4, min_scale: -1, scale_update_factor: 0.5}

@@ -3,10 +3,10 @@ model.layers:
     conv0: &overrider
         weights_overrider:
             type: mayo.override.DynamicNetworkSurgeryPruner
+            alpha: -3
     conv1: &depsep
         layers:
-            depthwise: {<<: *overrider}
-            pointwise: {<<: *overrider, should_update: false}
+            depthwise: {<<: *overrider, alpha: -3}
     conv2: {<<: *depsep}
     conv3: {<<: *depsep}
     conv4: {<<: *depsep}
