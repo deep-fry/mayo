@@ -46,13 +46,19 @@ class Targets(object):
         quantizer = None
         bias_quantizer = None
         if isinstance(element, Recentralizer):
-            tvs.append(getattr(element.mean_quantizer, target))
-            mean_quantizer = element.mean_quantizer
-            quantizer = element.quantizer
-            element = element.quantizer
-        if self._is_bias(element):
-            bias_quantizer = element
-        tvs.append(getattr(element, target))
+            if self._is_bias(element):
+                bias_quantizer = element
+                tvs.append(getattr(element, target))
+            else:
+                mean_quantizer = element.mean_quantizer
+                quantizer = element.quantizer
+                tvs.append(getattr(element.mean_quantizer, target))
+                tvs.append(getattr(element.quantizer, target))
+        else:
+            if self._is_bias(element):
+                bias_quantizer = element
+            tvs.append(getattr(element, target))
+
         if name is None:
             name = self._check_parent_layer(element.name)
         else:

@@ -57,14 +57,12 @@ class RetrainBase(Train):
         # if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self._avg_stats()
             if self.acc_avg >= self.acc_base:
-                print(self.acc_avg)
                 return self.forward_policy(floor_epoch)
 
             iter_max_epoch = self.config.retrain.iter_max_epoch
 
             # current setup exceeds max epoches, retrieve backwards
             # if epoch >= iter_max_epoch and epoch > 0:
-            # import pdb; pdb.set_trace()
             if epoch > 0.11:
                 self.retrain_cnt += 1
                 self.reset_num_epochs()
@@ -293,7 +291,6 @@ class GlobalRetrain(RetrainBase):
         if check_shift:
             for item in self.targets.members:
                 av_before = self.run(item.av.before)
-                av_before = av_before[av_before != 0]
                 if item.mean_quantizer:
                     raise ValueError('Mean quantizer not defined!')
                 self._update_mean_quantizer(av_before, item.mean_quantizer, w)
@@ -329,8 +326,8 @@ class GlobalRetrain(RetrainBase):
             biases = []
             exponent_width = width - mantissa_width
             for item in self.targets.members:
-                org_matrix = self.run(item.av.before)
-                tmp, bias = item.av.compute_quantization_loss(
+                org_matrix = self.run(item.av.quantizer.before)
+                tmp, bias = item.av.quantizer.compute_quantization_loss(
                     org_matrix[org_matrix != 0], exponent_width,
                     mantissa_width, overflow_rate)
                 # accumulate loss
@@ -345,7 +342,7 @@ class GlobalRetrain(RetrainBase):
         for item in self.targets.members:
             values = self.run(item.av.before)
             self._update_mean_quantizer(
-                values[values != 0], item.mean_quantizer, width, overflow_rate)
+                values, item.mean_quantizer, width, overflow_rate)
             self.assign(item.quantizer.mantissa_width, mantissa_width)
             self.assign(item.quantizer.exponent_bias, biases[index])
             self.assign(item.bias_quantizer.mantissa_width, mantissa_width)
@@ -398,8 +395,6 @@ class GlobalRetrain(RetrainBase):
                 'Decreasing scale to {}, threshold is {}...'
                 .format(self._fetch_scale(), tmp_tv.thresholds[0]))
             self.reset_num_epochs()
-            print('quiting backward policy with returning true')
-            import pdb; pdb.set_trace()
             return True
         # stop if reach min scale
         else:
@@ -417,8 +412,6 @@ class GlobalRetrain(RetrainBase):
                 'Overrider is done, model stored at {}.'
                 .format(self.best_ckpt))
             self.reset_num_epochs()
-            print('quiting backward policy with returning false')
-            import pdb; pdb.set_trace()
             return False
 
     def _decrease_scale(self):

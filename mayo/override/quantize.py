@@ -79,7 +79,6 @@ class FixedPointQuantizer(QuantizerBase):
         if width is not None:
             max_value = util.cast(2 ** (width - 1), float)
             if compute_overflow_rate:
-                import pdb; pdb.set_trace()
                 overflow_value = value[value != 0]
                 overflows = util.logical_or(
                     overflow_value < -max_value,
