@@ -4,20 +4,20 @@ model.layers:
         type: mayo.override.Recentralizer
         quantizer:
             type: mayo.override.ShiftQuantizer
-            width: 8
-            bias: -16
+            width: 16
+            bias: 16
             overflow_rate: 0.01
         mean_quantizer:
             type: mayo.override.ShiftQuantizer
-            width: 8
-            bias: -16
+            width: 16
+            bias: 16
             overflow_rate: 0.01
     conv0: &overrider
         weights_overrider:
           - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
           - *recentralizer
         biases_overrider:
-          - {type: mayo.override.ShiftQuantizer, width: 8, bias: -16, overflow_rate: 0.01}
+          - {type: mayo.override.ShiftQuantizer, width: 16, bias: 16, overflow_rate: 0.01}
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
     logits: {<<: *overrider}

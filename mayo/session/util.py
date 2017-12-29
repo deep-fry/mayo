@@ -187,14 +187,13 @@ class Target(object):
             chained_vars = [self._metric_calc(v) for v in variable]
             metric_value = reduce(operator.mul, chained_vars)
         if isinstance(variable, OverriderBase):
+            metric_value = 1
             if hasattr(variable, 'width'):
-                return session.run(variable.width)
+                metric_value *= session.run(variable.width)
             if hasattr(variable, 'mask'):
                 density = np.count_nonzero(session.run(variable.mask)) / \
                     float(session.run(variable.after).size)
-                return density
-            else:
-                metric_value = 1
+                metric_value *= density
         # normal tensor value should have been returned
         return metric_value * session.run(variable.after).size
 

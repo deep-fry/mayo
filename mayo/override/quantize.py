@@ -275,7 +275,7 @@ class FloatingPointQuantizer(QuantizerBase):
         with tf.control_dependencies([assertion]):
             return value + tf.stop_gradient(quantized - value)
 
-    def compute_exp(self, value, width, overflow_rate):
+    def find_float_exp(self, value, width, overflow_rate):
         """ Compute an exponent bound based on the overflow rate.  """
         max_exponent = int(2 ** width)
         for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
@@ -287,7 +287,7 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def compute_quantization_loss(
             self, value, exponent_width, mantissa_width, overflow_rate):
-        max_exponent = self.compute_exp(value, exponent_width, overflow_rate)
+        max_exponent = self.find_float_exp(value, exponent_width, overflow_rate)
         # obtain exponent bias based on the bound
         # max_exponent = exponent - bias, bias >= 0
         exponent_bias = 2 ** exponent_width - 1 - max_exponent
@@ -320,11 +320,11 @@ class ShiftQuantizer(FloatingPointQuantizer):
         # mantissa == 1
         return self._represent(sign, exponent, 1)
 
-    def compute_exp(self, value, session):
+    def find_shift_exp(self, value, session):
         width = session.run(self.width)
         max_exponent = int(2 ** width)
-        for exp in range(max(-max_exponent, -2), max(max_exponent, 4)):
-            max_value = 2 ** exp
+        for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
+            max_value = 2 ** (exp + 1)
             overflows = util.logical_or(value < -max_value, value > max_value)
             if _overflow_rate(overflows) <= self.overflow_rate:
                 break
@@ -332,7 +332,7 @@ class ShiftQuantizer(FloatingPointQuantizer):
 
     def _update(self, session):
         log.info('finding a exp bias for shift quantizer using overflow rate')
-        max_exponent = self.compute_exp(session.run(self.before), session)
+        max_exponent = self.find_shift_exp(session.run(self.before), session)
         self.exponent_bias = 2 ** session.run(self.width) - 1 - max_exponent
 
 

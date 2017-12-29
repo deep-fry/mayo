@@ -138,10 +138,6 @@ class RetrainBase(Train):
         raise NotImplementedError(
             'Method of forward policy is not implemented.')
 
-    def log_thresholds(self, loss, acc):
-        raise NotImplementedError(
-            'Method of logging threholds is not implemented.')
-
     def _fetch_scale(self):
         for item in self.targets.members:
             if item.name == self.target_layer.name:
@@ -245,6 +241,16 @@ class RetrainBase(Train):
         for v, t in zip(variables, target.thresholds):
             self.assign(v, t)
 
+    def log_thresholds(self, loss, acc):
+        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
+        for tv in self.targets.members:
+            value = tv.thresholds
+            if prev_loss is None:
+                self.log[tv.name] = (value, loss, acc)
+            else:
+                if acc > self.acc_base:
+                    self.log[self.target_layer] = (value, loss, acc)
+
 
 class GlobalRetrain(RetrainBase):
     def forward_policy(self, floor_epoch):
@@ -262,15 +268,42 @@ class GlobalRetrain(RetrainBase):
             threshold, self.target_layer))
         return True
 
-    def log_thresholds(self, loss, acc):
-        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
-        for tv in self.targets.members:
-            value = tv.thresholds
-            if prev_loss is None:
-                self.log[tv.name] = (value, loss, acc)
-            else:
-                if acc > self.acc_base:
-                    self.log[self.target_layer] = (value, loss, acc)
+    def backward_policy(self):
+        # if did not reach min scale
+        tmp_tv = self.targets.members[0]
+        if tmp_tv.scale >= 0:
+            scale_check = self._fetch_scale() > tmp_tv.min_scale
+            threshold_check = tmp_tv.end_thresholds[0] > tmp_tv.thresholds[0]
+        else:
+            scale_check = self._fetch_scale() < tmp_tv.min_scale
+            threshold_check = tmp_tv.end_thresholds[0] < tmp_tv.thresholds[0]
+
+        if scale_check and threshold_check:
+            # retrace the best ckpt
+            self.load_checkpoint(self.best_ckpt)
+            self._decrease_scale()
+            log.info(
+                'Decreasing scale to {}, threshold is {}...'
+                .format(self._fetch_scale(), tmp_tv.thresholds[0]))
+            self.reset_num_epochs()
+            return True
+        # stop if reach min scale
+        else:
+            self.targets.cont = []
+            thresholds = tmp_tv.thresholds[0]
+            scale = tmp_tv.scale
+            log.info(
+                'All layers done, final threshold is {}'
+                .format(thresholds - scale))
+            if not threshold_check:
+                log.info('threshold meets its minimum')
+            if not scale_check:
+                log.info('scale meets its minimum')
+            log.info(
+                'Overrider is done, model stored at {}.'
+                .format(self.best_ckpt))
+            self.reset_num_epochs()
+            return False
 
     def variables_refresh(self):
         update_flag = False
@@ -291,7 +324,7 @@ class GlobalRetrain(RetrainBase):
         if check_shift:
             for item in self.targets.members:
                 av_before = self.run(item.av.before)
-                if item.mean_quantizer:
+                if not item.mean_quantizer:
                     raise ValueError('Mean quantizer not defined!')
                 self._update_mean_quantizer(av_before, item.mean_quantizer, w)
         if update_flag:
@@ -376,44 +409,6 @@ class GlobalRetrain(RetrainBase):
         else:
             self.assign(variable.exponent_bias, 0)
 
-    def backward_policy(self):
-        # if did not reach min scale
-        tmp_tv = self.targets.members[0]
-        if tmp_tv.scale >= 0:
-            scale_check = self._fetch_scale() > tmp_tv.min_scale
-            threshold_check = tmp_tv.end_thresholds[0] > tmp_tv.thresholds[0]
-        else:
-            scale_check = self._fetch_scale() < tmp_tv.min_scale
-            threshold_check = tmp_tv.end_thresholds[0] < tmp_tv.thresholds[0]
-
-        if scale_check and threshold_check:
-            # retrace the best ckpt
-            self.load_checkpoint(self.best_ckpt)
-            # TODO change decrease scale
-            self._decrease_scale()
-            log.info(
-                'Decreasing scale to {}, threshold is {}...'
-                .format(self._fetch_scale(), tmp_tv.thresholds[0]))
-            self.reset_num_epochs()
-            return True
-        # stop if reach min scale
-        else:
-            self.targets.cont = []
-            thresholds = tmp_tv.thresholds[0]
-            scale = tmp_tv.scale
-            log.info(
-                'All layers done, final threshold is {}'
-                .format(thresholds - scale))
-            if not threshold_check:
-                log.info('threshold meets its minimum')
-            if not scale_check:
-                log.info('scale meets its minimum')
-            log.info(
-                'Overrider is done, model stored at {}.'
-                .format(self.best_ckpt))
-            self.reset_num_epochs()
-            return False
-
     def _decrease_scale(self):
         # decrease scale factor, for quantizer, this factor might be 1
         for item in self.targets.members:
@@ -445,84 +440,85 @@ class GlobalRetrain(RetrainBase):
 
 
 class LayerwiseRetrain(RetrainBase):
-    def variables_refresh(self):
-        for item in self.targets.members:
-            if item.name == self.target_layer:
-                for tv in item.tv:
-                    self.variable_refresh(tv)
-                if isinstance(item.av, OverriderBase):
-                    item.av.should_update = True
-        if isinstance(item.av, OverriderBase):
-            self.overriders_update()
-
     def forward_policy(self, floor_epoch):
         log.debug('Targeting on {}...'.format(self.target_layer))
         log.debug('Log: {}'.format(self.log))
-        self.save_checkpoint(
-            'retrain-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+
         self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
+        self.save_checkpoint(
+            'retrain-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
         self._cp_epoch = floor_epoch
         self.retrain_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
         self.profile_associated_vars()
         self.variables_refresh()
         self.reset_num_epochs()
-        for tv in self.targeting_vars:
-            if tv.name == self.target_layer:
-                threshold = self.info.get(tv, 'threshold')
+        for item in self.targets.members:
+            if item.name == self.target_layer.name:
+                for tv in item.tv:
+                    threshold = item.thresholds[0]
+                    break
         log.info(
             'update threshold to {}, working on {}'
-            .format(threshold, self.target_layer))
+            .format(threshold, self.target_layer.name))
         return True
 
     def backward_policy(self):
-        finished = not self.cont[self.target_layer]
-        if self.priority_list == [] and finished:
+        finished = self.target_layer.name in self.targets.cont
+        if self.targets.priority_list == [] and finished:
             log.info(
-                'Overrider is done, model stored at {}.'
-                .format(self.best_ckpt))
-            for tv in self.targeting_vars:
-                threshold = self.info.get(tv, 'threshold')
-                scale = self.info.get(tv, 'scale')
+                'Done, model stored at {}.'.format(self.best_ckpt))
+            for item in self.targets.members:
+                names = [tv.name for tv in item.tv]
+                thresholds = item.thresholds
+                scale = item.scale
                 log.info(
                     'Layer name: {}, threshold: {}, scale: {}.'
-                    .format(tv.name, threshold, scale))
+                    .format(names, thresholds, scale))
             return False
         else:
             # trace back
             self.load_checkpoint(self.best_ckpt)
             # current layer is done
-            for tv in self.targeting_vars:
-                if tv.name == self.target_layer:
-                    recorded = tv
+            for item in self.targets.members:
+                if item.name == self.target_layer.name:
+                    recorded = item
                     break
-            end_scale = self.info.get(recorded, 'end_scale')
-            scale = self.info.get(recorded, 'scale')
-            end_threshold = self.info.get(recorded, 'end_threshold')
-            threshold = self.info.get(recorded, 'threshold')
+            # assuming only one threshold is targeted per layer
+            min_scale = recorded.min_scale
+            scale = recorded.scale
+            end_thresholds = recorded.end_thresholds
+            thresholds = recorded.thresholds
+
             if scale >= 0:
-                scale_check = self._fetch_scale() > end_scale
-                threshold_check = end_threshold > threshold
+                scale_check = self._fetch_scale() > min_scale
+                threshold_check = [e > t for t, e in zip(
+                    thresholds, end_thresholds)]
+                threshold_check = any(threshold_check)
             else:
-                scale_check = self._fetch_scale() < end_scale
-                threshold_check = end_threshold < threshold
+                scale_check = self._fetch_scale() < min_scale
+                threshold_check = [e < t for t, e in zip(
+                    thresholds, end_thresholds)]
+                threshold_check = any(threshold_check)
             run = scale_check and threshold_check
             if run:
                 # overriders are refreshed inside decrease scale
+                # TODO: check decrease scale
                 self._decrease_scale()
                 self.reset_num_epochs()
                 log.info(
                     'Decreasing scale to {}, working on {}...'
-                    .format(self._fetch_scale(), self.target_layer))
+                    .format(self._fetch_scale(), self.target_layer.name))
             else:
                 # threshold roll back
-                for item in self.targets:
-                    item.thresholds = [threshold - item.scale for threshold in
-                                       item.thresholds]
-                self.cont[self.target_layer] = False
+                for item in self.targets.members:
+                    if item.name == self.target_layer.name:
+                        item.thresholds = [threshold - item.scale for
+                                           threshold in item.thresholds]
+                # give up on current target
                 self.targets.cont = [tmp for tmp in self.targets.cont if
-                                     tmp != self.target_layer]
+                                     tmp != self.target_layer.name]
                 # fetch a new layer to retrain
                 self.profile_associated_vars()
                 self.variables_refresh()
@@ -532,43 +528,47 @@ class LayerwiseRetrain(RetrainBase):
                 if not scale_check:
                     log.info('scale meets its minimum')
                 log.info('switching layer, working on {}'.format(
-                    self.target_layer))
-                log.info('priority_list: {}'.format(self.priority_list))
+                    self.target_layer.name))
+                log.info('priority_list: {}'.format(self.targets.priority_list))
                 # refresh the yaml
-                self.dump_data['retrain']['cont_list'] = self.cont
+                self.dump_data['retrain']['cont_list'] = self.targets.cont
                 yaml.dump(
                     self.dump_data, self.stream, default_flow_style=False)
             return True
 
+    def variables_refresh(self):
+        update_flag = False
+        for item in self.targets.members:
+            if item.name == self.target_layer.name:
+                self.variable_refresh(item)
+                if isinstance(item.av, OverriderBase):
+                    item.av.should_update = True
+                    update_flag = True
+        if update_flag:
+            self.overriders_update()
+
     def _decrease_scale(self):
         # decrease scale factor, for quantizer, this factor might be 1
-        for tv in self.targets.show_targets():
-            if tv.name == self.target_layer:
+        for item in self.targets.members:
+            if item.name == self.target_layer.name:
                 # threshold roll back
-                threshold = self.info.get(tv, 'threshold')
-                scale = self.info.get(tv, 'scale')
-                if threshold == self.info.get(tv, 'start_threshold'):
+                scale = item.scale
+                start_th = item.start_threshold
+                check_start = all([th == start_th for th in item.thresholds])
+                if check_start:
                     raise ValueError(
-                        'Threshold failed on starting point, consider '
+                        'Threshold failed at starting point, consider '
                         'changing your starting point.')
                 else:
-                    self.info.set(tv, 'threshold', threshold - scale)
-                factor = self.info.get(tv, 'scale_factor')
+                    item.thresholds = [th - scale for th in item.thresholds]
+                factor = item.update_factor
                 # update scale
-                if isinstance(scale, int) and isinstance(threshold, int):
-                    self.info.set(tv, 'scale', int(scale * factor))
-                else:
-                    self.info.set(tv, 'scale', scale * factor)
-                self.variable_refresh(tv)
+                item.scale = self._new_scale(scale, item.thresholds, factor)
+                self.variable_refresh(item)
 
-    def log_thresholds(self, loss, acc):
-        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
-        for tv in self.targeting_vars:
-            if tv.name == self.target_layer:
-                value = self.info.get(tv, 'threshold')
-                break
-        if prev_loss is None:
-            self.log[self.target_layer] = (value, loss, acc)
-        else:
-            if acc > self.acc_base:
-                self.log[self.target_layer] = (value, loss, acc)
+    @staticmethod
+    def _new_scale(old_scale, thresholds, factor):
+        check_threshold = all([isinstance(th, int) for th in thresholds])
+        if isinstance(old_scale, int) and check_threshold:
+            return int(old_scale * factor)
+        return old_scale * factor
