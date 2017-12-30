@@ -5,22 +5,6 @@ import tensorflow as tf
 from mayo.util import Percent
 
 
-def _sparsity(session, collection):
-    # sparsity info
-    gates = tf.get_collection(collection)
-    if not gates:
-        return
-    valid = []
-    total = 0
-    for g in gates:
-        valid.append(tf.reduce_sum(tf.cast(g, tf.float32)))
-        total += g.shape.num_elements()
-    density = tf.add_n(valid) / total
-    density_formatter = lambda d: Percent(
-        session.change.moving_metrics('density', d, std=False))
-    session.register_update('density', density, density_formatter)
-
-
 def _subsample(constructor, tensor, scope):
     num, height, width, channels = tensor.shape
     # pool
@@ -136,8 +120,7 @@ class GateLayers(object):
         gate = _regularized_gate(
             self, tensor, output, density, activation_fn, online,
             params['scope'])
-        # register gate sparsity for printing
-        self.register_update('mayo.gates', gate, _sparsity)
+        # TODO register gate sparsity for printing
         # actual gating
         gate = tf.stop_gradient(tf.cast(gate, tf.float32))
         return output * gate
@@ -146,8 +129,7 @@ class GateLayers(object):
         gate_scope = '{}/gate'.format(params['scope'])
         subsampled = _subsample(self, tensor, gate_scope)
         gate = _descriminate_by_density(subsampled, params['density'])
-        # register gate sparsity for printing
-        self.register_update('mayo.gates', gate, _sparsity)
+        # TODO register gate sparsity for printing
         # actual gating
         gate = tf.stop_gradient(tf.cast(gate, tf.float32))
         return tensor * gate
