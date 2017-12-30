@@ -12,12 +12,13 @@ from mayo.net.tf.util import ParameterTransformer
 class TFNetBase(NetBase):
     """ Utility functions to create a TensorFlow network.  """
 
-    def __init__(self, model, images, labels, num_classes, is_training, reuse):
+    def __init__(
+            self, model, images, labels, num_classes, is_training, reuse,
+            estimator):
+        self.estimator = estimator
         self.is_training = is_training
         self._transformer = ParameterTransformer(
             num_classes, is_training, reuse)
-        self.statistic_collections = {}
-        self.statistic_functions = {}
         super().__init__(model, {'input': images})
         self._labels = labels
         self._verify_io()
@@ -33,23 +34,6 @@ class TFNetBase(NetBase):
             raise ValueError(
                 'We expect the graph to have a unique logits output named '
                 '"output", found {!r}.'.format(nodes))
-
-    def register_statistic(self, name, tensor, function, collection=None):
-        """
-        Register statistic tensors to be run by session.
-        """
-        collections = self.statistic_collections
-        if collection is None:
-            collection_map = collections
-            collection = name
-        else:
-            collection_map = collections.setdefault(collection, {})
-        if name in collection_map:
-            raise ValueError(
-                'Tensor named {!r} already exists in collection {!r}.'
-                .format(name, collection))
-        collection_map[name] = tensor
-        self.statistic_functions[collection] = function
 
     def labels(self):
         return self._labels

@@ -2,7 +2,6 @@ import collections
 
 from mayo.util import object_from_params, ensure_list, Table
 from mayo.net.graph import Graph, LayerNode, SplitNode, JoinNode
-from mayo.net.estimate import ResourceEstimator
 
 
 class NetBase(object):
@@ -33,17 +32,7 @@ class NetBase(object):
         return layers
 
     def info(self):
-        layer_info = Table(['layer', 'shape', '#macs'])
-        stats = ResourceEstimator(self).statistics
-        for n in self._graph.layer_nodes():
-            tensors = ensure_list(self._tensors[n])
-            name = '{}/{}'.format('/'.join(n.module), n.name)
-            macs = (stats[n] or {}).get('MACs', 0)
-            for tensor in tensors:
-                layer_info.add_row((name, tensor.shape, macs))
-        layer_info.set_footer(
-            ['', '    total:', sum(layer_info.get_column('#macs'))])
-        return {'layers': layer_info}
+        return {}
 
     def _instantiate(self):
         for each_node in self._graph.topological_order():

@@ -1,17 +1,16 @@
 import os
 import re
-import time
 import functools
 import subprocess
-import collections
 from contextlib import contextmanager
 
 import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_method, memoize_property, Change, flatten, Table)
+    ensure_list, memoize_method, memoize_property, Change, flatten, Table)
 from mayo.net.tf import TFNet
+from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
 from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
@@ -78,6 +77,7 @@ class Session(object, metaclass=SessionMeta):
             self.tf_session, self.mode, config, self.num_gpus)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
+        self.estimator = ResourceEstimator()
         self.nets = self._instantiate_nets()
 
     def __del__(self):
@@ -217,6 +217,18 @@ class Session(object, metaclass=SessionMeta):
 
     def info(self):
         info_dict = self.nets[0].info()
+        # layer info
+        layer_info = Table(['layer', 'shape', '#macs'])
+        stats = self.estimator.estimate(self.nets[0]._tensors)
+        for n in self._graph.layer_nodes():
+            tensors = ensure_list(self._tensors[n])
+            name = '{}/{}'.format('/'.join(n.module), n.name)
+            macs = (stats[n] or {}).get('MACs', 0)
+            for tensor in tensors:
+                layer_info.add_row((name, tensor.shape, macs))
+        layer_info.set_footer(
+            ['', '    total:', sum(layer_info.get_column('#macs'))])
+        return {'layers': layer_info}
         if self.nets[0].overriders:
             info_dict['overriders'] = self.overrider_info()
         return info_dict
@@ -246,24 +258,6 @@ class Session(object, metaclass=SessionMeta):
     def num_examples_per_epoch(self):
         return self.config.dataset.num_examples_per_epoch[self.mode]
 
-    def register_statistic(self, name, tensor, function, collection=None):
-        self.nets[0].register_statistic(name, tensor, function, collection)
-
-    def _update_progress(self, to_update):
-        if not to_update:
-            return
-        info = []
-        for key, value in to_update.items():
-            info.append('{}: {}'.format(key, value))
-        # performance
-        interval = self.change.delta('step.duration', time.time())
-        if interval != 0:
-            imgs_per_sec = self.batch_size / float(interval)
-            imgs_per_sec = self.change.moving_metrics(
-                'step.imgs_per_sec', imgs_per_sec, std=False)
-            info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
-        log.info(' | '.join(info), update=True)
-
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
@@ -282,20 +276,15 @@ class Session(object, metaclass=SessionMeta):
         # assign overrider hyperparameters
         self._overrider_assign_parameters()
 
-        # extra statistics to consider
-        statistics = self.nets[0].statistic_collections
-
         # session run
-        results, statistics = self.raw_run((ops, statistics), **kwargs)
+        operations = (ops, self.estimator.operations)
+        results, statistics = self.raw_run(operations, **kwargs)
 
-        # progress update
+        # update statistics
+        self.estimator.add(statistics)
         if update_progress:
-            statistic_functions = self.nets[0].statistic_functions
-            formatted_statistics = {}
-            for name, stats in statistics.items():
-                func = statistic_functions[name]
-                formatted_statistics[name] = func(stats)
-            self._update_progress(formatted_statistics)
+            text = self.estimator.format(batch_size=self.batch_size)
+            log.info(text, update=True)
 
         return results
 
@@ -317,7 +306,7 @@ class Session(object, metaclass=SessionMeta):
             with self._gpu_context(i):
                 net = TFNet(
                     self.config.model, images, labels, num_classes,
-                    self.mode == 'train', bool(nets))
+                    self.mode == 'train', bool(nets), self.estimator)
             nets.append(net)
         return nets
 
