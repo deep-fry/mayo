@@ -458,11 +458,9 @@ class LayerwiseRetrain(RetrainBase):
     def forward_policy(self, floor_epoch):
         log.debug('Targeting on {}...'.format(self.target_layer.name))
         log.debug('Log: {}'.format(self.log))
-
         self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
             + str(floor_epoch)
-        self.save_checkpoint(
-            'retrain-' + str(self.retrain_cnt) + '-' + str(floor_epoch))
+        self.save_checkpoint(self.best_ckpt)
         self._cp_epoch = floor_epoch
         self.retrain_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
@@ -579,6 +577,7 @@ class LayerwiseRetrain(RetrainBase):
                 # update scale
                 item.scale = self._new_scale(scale, item.thresholds, factor)
                 self.variable_refresh(item)
+        self.overriders_update()
 
     @staticmethod
     def _new_scale(old_scale, thresholds, factor):
