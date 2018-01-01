@@ -48,29 +48,44 @@ class RetrainBase(Train):
         self._update_stats(loss, acc)
         summary_delta = self.change.delta('summary.epoch', epoch)
 
+        if not hasattr(self, 'start_acc') or self.start_acc is None:
+            self.start_acc = acc
+
         if system.summary.save and summary_delta >= 0.1:
             self._save_summary(epoch)
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
 
-        if epoch > 0.1:
-        # if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
+        # if epoch > 0.1:
+        if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
             self._avg_stats()
             if self.acc_avg >= self.acc_base:
+                self.start_acc = None
                 return self.forward_policy(floor_epoch)
 
             iter_max_epoch = self.config.retrain.iter_max_epoch
 
             # current setup exceeds max epoches, retrieve backwards
+            # if epoch > 0.11:
             # if epoch >= iter_max_epoch and epoch > 0:
-            if epoch > 0.11:
+            early_stop = self.config.retrain.get('early_stop', False)
+            if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop):
                 self.retrain_cnt += 1
                 self.reset_num_epochs()
                 self.log_thresholds(self.loss_avg, self.acc_avg)
-                tmp = self.backward_policy()
-                return tmp
+                self.start_acc = None
+                return self.backward_policy()
                 # return self.backward_policy()
         return True
+
+    def _exceed_max_epoch(self, epoch, max_epoch, early_stop=False):
+        if early_stop:
+            baseline = (self.acc_base - self.start_acc) / float(max_epoch)
+            acc_grad = (self.acc_avg - self.start_acc) / float(epoch)
+            if acc_grad < (baseline * 0.7):
+                log.info('early stop activated')
+                return True
+        return epoch >= max_epoch and epoch > 0
 
     def _fetch_as_overriders(self, info):
         self.targets = Targets(info)
@@ -441,7 +456,7 @@ class GlobalRetrain(RetrainBase):
 
 class LayerwiseRetrain(RetrainBase):
     def forward_policy(self, floor_epoch):
-        log.debug('Targeting on {}...'.format(self.target_layer))
+        log.debug('Targeting on {}...'.format(self.target_layer.name))
         log.debug('Log: {}'.format(self.log))
 
         self.best_ckpt = 'retrain-' + str(self.retrain_cnt) + '-' \
@@ -504,7 +519,6 @@ class LayerwiseRetrain(RetrainBase):
             run = scale_check and threshold_check
             if run:
                 # overriders are refreshed inside decrease scale
-                # TODO: check decrease scale
                 self._decrease_scale()
                 self.reset_num_epochs()
                 log.info(

@@ -4,7 +4,8 @@ retrain:
     tolerance: 0.001
     retrain_mode: overriders
     run_status: normal
+    early_stop: True
     parameters:
         type: mayo.override.DynamicNetworkSurgeryPruner
         target: alpha
-        range: {from: -1.0, to: 10.0, scale: 1, min_scale: 0.1, scale_update_factor: 0.5}
+        range: {from: -1.0, to: 10.0, scale: 5, min_scale: 0.1, scale_update_factor: 0.5}
