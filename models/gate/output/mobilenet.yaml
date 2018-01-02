@@ -8,7 +8,7 @@ model:
             density: 0.5
         _dsconv: &dsconv
             layers:
-                depthwise: {<<: *gated_conv}
+                pointwise: {<<: *gated_conv}
         conv0: {<<: *gated_conv}
         # conv1: {<<: *dsconv}
         # conv2: {<<: *dsconv}
