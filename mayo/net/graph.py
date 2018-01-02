@@ -24,6 +24,10 @@ def _replace_module_kwargs(params):
             for k in keys:
                 placeholder = '^({})'.format(k)
                 value = value.replace(placeholder, str(replace_map[k]))
+        if value == 'False':
+            return False
+        if value == 'True':
+            return True
         try:
             return int(value)
         except ValueError:

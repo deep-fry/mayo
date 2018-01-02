@@ -7,4 +7,5 @@ model:
             density: 0.5
             online: true
             trainable: true
-        conv0: {<<: *gated_conv}
+        conv0: {<<: *gated_conv, should_gate: False}
+        conv1: {<<: *gated_conv, should_gate: False}
