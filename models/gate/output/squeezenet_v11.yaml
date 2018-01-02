@@ -6,6 +6,7 @@ model:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: 0.5
+            trainable: false
         _fire: &fire
             kwargs: {should_gate: null}
             layers:
