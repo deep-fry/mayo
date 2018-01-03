@@ -286,9 +286,12 @@ class GlobalRetrain(RetrainBase):
     def backward_policy(self):
         # if did not reach min scale
         tmp_tv = self.targets.members[0]
-        if tmp_tv.scale >= 0:
+        if tmp_tv.scale > 0:
             scale_check = self._fetch_scale() > tmp_tv.min_scale
             threshold_check = tmp_tv.end_thresholds[0] > tmp_tv.thresholds[0]
+        elif tmp_tv.scale == 0:
+            scale_check = False
+            threshold_check = False
         else:
             scale_check = self._fetch_scale() < tmp_tv.min_scale
             threshold_check = tmp_tv.end_thresholds[0] < tmp_tv.thresholds[0]
@@ -436,12 +439,12 @@ class GlobalRetrain(RetrainBase):
                     'changing starting point.')
             else:
                 item.thresholds = [
-                    threshold - scale for threshold in item.thresholds]
+                    th - scale for th in item.thresholds]
             # decrease scale
             if isinstance(scale, int) and isinstance(threshold, int):
                 item.scale = int(item.scale * item.update_factor)
             else:
-                item.scale = int(item.scale * item.update_factor)
+                item.scale = item.scale * item.update_factor
         tmp = self.targets.members[0].av
         check_floating_point = self._check_cls(tmp, FloatingPointQuantizer) \
             and not self._check_cls(tmp, ShiftQuantizer)
@@ -504,11 +507,14 @@ class LayerwiseRetrain(RetrainBase):
             end_thresholds = recorded.end_thresholds
             thresholds = recorded.thresholds
 
-            if scale >= 0:
+            if scale > 0:
                 scale_check = self._fetch_scale() > min_scale
                 threshold_check = [e > t for t, e in zip(
                     thresholds, end_thresholds)]
                 threshold_check = any(threshold_check)
+            elif scale == 0:
+                scale_check = False
+                threshold_check = False
             else:
                 scale_check = self._fetch_scale() < min_scale
                 threshold_check = [e < t for t, e in zip(
