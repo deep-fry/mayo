@@ -23,15 +23,11 @@ def _replace_module_kwargs(params):
                 break
             for k in keys:
                 placeholder = '^({})'.format(k)
-                value = value.replace(placeholder, str(replace_map[k]))
-        if value == 'False':
-            return False
-        if value == 'True':
-            return True
-        try:
-            return int(value)
-        except ValueError:
-            return value
+                replace_value = replace_map[k]
+                if value == placeholder:
+                    return replace_value
+                value = value.replace(placeholder, str(replace_value))
+        return value
 
     def skip_inner_module(value):
         if not isinstance(value, collections.Mapping):

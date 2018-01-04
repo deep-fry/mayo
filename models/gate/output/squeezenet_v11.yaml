@@ -17,17 +17,8 @@ model:
         fire2: {<<: *fire, should_gate: false}
         fire3: {<<: *fire, should_gate: false}
         fire4: {<<: *fire, should_gate: false}
-        fire4: {<<: *fire, should_gate: false}
         fire5: {<<: *fire, should_gate: false}
         fire6: {<<: *fire, should_gate: false}
         fire7: {<<: *fire, should_gate: false}
         fire8: {<<: *fire, should_gate: false}
         fire9: {<<: *fire, should_gate: false}
-        # fire3: {<<: *fire}
-        # fire4: {<<: *fire}
-        # fire5: {<<: *fire}
-        # fire6: {<<: *fire}
-        # fire7: {<<: *fire}
-        # fire8: {<<: *fire}
-        # fire9: {<<: *fire}
-        # conv10: {<<: *gated_conv}
