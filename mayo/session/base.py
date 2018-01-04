@@ -1,17 +1,17 @@
 import os
 import re
-import time
 import functools
 import subprocess
-import collections
 from contextlib import contextmanager
 
 import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_method, memoize_property, Change, flatten, Table)
+    ensure_list, memoize_method, memoize_property, flatten,
+    Change, Table, Percent)
 from mayo.net.tf import TFNet
+from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
 from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
@@ -78,17 +78,37 @@ class Session(object, metaclass=SessionMeta):
             self.tf_session, self.mode, config, self.num_gpus)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
+        self.estimator = ResourceEstimator()
+        self.register_formatters()
         self.nets = self._instantiate_nets()
-        self._to_update_op = collections.OrderedDict()
-        self._to_update_formatter = {}
 
     def __del__(self):
         log.debug('Finishing...')
         self.tf_session.close()
 
+    def register_formatters(self):
+        def progress_formatter(estimator):
+            progress = estimator.get_value('imgs_seen') / self.num_examples
+            if self.is_training:
+                return 'epoch: {:.2f}'.format(progress)
+            if progress > 1:
+                progress = 1
+            return '{}: {}'.format(self.mode, Percent(progress))
+        self.estimator.register(
+            self.imgs_seen_op, 'imgs_seen',
+            history=1, formatter=progress_formatter)
+
+    @property
+    def is_training(self):
+        return self.mode == 'train'
+
     @property
     def batch_size(self):
         return self.config.system.batch_size_per_gpu * self.num_gpus
+
+    @property
+    def num_examples(self):
+        return self.config.dataset.num_examples_per_epoch[self.mode]
 
     @property
     def num_gpus(self):
@@ -141,13 +161,16 @@ class Session(object, metaclass=SessionMeta):
         return self._tf_int('imgs_seen', tf.int64)
 
     @memoize_property
+    def imgs_seen_op(self):
+        return tf.assign_add(self.imgs_seen, self.batch_size)
+
+    @memoize_property
     def num_steps(self):
         return self.imgs_seen / self.batch_size
 
     @memoize_property
     def num_epochs(self):
-        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        return self.imgs_seen / imgs_per_epoch
+        return self.imgs_seen / self.num_examples
 
     def _mean_metric(self, func):
         return tf.reduce_mean(list(self.net_map(func)))
@@ -218,7 +241,23 @@ class Session(object, metaclass=SessionMeta):
         self.checkpoint.save(name)
 
     def info(self):
-        info_dict = self.nets[0].info()
+        net = self.nets[0]
+        info_dict = net.info()
+        # layer info
+        layer_info = Table(['layer', 'shape', '#macs'])
+        self.estimator.add_estimate(net._tensors)
+        for n in net._graph.layer_nodes():
+            tensors = ensure_list(net._tensors[n])
+            name = '{}/{}'.format('/'.join(n.module), n.name)
+            try:
+                macs = self.estimator.get_value('MACs', n)
+            except KeyError:
+                macs = 0
+            for tensor in tensors:
+                layer_info.add_row((name, tensor.shape, macs))
+        layer_info.set_footer(
+            ['', '    total:', sum(layer_info.get_column('#macs'))])
+        info_dict['layers'] = layer_info
         if self.nets[0].overriders:
             info_dict['overriders'] = self.overrider_info()
         return info_dict
@@ -244,46 +283,14 @@ class Session(object, metaclass=SessionMeta):
         for o in self.nets[0].overriders:
             o.assign_parameters(self)
 
-    def register_update(self, message, tensor, formatter=None):
-        """
-        Register message and tensor to print in progress update
-        at each self.run().
-        """
-        self._to_update_op[message] = tensor
-        self._to_update_formatter[message] = formatter
-
     @memoize_property
     def num_examples_per_epoch(self):
         return self.config.dataset.num_examples_per_epoch[self.mode]
 
-    def _update_progress(self, to_update):
-        if not to_update:
-            return
-        info = []
-        for key, value in to_update.items():
-            formatter = self._to_update_formatter[key]
-            if formatter:
-                value = formatter(value)
-            info.append('{}: {}'.format(key, value))
-        # performance
-        epoch = to_update.get('epoch')
-        interval = self.change.delta('step.duration', time.time())
-        if interval != 0:
-            if epoch:
-                imgs = epoch * self.num_examples_per_epoch
-                imgs_per_step = self.change.delta('step.images', imgs)
-            else:
-                imgs_per_step = self.batch_size
-            imgs_per_sec = imgs_per_step / float(interval)
-            imgs_per_sec = self.change.moving_metrics(
-                'step.imgs_per_sec', imgs_per_sec, std=False)
-            info.append('tp: {:4.0f}/s'.format(imgs_per_sec))
-        log.info(' | '.join(info), update=True)
-
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
-    def run(self, ops, update_progress=False, **kwargs):
+    def run(self, ops, batch=False, **kwargs):
         # ensure variables are initialized
         uninit_vars = []
         for var in self.global_variables():
@@ -298,25 +305,16 @@ class Session(object, metaclass=SessionMeta):
         # assign overrider hyperparameters
         self._overrider_assign_parameters()
 
-        # extra statistics to print in progress update
-        update_funcs = self.nets[0].update_functions
-        if update_funcs:
-            for collection in list(update_funcs):
-                func = update_funcs.pop(collection)
-                func(self, collection)
-
         # session run
-        filtered_to_update_op = {
-            k: v for k, v in self._to_update_op.items()
-            if isinstance(v, (tf.Tensor, tf.Variable))}
-        results, to_update = self.raw_run(
-            (ops, filtered_to_update_op), **kwargs)
-
-        # progress update
-        if update_progress:
-            to_update = dict(self._to_update_op, **to_update)
-            self._update_progress(to_update)
-
+        if batch:
+            results, statistics = self.raw_run(
+                (ops, self.estimator.operations), **kwargs)
+            # update statistics
+            self.estimator.add(statistics)
+            text = self.estimator.format(batch_size=self.batch_size)
+            log.info(text, update=True)
+        else:
+            results = self.raw_run(ops, **kwargs)
         return results
 
     def _preprocess(self):
@@ -337,7 +335,7 @@ class Session(object, metaclass=SessionMeta):
             with self._gpu_context(i):
                 net = TFNet(
                     self.config.model, images, labels, num_classes,
-                    self.mode == 'train', bool(nets))
+                    self.is_training, bool(nets), self.estimator)
             nets.append(net)
         return nets
 

@@ -73,7 +73,6 @@ class Train(Session):
 
     def _setup_train_operation(self):
         ops = {}
-        ops['imgs_seen'] = tf.assign_add(self.imgs_seen, self.batch_size)
         ops['app_grad'] = self.optimizer.apply_gradients(self._gradients)
         ma_op = self.moving_average_op()
         if ma_op:
@@ -94,11 +93,6 @@ class Train(Session):
             tf.summary.scalar('loss', self.loss)]
         self._summary_op = tf.summary.merge(summaries)
 
-    def _loss_formatter(self, loss):
-        loss_mean, loss_std = self.change.moving_metrics('loss', loss)
-        loss_std = '±{}'.format(Percent(loss_std / loss_mean))
-        return '{:10f}{:5}'.format(loss_mean, loss_std)
-
     def _init(self):
         self.load_checkpoint(self.config.system.checkpoint.load)
 
@@ -107,13 +101,18 @@ class Train(Session):
             lr = self.run(self.learning_rate)
             log.debug('Current learning rate is {}.'.format(lr))
 
+        accuracy_formatter = lambda e: \
+            'accuracy: {}'.format(Percent(e.get_mean('accuracy')))
+
+        def loss_formatter(estimator):
+            loss_mean, loss_std = estimator.get_mean_std('loss')
+            loss_std = '±{}'.format(Percent(loss_std / loss_mean))
+            return 'loss: {:10f}{:5}'.format(loss_mean, loss_std)
+
         # register progress update statistics
-        self.register_update(
-            'epoch', self.num_epochs, lambda epoch: '{:.2f}'.format(epoch))
-        accuracy_formatter = lambda acc: Percent(
-            self.change.moving_metrics('accuracy', acc, std=False))
-        self.register_update('loss', self.loss, self._loss_formatter)
-        self.register_update('accuarcy', self.accuracy, accuracy_formatter)
+        self.estimator.register(
+            self.accuracy, 'accuracy', formatter=accuracy_formatter)
+        self.estimator.register(self.loss, 'loss', formatter=loss_formatter)
 
     @memoize_property
     def _summary_writer(self):
@@ -132,7 +131,7 @@ class Train(Session):
 
     def once(self):
         tasks = [self._train_op, self.loss, self.num_epochs]
-        noop, loss, num_epochs = self.run(tasks, update_progress=True)
+        noop, loss, num_epochs = self.run(tasks, batch=True)
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         return num_epochs
