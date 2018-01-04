@@ -8,10 +8,23 @@ model:
             density: 0.5
             trainable: false
         _dsconv: &dsconv
+            kwargs: {should_gate: null}
             layers:
-                pointwise: {<<: *gated_conv}
-        conv0: {<<: *gated_conv}
-        # conv1: {<<: *dsconv}
+                pointwise: {<<: *gated_conv, should_gate: ^(should_gate)}
+        conv0: {<<: *gated_conv, should_gate: false}
+        conv1: {<<: *dsconv, should_gate: false}
+        conv2: {<<: *dsconv, should_gate: false}
+        conv3: {<<: *dsconv, should_gate: false}
+        conv4: {<<: *dsconv, should_gate: false}
+        conv5: {<<: *dsconv, should_gate: false}
+        conv6: {<<: *dsconv, should_gate: false}
+        conv7: {<<: *dsconv, should_gate: false}
+        conv8: {<<: *dsconv, should_gate: false}
+        conv9: {<<: *dsconv, should_gate: false}
+        conv10: {<<: *dsconv, should_gate: false}
+        conv11: {<<: *dsconv, should_gate: false}
+        conv12: {<<: *dsconv, should_gate: false}
+        conv13: {<<: *dsconv, should_gate: false}
         # conv2: {<<: *dsconv}
         # conv3: {<<: *dsconv}
         # conv4: {<<: *dsconv}
