@@ -28,7 +28,7 @@ class ResourceEstimator(object):
             'global'.
         history:
             the number of past values to keep, if history='infinite' we do not
-            discard past values; if not specified, we keep only one.
+            discard past values; if not specified, we keep 100.
         formatter: calls .register_print with `formatter`.
         """
         history = 100 if history is None else history

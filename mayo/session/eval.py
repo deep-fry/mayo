@@ -20,6 +20,7 @@ class EvaluateBase(Session):
         avg_op = self.moving_average_op()
         using = 'Using' if avg_op else 'Not using'
         log.debug(using + ' exponential moving averages.')
+
         # setup metrics
         metrics_func = lambda net: (net.top(1), net.top(5))
         top1s, top5s = zip(*self.net_map(metrics_func))
@@ -47,13 +48,13 @@ class EvaluateBase(Session):
         if key is None:
             key = self.config.system.checkpoint.load
         self.load_checkpoint(key)
+        self.run(self.imgs_seen.initializer)
         # evaluation
         log.info('Starting evaluation...')
-        num_examples = self.config.dataset.num_examples_per_epoch.validate
-        num_iterations = math.ceil(num_examples / self.batch_size)
+        num_iterations = math.ceil(self.num_examples / self.batch_size)
         try:
             for step in range(num_iterations):
-                self.run([], update_progress=True)
+                self.run([], batch=True)
         except KeyboardInterrupt as e:
             log.info('Evaluation aborted.')
             if not keyboard_interrupt:
@@ -65,14 +66,10 @@ class EvaluateBase(Session):
             topn = []
             for each in self.estimator.get_history(name):
                 topn += each.tolist()
-            if len(topn) != num_iterations * self.batch_size:
-                raise ValueError(
-                    'Number of top statistics should match number of '
-                    'iterations.')
-            topn = topn[:num_examples]
+            topn = topn[:self.num_examples]
             stats[name] = Percent(sum(topn) / len(topn))
         log.info('    top1: {}, top5: {} [{} images]'.format(
-            stats['top1'], stats['top5'], num_examples))
+            stats['top1'], stats['top5'], self.num_examples))
         return stats
 
     def eval_all(self):

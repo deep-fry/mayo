@@ -8,7 +8,8 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    ensure_list, memoize_method, memoize_property, Change, flatten, Table)
+    ensure_list, memoize_method, memoize_property, flatten,
+    Change, Table, Percent)
 from mayo.net.tf import TFNet
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
@@ -78,11 +79,24 @@ class Session(object, metaclass=SessionMeta):
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.estimator = ResourceEstimator()
+        self.register_formatters()
         self.nets = self._instantiate_nets()
 
     def __del__(self):
         log.debug('Finishing...')
         self.tf_session.close()
+
+    def register_formatters(self):
+        def progress_formatter(estimator):
+            progress = estimator.get_value('imgs_seen') / self.num_examples
+            if self.is_training:
+                return 'epoch: {:.2f}'.format(progress)
+            if progress > 1:
+                progress = 1
+            return '{}: {}'.format(self.mode, Percent(progress))
+        self.estimator.register(
+            self.imgs_seen_op, 'imgs_seen',
+            history=1, formatter=progress_formatter)
 
     @property
     def is_training(self):
@@ -91,6 +105,10 @@ class Session(object, metaclass=SessionMeta):
     @property
     def batch_size(self):
         return self.config.system.batch_size_per_gpu * self.num_gpus
+
+    @property
+    def num_examples(self):
+        return self.config.dataset.num_examples_per_epoch[self.mode]
 
     @property
     def num_gpus(self):
@@ -143,13 +161,16 @@ class Session(object, metaclass=SessionMeta):
         return self._tf_int('imgs_seen', tf.int64)
 
     @memoize_property
+    def imgs_seen_op(self):
+        return tf.assign_add(self.imgs_seen, self.batch_size)
+
+    @memoize_property
     def num_steps(self):
         return self.imgs_seen / self.batch_size
 
     @memoize_property
     def num_epochs(self):
-        imgs_per_epoch = self.config.dataset.num_examples_per_epoch.train
-        return self.imgs_seen / imgs_per_epoch
+        return self.imgs_seen / self.num_examples
 
     def _mean_metric(self, func):
         return tf.reduce_mean(list(self.net_map(func)))
@@ -269,7 +290,7 @@ class Session(object, metaclass=SessionMeta):
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
-    def run(self, ops, update_progress=False, **kwargs):
+    def run(self, ops, batch=False, **kwargs):
         # ensure variables are initialized
         uninit_vars = []
         for var in self.global_variables():
@@ -285,15 +306,15 @@ class Session(object, metaclass=SessionMeta):
         self._overrider_assign_parameters()
 
         # session run
-        operations = (ops, self.estimator.operations)
-        results, statistics = self.raw_run(operations, **kwargs)
-
-        # update statistics
-        self.estimator.add(statistics)
-        if update_progress:
+        if batch:
+            results, statistics = self.raw_run(
+                (ops, self.estimator.operations), **kwargs)
+            # update statistics
+            self.estimator.add(statistics)
             text = self.estimator.format(batch_size=self.batch_size)
             log.info(text, update=True)
-
+        else:
+            results = self.raw_run(ops, **kwargs)
         return results
 
     def _preprocess(self):

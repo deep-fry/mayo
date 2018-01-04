@@ -73,7 +73,6 @@ class Train(Session):
 
     def _setup_train_operation(self):
         ops = {}
-        ops['imgs_seen'] = tf.assign_add(self.imgs_seen, self.batch_size)
         ops['app_grad'] = self.optimizer.apply_gradients(self._gradients)
         ma_op = self.moving_average_op()
         if ma_op:
@@ -102,8 +101,6 @@ class Train(Session):
             lr = self.run(self.learning_rate)
             log.debug('Current learning rate is {}.'.format(lr))
 
-        epoch_formatter = lambda e: \
-            'epoch: {:.2f}'.format(e.get_value('epoch'))
         accuracy_formatter = lambda e: \
             'accuracy: {}'.format(Percent(e.get_mean('accuracy')))
 
@@ -113,8 +110,6 @@ class Train(Session):
             return 'loss: {:10f}{:5}'.format(loss_mean, loss_std)
 
         # register progress update statistics
-        self.estimator.register(
-            self.num_epochs, 'epoch', formatter=epoch_formatter)
         self.estimator.register(
             self.accuracy, 'accuracy', formatter=accuracy_formatter)
         self.estimator.register(self.loss, 'loss', formatter=loss_formatter)
@@ -136,7 +131,7 @@ class Train(Session):
 
     def once(self):
         tasks = [self._train_op, self.loss, self.num_epochs]
-        noop, loss, num_epochs = self.run(tasks, update_progress=True)
+        noop, loss, num_epochs = self.run(tasks, batch=True)
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         return num_epochs
