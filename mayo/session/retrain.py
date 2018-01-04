@@ -3,12 +3,11 @@ import numpy as np
 import tensorflow as tf
 import yaml
 import pickle
-import operator
 
 from mayo.log import log
 from mayo.session.util import Targets
 from mayo.session.train import Train
-from mayo.override.base import OverriderBase, ChainOverrider
+from mayo.override.base import OverriderBase
 from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
 from mayo.override.quantize import ShiftQuantizer
 
@@ -140,7 +139,7 @@ class RetrainBase(Train):
             # do not run training operations when `retrain.eval_only` is set
             train_op = train_op['imgs_seen']
         tasks = [train_op, self.loss, self.accuracy, self.num_epochs]
-        noop, loss, acc, num_epochs = self.run(tasks, update_progress=True)
+        noop, loss, acc, num_epochs = self.run(tasks, batch=True)
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
         return (loss, acc, num_epochs)
@@ -211,7 +210,7 @@ class RetrainBase(Train):
         imgs_seen = self._train_op['imgs_seen']
         tasks = [imgs_seen, self.loss, self.accuracy, self.num_epochs]
         while epoch < 1.0:
-            _, loss, acc, epoch = self.run(tasks, update_progress=True)
+            _, loss, acc, epoch = self.run(tasks, batch=True)
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1
