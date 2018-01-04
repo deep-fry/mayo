@@ -85,6 +85,10 @@ class Session(object, metaclass=SessionMeta):
         self.tf_session.close()
 
     @property
+    def is_training(self):
+        return self.mode == 'train'
+
+    @property
     def batch_size(self):
         return self.config.system.batch_size_per_gpu * self.num_gpus
 
@@ -216,19 +220,23 @@ class Session(object, metaclass=SessionMeta):
         self.checkpoint.save(name)
 
     def info(self):
-        info_dict = self.nets[0].info()
+        net = self.nets[0]
+        info_dict = net.info()
         # layer info
         layer_info = Table(['layer', 'shape', '#macs'])
-        stats = self.estimator.estimate(self.nets[0]._tensors)
-        for n in self._graph.layer_nodes():
-            tensors = ensure_list(self._tensors[n])
+        self.estimator.add_estimate(net._tensors)
+        for n in net._graph.layer_nodes():
+            tensors = ensure_list(net._tensors[n])
             name = '{}/{}'.format('/'.join(n.module), n.name)
-            macs = (stats[n] or {}).get('MACs', 0)
+            try:
+                macs = self.estimator.get_value('MACs', n)
+            except KeyError:
+                macs = 0
             for tensor in tensors:
                 layer_info.add_row((name, tensor.shape, macs))
         layer_info.set_footer(
             ['', '    total:', sum(layer_info.get_column('#macs'))])
-        return {'layers': layer_info}
+        info_dict['layers'] = layer_info
         if self.nets[0].overriders:
             info_dict['overriders'] = self.overrider_info()
         return info_dict
@@ -306,7 +314,7 @@ class Session(object, metaclass=SessionMeta):
             with self._gpu_context(i):
                 net = TFNet(
                     self.config.model, images, labels, num_classes,
-                    self.mode == 'train', bool(nets), self.estimator)
+                    self.is_training, bool(nets), self.estimator)
             nets.append(net)
         return nets
 

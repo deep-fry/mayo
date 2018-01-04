@@ -17,7 +17,7 @@ class ResourceEstimator(object):
         self.properties = {}
         self.formatters = []
 
-    def register(self, tensor, name, node=None, history=100, formatter=None):
+    def register(self, tensor, name, node=None, history=None, formatter=None):
         """
         Register statistic tensors to be run by session.
 
@@ -31,8 +31,8 @@ class ResourceEstimator(object):
             discard past values; if not specified, we keep only one.
         formatter: calls .register_print with `formatter`.
         """
-        if node is None:
-            node = 'global'
+        history = 100 if history is None else history
+        node = 'global' if node is None else node
         layer = self.operations.setdefault(node, {})
         prop = self.properties.setdefault(node, {})
         if name in layer:
@@ -89,11 +89,24 @@ class ResourceEstimator(object):
     def get_history(self, name, node=None):
         return self.statistics[node or 'global'][name]
 
+    def get_histories(self, name):
+        return {
+            layer_name: layer_stats[name]
+            for layer_name, layer_stats in self.statistics.items()
+            if name in layer_stats
+        }
+
     def set_history(self, value, name, node=None):
         self.statistics[node or 'global'][name] = value
 
     def get_value(self, name, node=None):
         return self.get_history(name, node)[-1]
+
+    def get_values(self, name):
+        return {
+            name: values[-1]
+            for name, values in self.get_histories(name).items()
+        }
 
     def get_mean(self, name, node=None):
         history = self.get_history(name, node)
@@ -102,6 +115,9 @@ class ResourceEstimator(object):
     def get_mean_std(self, name, node=None):
         history = self.get_history(name, node)
         return np.mean(history), np.std(history)
+
+    def get_tensor(self, name, node=None):
+        return self.operations[node or 'global'][name]
 
     def add_estimate(self, layer_tensors):
         for n, tensor in layer_tensors.items():
@@ -114,10 +130,10 @@ class ResourceEstimator(object):
                 continue
             # tensors
             inputs = [layer_tensors[p] for p in n.predecessors]
-            if len(inputs) == 1:
-                inputs = inputs[0]
-            outputs = tensor
-            layer[n].update = func(n, inputs, outputs, params)
+            inputs = inputs[0] if len(inputs) == 1 else inputs
+            stats = func(n, inputs, tensor, params)
+            stats = {name: [value] for name, value in stats.items()}
+            layer.update(stats)
 
     @staticmethod
     def _multiply(items):
@@ -155,4 +171,39 @@ class ResourceEstimator(object):
 
     def estimate_fully_connected(
             self, node, input_tensor, output_tensor, params):
-        return {'MACs': input_tensor.shape[-1] * params['num_outputs']}
+        return {'MACs': int(input_tensor.shape[-1] * output_tensor.shape[-1])}
+
+    def _gated_density(self, node):
+        if not isinstance(node, LayerNode):
+            return 1
+        if node.params['type'] != 'gated_convolution':
+            return 1
+        try:
+            gates = self.get_history('gate', node)
+        except KeyError:
+            return 1
+        if not gates:
+            return 1
+        valids = sum(np.sum(g.astype(np.int32)) for g in gates)
+        totals = sum(g.size for g in gates)
+        return valids / totals
+
+    def estimate_gated_convolution(
+            self, node, input_tensor, output_tensor, params):
+        out_density = self._gated_density(node)
+        preds = node.predecessors
+        if len(preds) > 1:
+            raise ValueError(
+                'Number of predecessors should only be 1 for '
+                'gated_convolution.')
+        if not preds:
+            in_density = input_tensor.shape[-1]
+        else:
+            in_density = self._gated_density(preds[0])
+        stats = self.estimate_convolution(
+            node, input_tensor, output_tensor, params)
+        stats['MACs'] *= in_density * out_density
+        # gating network overhead
+        stats['MACs'] += int(input_tensor.shape[-1] * output_tensor.shape[-1])
+        stats['MACs'] = int(stats['MACs'])
+        return stats
