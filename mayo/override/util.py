@@ -182,3 +182,11 @@ def clip_by_value(tensor, minimum, maximum, transparent_backprop=False):
         omap = {'Minimum': 'Identity', 'Maximum': 'Identity'}
     with tf.get_default_graph().gradient_override_map(omap):
         return tf.clip_by_value(tensor, minimum, maximum)
+
+
+def top_k(tensor, k):
+    if is_tensor(tensor):
+        tensor = tf.reshape(tensor, [-1])
+        topk = tf.nn.top_k(tensor, k)
+        return tf.reduce_min(cast(topk.values, float))
+    return sorted(value)[k]

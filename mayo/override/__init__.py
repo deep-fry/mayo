@@ -12,6 +12,7 @@ from mayo.override.quantize import (
     ShiftQuantizer,
     LogQuantizer,
     Recentralizer,
+    IncrementalQuantizer,
 )
 from mayo.override.prune import (
     MeanStdPruner,
@@ -39,4 +40,5 @@ __all__ = [
     Recentralizer,
     ChannelGater,
     RandomChannelGater,
+    IncrementalQuantizer
 ]

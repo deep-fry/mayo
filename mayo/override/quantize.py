@@ -459,3 +459,44 @@ class Recentralizer(OverriderBase):
             for key, value in mean_info._asdict().items():
                 info['mean_' + key] = value
         return self._info_tuple(**info)
+
+
+class IncrementalQuantizer(OverriderBase):
+    '''
+    https://arxiv.org/pdf/1702.03044.pdf
+    '''
+    interval = Parameter('interval', 0.1, [], tf.float32)
+
+    def __init__(self, quantizer, intervals):
+        super().__init__()
+        cls, params = object_from_params(quantizer)
+        self.quantizer = cls(**params)
+        if intervals is not None:
+            self.interval = intervals[0]
+            self.intervls = intervals[1:]
+
+    def _quantize(self, value, mean_quantizer=False):
+        quantizer = self.quantizer
+        scope = '{}/{}'.format(self._scope, self.__class__.__name__)
+        return quantizer.apply(scope, self._original_getter, value)
+
+    def _apply(self, value):
+        value = self.before
+        mask = self._policy(value)
+        mask = util.cast(mask, float)
+        quantized_value = self._quantize(value)
+        off_mask = util.cast(util.logical_not(util.cast(mask, bool)), float)
+        return value * off_mask + quantized_value * mask
+
+    def _policy(self, value):
+        th_arg = util.cast(util.count(value) * self.interval, int)
+        th = util.top_k(util.abs(value), th_arg)
+        th = util.cast(th, float)
+        return util.greater_equal(util.abs(value), th)
+
+    def update_interval(self, session):
+        if self.intervals == []:
+            return False
+        self.interval = self.intervals[0]
+        self.intervals = self.intervals[1:]
+        return True
