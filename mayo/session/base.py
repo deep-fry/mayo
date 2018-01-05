@@ -245,7 +245,7 @@ class Session(object, metaclass=SessionMeta):
         info_dict = net.info()
         # layer info
         layer_info = Table(['layer', 'shape', '#macs'])
-        self.estimator.add_estimate(net._tensors)
+        self.estimator.add_estimate(net.shapes)
         for n in net._graph.layer_nodes():
             tensors = ensure_list(net._tensors[n])
             name = '{}/{}'.format('/'.join(n.module), n.name)

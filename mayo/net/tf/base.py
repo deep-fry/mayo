@@ -95,6 +95,13 @@ class TFNetBase(NetBase):
         info_dict['nontrainables'] = nontrainable
         return info_dict
 
+    @property
+    def shapes(self):
+        shapes = {}
+        for node, tensor in self._tensors.items():
+            shapes[node] = tuple(int(s) for s in tensor.shape)
+        return shapes
+
     def _params_to_text(self, params):
         arguments = []
         for k, v in params.items():

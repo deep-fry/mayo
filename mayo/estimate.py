@@ -119,19 +119,20 @@ class ResourceEstimator(object):
     def get_tensor(self, name, node=None):
         return self.operations[node or 'global'][name]
 
-    def add_estimate(self, layer_tensors):
-        for n, tensor in layer_tensors.items():
-            if not isinstance(n, LayerNode):
+    def add_estimate(self, layer_shapes):
+        for node, shape in layer_shapes.items():
+            if not isinstance(node, LayerNode):
                 continue
-            layer = self.statistics.setdefault(n, {})
+            layer = self.statistics.setdefault(node, {})
             try:
-                func, params = object_from_params(n.params, self, 'estimate_')
+                func, params = object_from_params(
+                    node.params, self, 'estimate_')
             except NotImplementedError:
                 continue
             # tensors
-            inputs = [layer_tensors[p] for p in n.predecessors]
+            inputs = [layer_shapes[p] for p in node.predecessors]
             inputs = inputs[0] if len(inputs) == 1 else inputs
-            stats = func(n, inputs, tensor, params)
+            stats = func(node, inputs, shape, params)
             stats = {name: [value] for name, value in stats.items()}
             layer.update(stats)
 
@@ -139,8 +140,6 @@ class ResourceEstimator(object):
     def _multiply(items):
         value = 1
         for i in items:
-            if isinstance(i, tf.Dimension):
-                i = int(i)
             value *= i
         return value
 
@@ -155,23 +154,23 @@ class ResourceEstimator(object):
             'We do not understand the kernel size {!r}.'.format(kernel))
 
     def estimate_depthwise_convolution(
-            self, node, input_tensor, output_tensor, params):
+            self, node, input_shape, output_shape, params):
         # output feature map size (H x W x C_out)
-        macs = list(output_tensor.shape[1:])
+        macs = list(output_shape[1:])
         # kernel size K_H x K_W
         macs.append(self._kernel_size(node))
         return {'MACs': self._multiply(macs)}
 
-    def estimate_convolution(self, node, input_tensor, output_tensor, params):
+    def estimate_convolution(self, node, input_shape, output_shape, params):
         depthwise_stats = self.estimate_depthwise_convolution(
-            node, input_tensor, output_tensor, params)
+            node, input_shape, output_shape, params)
         # input channel size C_in
-        macs = depthwise_stats['MACs'] * int(input_tensor.shape[-1])
+        macs = depthwise_stats['MACs'] * int(input_shape[-1])
         return {'MACs': macs}
 
     def estimate_fully_connected(
-            self, node, input_tensor, output_tensor, params):
-        return {'MACs': int(input_tensor.shape[-1] * output_tensor.shape[-1])}
+            self, node, input_shape, output_shape, params):
+        return {'MACs': int(input_shape[-1] * output_shape[-1])}
 
     def _gated_density(self, node):
         if not isinstance(node, LayerNode):
@@ -188,22 +187,33 @@ class ResourceEstimator(object):
         totals = sum(g.size for g in gates)
         return valids / totals
 
-    def estimate_gated_convolution(
-            self, node, input_tensor, output_tensor, params):
-        out_density = self._gated_density(node)
+    def _gated_conv_predecessor(self, node):
         preds = node.predecessors
+        if not preds:
+            return None
         if len(preds) > 1:
             raise ValueError(
                 'Number of predecessors should only be 1 for '
                 'gated_convolution.')
-        if not preds:
-            in_density = input_tensor.shape[-1]
+        pred = preds[0]
+        if not isinstance(pred, LayerNode):
+            return None
+        if pred.params['type'] in ['dropout', 'max_pool', 'average_pool']:
+            return self._gated_conv_predecessor(pred)
+        return pred
+
+    def estimate_gated_convolution(
+            self, node, input_shape, output_shape, params):
+        out_density = self._gated_density(node)
+        pred = self._gated_conv_predecessor(node)
+        if not pred:
+            in_density = 1
         else:
-            in_density = self._gated_density(preds[0])
+            in_density = self._gated_density(pred)
         stats = self.estimate_convolution(
-            node, input_tensor, output_tensor, params)
+            node, input_shape, output_shape, params)
         stats['MACs'] *= in_density * out_density
         # gating network overhead
-        stats['MACs'] += int(input_tensor.shape[-1] * output_tensor.shape[-1])
+        stats['MACs'] += int(input_shape[-1] * output_shape[-1])
         stats['MACs'] = int(stats['MACs'])
         return stats
