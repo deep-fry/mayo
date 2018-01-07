@@ -4,7 +4,6 @@ import numpy as np
 import tensorflow as tf
 
 from mayo.util import Percent, memoize_method
-from mayo.net.graph import LayerNode
 
 
 def _subsample(constructor, tensor, scope):
@@ -89,6 +88,8 @@ def _regularized_gate(
         match = _descriminate_by_density(subsampled, density)
         ones = tf.ones(match.shape)
         match = tf.where(match, ones, -ones)
+
+    # loss regularizer
     loss = tf.losses.mean_squared_error(
         match, gate_output, weights=0.01,
         loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)

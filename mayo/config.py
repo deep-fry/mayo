@@ -238,8 +238,11 @@ class _DotDict(collections.MutableMapping):
                         raise KeyError(
                             'Attempting to resolve a non-existent key-path '
                             'with placeholder {!r}.'.format(placeholder))
+                    is_unique = not value.replace(placeholder, '')
+                    if is_unique:
+                        return v
                     if isinstance(v, collections.Mapping):
-                        if value.replace(placeholder, ''):
+                        if not is_unique:
                             raise ValueError(
                                 'Do not know how to replace {!r} where {!r} '
                                 'accesses a mapping.'
