@@ -1,7 +1,6 @@
 import collections
 
-
-from mayo.util import object_from_params
+from mayo.util import object_from_params, ensure_list, Table
 from mayo.net.graph import Graph, LayerNode, SplitNode, JoinNode
 
 
@@ -25,6 +24,16 @@ class NetBase(object):
     def outputs(self):
         return {n.name: self._tensors[n] for n in self._graph.output_nodes()}
 
+    def layers(self):
+        layers = {}
+        for n in self._graph.layer_nodes():
+            name = '{}/{}'.format('/'.join(n.module), n.name)
+            layers[name] = self._tensors[n]
+        return layers
+
+    def info(self):
+        return {}
+
     def _instantiate(self):
         for each_node in self._graph.topological_order():
             self._instantiate_node(each_node)
@@ -36,7 +45,7 @@ class NetBase(object):
                     'Input node {!r} is not initialized with a value '
                     'before instantiating the net.'.format(node))
             return
-        pred_nodes = tuple(self._graph.predecessors(node))
+        pred_nodes = node.predecessors
         if node in self._tensors:
             raise ValueError(
                 'Node {!r} has already been assigned a value.'.format(node))
@@ -56,7 +65,7 @@ class NetBase(object):
         pred_node = pred_nodes[0]
         if isinstance(pred_node, SplitNode):
             values = []
-            for index, sibling in enumerate(self._graph.successors(pred_node)):
+            for index, sibling in enumerate(pred_node.successors):
                 if sibling != node:
                     continue
                 values.append(self._tensors[pred_node][index])

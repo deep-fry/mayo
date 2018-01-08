@@ -1,24 +1,9 @@
 import math
 
+import numpy as np
 import tensorflow as tf
 
-from mayo.util import Percent
-
-
-def _sparsity(session, collection):
-    # sparsity info
-    gates = tf.get_collection(collection)
-    if not gates:
-        return
-    valid = []
-    total = 0
-    for g in gates:
-        valid.append(tf.reduce_sum(tf.cast(g, tf.float32)))
-        total += g.shape.num_elements()
-    density = tf.add_n(valid) / total
-    density_formatter = lambda d: Percent(
-        session.change.moving_metrics('density', d, std=False))
-    session.register_update('density', density, density_formatter)
+from mayo.util import Percent, memoize_method
 
 
 def _subsample(constructor, tensor, scope):
@@ -62,12 +47,13 @@ def _descriminate_by_density(to_gate, density):
 
 
 def _regularized_gate(
-        constructor, conv_input, conv_output, density,
+        constructor, node, conv_input, conv_output, density,
         activation_fn, online, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
 
+    node (mayo.net.graph.LayerNode): The convolution layer node.
     conv_input (tf.Tensor): The input of the convolution layer.
     conv_output (tf.Tensor): The output from convolution layer.
     density (float): The target density.
@@ -102,20 +88,12 @@ def _regularized_gate(
         match = _descriminate_by_density(subsampled, density)
         ones = tf.ones(match.shape)
         match = tf.where(match, ones, -ones)
+
+    # loss regularizer
     loss = tf.losses.mean_squared_error(
         match, gate_output, weights=0.01,
         loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-
-    # gating loss for printing
-    def update_func(session, collection):
-        def formatter(loss):
-            loss_mean, loss_std = session.change.moving_metrics(
-                'gate.loss', loss)
-            loss_std = '±{}'.format(Percent(loss_std / loss_mean))
-            return '{:10f}{:5}'.format(loss_mean, loss_std)
-        loss = tf.get_collection(collection)[0]
-        session.register_update('gate loss', loss, formatter)
-    constructor.register_update('mayo.gate.loss', loss, update_func)
+    constructor.estimator.register(loss, 'loss', node)
 
     if online:
         return _descriminate_by_density(gate_output, density)
@@ -123,9 +101,39 @@ def _regularized_gate(
 
 
 class GateLayers(object):
-    """
-    Layer implementations for gated convolution.
-    """
+    """Layer implementations for gated convolution.  """
+
+    def _register_gate_density(self, node, gate, in_channels):
+        history = None if self.is_training else 'infinite'
+        self.estimator.register(gate, 'gate', node, history=history)
+
+    @memoize_method
+    def _register_gate_formatters(self):
+        def loss_formatter(estimator):
+            # gating loss for printing
+            losses = estimator.get_histories('loss')
+            total_losses = None
+            for loss_history in losses.values():
+                if total_losses is None:
+                    total_losses = list(loss_history)
+                else:
+                    total_losses = [
+                        a + b for a, b in zip(total_losses, loss_history)]
+            loss_mean = np.mean(total_losses)
+            loss_std = Percent(np.std(total_losses) / loss_mean)
+            return 'gate.loss: {:.5f}±{}'.format(loss_mean, loss_std)
+
+        def density_formatter(estimator):
+            gates = estimator.get_values('gate')
+            valid = total = 0
+            for layer, gate in gates.items():
+                valid += np.sum(gate.astype(np.float32))
+                total += gate.size
+            return 'gate: {}'.format(Percent(valid / total))
+
+        self.estimator.register_formatter(loss_formatter)
+        self.estimator.register_formatter(density_formatter)
+
     def instantiate_gated_convolution(self, node, tensor, params):
         online = params.pop('online', False)
         density = params.pop('density')
@@ -135,10 +143,11 @@ class GateLayers(object):
         output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
         gate = _regularized_gate(
-            self, tensor, output, density, activation_fn, online,
+            self, node, tensor, output, density, activation_fn, online,
             params['scope'])
         # register gate sparsity for printing
-        self.register_update('mayo.gates', gate, _sparsity)
+        self._register_gate_density(node, gate, tensor.shape[-1])
+        self._register_gate_formatters()
         if not should_gate:
             return output
         # actual gating
@@ -150,7 +159,8 @@ class GateLayers(object):
         subsampled = _subsample(self, tensor, gate_scope)
         gate = _descriminate_by_density(subsampled, params['density'])
         # register gate sparsity for printing
-        self.register_update('mayo.gates', gate, _sparsity)
+        self._register_gate_density(node, gate, tensor.shape[-1])
+        self._register_gate_formatters()
         # actual gating
         gate = tf.stop_gradient(tf.cast(gate, tf.float32))
         if not params['should_gate']:
