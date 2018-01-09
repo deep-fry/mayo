@@ -7,10 +7,12 @@ model.layers:
             type: mayo.override.Recentralizer
             quantizer:
                 type: mayo.override.FixedPointQuantizer
-                width: 10
+                width: 2
+                point: 0
             mean_quantizer:
                 type: mayo.override.FixedPointQuantizer
-                width: 10
+                width: 2
+                point: 1
     _overrider: &playground
         # - {type: mayo.override.EmptyOverrider}
         - {type: mayo.override.DynamicNetworkSurgeryPruner}

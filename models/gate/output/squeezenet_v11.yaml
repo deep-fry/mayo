@@ -7,18 +7,20 @@ model:
             type: gated_convolution
             density: 0.5
             trainable: false
+            online: true
+            gate_reg: 0.0001
         _fire: &fire
-            kwargs: {should_gate: null}
+            kwargs: {should_gate: null, trainable: null}
             layers:
-                squeeze: {<<: *gated_conv, should_gate: ^(should_gate)}
-                expand1: {<<: *gated_conv, should_gate: ^(should_gate)}
-                expand3: {<<: *gated_conv, should_gate: ^(should_gate)}
-        conv1: {<<: *gated_conv, should_gate: false}
-        fire2: {<<: *fire, should_gate: false}
-        fire3: {<<: *fire, should_gate: false}
-        fire4: {<<: *fire, should_gate: false}
-        fire5: {<<: *fire, should_gate: false}
-        fire6: {<<: *fire, should_gate: false}
-        fire7: {<<: *fire, should_gate: false}
-        fire8: {<<: *fire, should_gate: false}
-        fire9: {<<: *fire, should_gate: false}
+                squeeze: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
+                expand1: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
+                expand3: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
+        conv1: {<<: *gated_conv, should_gate: false, trainable: false}
+        fire2: {<<: *fire, should_gate: false, trainable: false}
+        fire3: {<<: *fire, should_gate: false, trainable: false}
+        fire4: {<<: *fire, should_gate: false, trainable: false}
+        fire5: {<<: *fire, should_gate: false, trainable: false}
+        fire6: {<<: *fire, should_gate: false, trainable: false}
+        fire7: {<<: *fire, should_gate: false, trainable: false}
+        fire8: {<<: *fire, should_gate: false, trainable: false}
+        fire9: {<<: *fire, should_gate: false, trainable: false}

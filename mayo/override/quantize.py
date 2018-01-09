@@ -484,8 +484,10 @@ class IncrementalQuantizer(OverriderBase):
         value = self.before
         mask = self._policy(value)
         mask = util.cast(mask, float)
+        self.mask = mask
         quantized_value = self._quantize(value)
         off_mask = util.cast(util.logical_not(util.cast(mask, bool)), float)
+        self.off_mask = off_mask
         return value * off_mask + quantized_value * mask
 
     def _policy(self, value):

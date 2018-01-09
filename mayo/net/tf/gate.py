@@ -48,7 +48,7 @@ def _descriminate_by_density(to_gate, density):
 
 def _regularized_gate(
         constructor, node, conv_input, conv_output, density,
-        activation_fn, online, scope):
+        activation_fn, online, gate_reg, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -91,7 +91,7 @@ def _regularized_gate(
 
     # loss regularizer
     loss = tf.losses.mean_squared_error(
-        match, gate_output, weights=0.01,
+        match, gate_output, weights=gate_reg,
         loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
     constructor.estimator.register(loss, 'loss', node)
 
@@ -138,13 +138,14 @@ class GateLayers(object):
         online = params.pop('online', False)
         density = params.pop('density')
         should_gate = params.pop('should_gate', True)
+        gate_reg = params.pop('gate_reg', 0.01)
         activation_fn = params.get('activation_fn', tf.nn.relu)
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
         gate = _regularized_gate(
             self, node, tensor, output, density, activation_fn, online,
-            params['scope'])
+            gate_reg, params['scope'])
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters()
