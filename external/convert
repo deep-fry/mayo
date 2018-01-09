@@ -108,7 +108,12 @@ class BaseExporter(object):
                     if re.findall(pattern, nv):
                         break
                 else:
-                    nv = re.sub(pattern, replacement, nv)
+                    try:
+                        nv = re.sub(pattern, replacement, nv)
+                    except re.error as e:
+                        raise SyntaxError(
+                            'Unable to replace pattern {!r} in {!r} with {!r}.'
+                            .format(pattern, nv, replacement))
             else:
                 vvmap[v] = nv
         return vvmap

@@ -70,7 +70,7 @@ model:
                 - {from: input, with: ^(shortcut)_shortcut, to: b}
                 - {from: [a, b], with: add, to: preact}
                 - {from: preact, with: relu, to: output}
-        b11: {<<: *bb, stride: 1, depth: 64, shortcut: downsample}
+        b11: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
         b12: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
         b21: {<<: *bb, stride: 2, depth: 128, shortcut: downsample}
         b22: {<<: *bb, stride: 1, depth: 128, shortcut: identity}
@@ -79,19 +79,16 @@ model:
         b41: {<<: *bb, stride: 2, depth: 512, shortcut: downsample}
         b42: {<<: *bb, stride: 1, depth: 512, shortcut: identity}
         pool4: {type: average_pool, kernel_size: 7}
-        logits5:
-            <<: *conv
-            kernel_size: 1
-            stride: 1
+        flatten4: {type: flatten}
+        fc5:
+            type: fully_connected
             num_outputs: num_classes
             activation_fn: null
-            normalizer_fn: null
-            weights_regularizer: null
-        squeeze5: {type: squeeze, axis: [1, 2]}
+            weights_initializer: *initializer
     graph:
         from: input
         with: [
             conv1, pool1,
-            b11, b12, b21, b22, b31, b32, b41, b42, pool4,
-            logits5, squeeze5]
+            b11, b12, b21, b22, b31, b32, b41, b42,
+            pool4, flatten4, fc5]
         to: output
