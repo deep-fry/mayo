@@ -97,9 +97,13 @@ class TFNetBase(NetBase):
 
     @property
     def shapes(self):
+        unify = lambda t: tuple(int(s) for s in t.shape)
         shapes = {}
-        for node, tensor in self._tensors.items():
-            shapes[node] = tuple(int(s) for s in tensor.shape)
+        for node, tensors in self._tensors.items():
+            if isinstance(tensors, collections.Sequence):
+                shapes[node] = [unify(t) for t in tensors]
+            else:
+                shapes[node] = unify(tensors)
         return shapes
 
     def _params_to_text(self, params):
