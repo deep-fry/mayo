@@ -74,3 +74,16 @@ class Layers(TFNetBase):
 
     def instantiate_add(self, node, tensors, params):
         return tf.add_n(tensors, name=params['scope'])
+
+    def instantiate_activation(self, node, tensors, params):
+        supported_modes = ['relu', 'relu6', 'elu', 'sigmoid', 'tanh']
+        mode = params['mode']
+        if mode not in supported_modes:
+            raise TypeError(
+                '{!r} cannot instantiate activation of type {!r}.'
+                .format(self, mode))
+        func = getattr(tf.nn, mode)
+        return func(tensors, name=params['scope'])
+
+    def instantiate_identity(self, node, tensors, params):
+        return tensors

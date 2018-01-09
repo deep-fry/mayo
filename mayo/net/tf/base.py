@@ -97,9 +97,13 @@ class TFNetBase(NetBase):
 
     @property
     def shapes(self):
+        unify = lambda t: tuple(int(s) for s in t.shape)
         shapes = {}
-        for node, tensor in self._tensors.items():
-            shapes[node] = tuple(int(s) for s in tensor.shape)
+        for node, tensors in self._tensors.items():
+            if isinstance(tensors, collections.Sequence):
+                shapes[node] = [unify(t) for t in tensors]
+            else:
+                shapes[node] = unify(tensors)
         return shapes
 
     def _params_to_text(self, params):
@@ -117,19 +121,28 @@ class TFNetBase(NetBase):
         params, scope = self._transformer.transform(
             node.name, params, node.module)
         with scope:
+            tensors = self.instantiate_numeric_padding(node, tensors, params)
             layer_type = params['type']
             layer_key = '{}/{}'.format(
                 tf.get_variable_scope().name, params['scope'])
             layer_args = self._params_to_text(params)
             log.debug(
-                'Instantiating {!r} of type {!r} with arguments:\n{}'
-                .format(layer_key, layer_type, layer_args))
-            tensors = self.instantiate_numeric_padding(node, tensors, params)
+                'Instantiating {!r} of type {!r} with arguments:\n{}\n'
+                '  for tensor(s) {}.'
+                .format(layer_key, layer_type, layer_args, tensors))
             # get method by its name to instantiate a layer
-            func, params = object_from_params(params, self, 'instantiate_')
+            try:
+                func, params = object_from_params(params, self, 'instantiate_')
+            except NotImplementedError:
+                func = self.generic_instantiate
             # instantiation
             layer = func(node, tensors, params)
         return layer
+
+    def generic_instantiate(self, node, tensors, params):
+        raise NotImplementedError(
+            '{!r} does not know how to instantiate layer with type {!r}.'
+            .format(self, params['type']))
 
     def instantiate_numeric_padding(self, node, tensors, params):
         pad = params.get('padding')
@@ -148,7 +161,9 @@ class TFNetBase(NetBase):
                 '[pad_h, pad_w].'.format(pad))
         # disable pad for next layer
         params['padding'] = 'VALID'
+        log.debug(
+            'Instantiating padding {!r} for tensors(s) {}.'
+            .format(paddings, tensors))
         if isinstance(tensors, collections.Sequence):
             return [tf.pad(t, paddings) for t in tensors]
-        else:
-            return tf.pad(tensors, paddings)
+        return tf.pad(tensors, paddings)
