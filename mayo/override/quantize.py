@@ -496,6 +496,11 @@ class IncrementalQuantizer(OverriderBase):
         th = util.cast(th, float)
         return util.greater_equal(util.abs(value), th)
 
+    # override assign_parameters to assign quantizer as well
+    def assign_parameters(self, session):
+        super().assign_parameters(session)
+        self.quantizer.assign_parameters(session)
+
     def update_interval(self, session):
         if self.intervals == []:
             return False
