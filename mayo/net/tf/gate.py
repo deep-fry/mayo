@@ -34,6 +34,9 @@ def _gate_network(constructor, tensor, num_outputs, activation_fn, scope):
 
 
 def _descriminate_by_density(to_gate, density):
+    if not (0 < density <= 1):
+        raise ValueError(
+            'Gate density value {} is out of range (0, 1].'.format(density))
     # not training with the output as we train the predictor `gate`
     to_gate = tf.stop_gradient(to_gate)
     # number of active channels
