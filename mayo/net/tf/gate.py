@@ -111,36 +111,38 @@ class GateLayers(object):
         history = None if self.is_training else 'infinite'
         self.estimator.register(gate, 'gate', node, history=history)
 
+    @staticmethod
+    def _gate_loss_formatter(estimator):
+        # gating loss for printing
+        losses = estimator.get_histories('loss')
+        total_losses = None
+        for loss_history in losses.values():
+            if total_losses is None:
+                total_losses = list(loss_history)
+            else:
+                total_losses = [
+                    a + b for a, b in zip(total_losses, loss_history)]
+        loss_mean = np.mean(total_losses)
+        loss_std = Percent(np.std(total_losses) / loss_mean)
+        return 'gate.loss: {:.5f}±{}'.format(loss_mean, loss_std)
+
+    @staticmethod
+    def _gate_density_formatter(estimator):
+        gates = estimator.get_values('gate')
+        valid = total = 0
+        for layer, gate in gates.items():
+            valid += np.sum(gate.astype(np.float32))
+            total += gate.size
+        return 'gate: {}'.format(Percent(valid / total))
+
     @memoize_method
     def _register_gate_formatters(self):
-        def loss_formatter(estimator):
-            # gating loss for printing
-            losses = estimator.get_histories('loss')
-            total_losses = None
-            for loss_history in losses.values():
-                if total_losses is None:
-                    total_losses = list(loss_history)
-                else:
-                    total_losses = [
-                        a + b for a, b in zip(total_losses, loss_history)]
-            loss_mean = np.mean(total_losses)
-            loss_std = Percent(np.std(total_losses) / loss_mean)
-            return 'gate.loss: {:.5f}±{}'.format(loss_mean, loss_std)
-
-        def density_formatter(estimator):
-            gates = estimator.get_values('gate')
-            valid = total = 0
-            for layer, gate in gates.items():
-                valid += np.sum(gate.astype(np.float32))
-                total += gate.size
-            return 'gate: {}'.format(Percent(valid / total))
-
-        self.estimator.register_formatter(loss_formatter)
-        self.estimator.register_formatter(density_formatter)
+        self.estimator.register_formatter(self._gate_loss_formatter)
+        self.estimator.register_formatter(self._gate_density_formatter)
 
     def instantiate_gated_convolution(self, node, tensor, params):
-        online = params.pop('online', False)
         density = params.pop('density')
+        online = params.pop('online', False)
         should_gate = params.pop('should_gate', True)
         weight = params.pop('weight', 0.01)
         activation_fn = params.get('activation_fn', tf.nn.relu)
