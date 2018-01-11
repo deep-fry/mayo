@@ -2,15 +2,15 @@ import time
 import collections
 
 import numpy as np
-import tensorflow as tf
 
 from mayo.util import object_from_params, Change
 from mayo.net.graph import LayerNode
 
 
 class ResourceEstimator(object):
-    def __init__(self):
+    def __init__(self, allow_reregister=True):
         super().__init__()
+        self.allow_reregister = allow_reregister
         self.change = Change()
         self.operations = {}
         self.statistics = {}
@@ -35,7 +35,7 @@ class ResourceEstimator(object):
         node = 'global' if node is None else node
         layer = self.operations.setdefault(node, {})
         prop = self.properties.setdefault(node, {})
-        if name in layer:
+        if name in layer and not self.allow_reregister:
             raise ValueError(
                 'Tensor named {!r} already registered for layer {!r}.'
                 .format(name, layer))

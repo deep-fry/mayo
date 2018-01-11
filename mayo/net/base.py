@@ -1,6 +1,6 @@
 import collections
 
-from mayo.util import object_from_params, ensure_list, Table
+from mayo.util import object_from_params
 from mayo.net.graph import Graph, LayerNode, SplitNode, JoinNode
 
 
