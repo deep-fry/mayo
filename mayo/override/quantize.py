@@ -473,7 +473,8 @@ class IncrementalQuantizer(OverriderBase):
         self.quantizer = cls(**params)
         if intervals is not None:
             self.interval = intervals[0]
-            self.intervls = intervals[1:]
+            self.intervls = intervals
+            self.interval_index = 0
 
     def _quantize(self, value, mean_quantizer=False):
         quantizer = self.quantizer
@@ -496,9 +497,19 @@ class IncrementalQuantizer(OverriderBase):
         th = util.cast(th, float)
         return util.greater_equal(util.abs(value), th)
 
+    # override assign_parameters to assign quantizer as well
+    def assign_parameters(self, session):
+        super().assign_parameters(session)
+        self.quantizer.assign_parameters(session)
+
     def update_interval(self, session):
         if self.intervals == []:
             return False
-        self.interval = self.intervals[0]
-        self.intervals = self.intervals[1:]
+        self.interval = self.intervals[self.interval_index]
+        self.interval_index += 1
         return True
+
+    def _update(self, session):
+        # reset index
+        self.interval_index = 0
+        self.quantizer.update(session)

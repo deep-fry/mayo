@@ -207,10 +207,9 @@ class RetrainBase(Train):
 
         tolerance = self.config.retrain.tolerance
         log.info('profiling baseline')
-        imgs_seen = self._train_op['imgs_seen']
-        tasks = [imgs_seen, self.loss, self.accuracy, self.num_epochs]
+        tasks = [self.loss, self.accuracy, self.num_epochs]
         while epoch < 1.0:
-            _, loss, acc, epoch = self.run(tasks, batch=True)
+            loss, acc, epoch = self.run(tasks, batch=True)
             self.loss_total += loss
             self.acc_total += acc
             self.step += 1

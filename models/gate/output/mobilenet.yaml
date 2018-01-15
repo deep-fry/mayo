@@ -7,6 +7,8 @@ model:
             type: gated_convolution
             density: 0.5
             trainable: false
+            online: true
+            weight: 0.0001
         _dsconv: &dsconv
             kwargs: {should_gate: null}
             layers:
