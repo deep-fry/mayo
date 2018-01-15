@@ -6,12 +6,18 @@ import tensorflow as tf
 from mayo.util import Percent, memoize_method
 
 
-def _subsample(constructor, tensor, scope):
+def _subsample(constructor, tensor, granularity, scope):
     num, height, width, channels = tensor.shape
+    if granularity == 'channel':
+        kernel = [height, width]
+    elif granularity == 'height':
+        kernel = [1, width]
+    else:
+        raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
     # pool
     pool_params = {
         'padding': 'VALID',
-        'kernel_size': [height, width],
+        'kernel_size': kernel,
         'scope': scope,
     }
     gate_input = tf.stop_gradient(tensor)
@@ -19,39 +25,71 @@ def _subsample(constructor, tensor, scope):
     return constructor.instantiate_max_pool(None, gate_input, pool_params)
 
 
-def _gate_network(constructor, tensor, num_outputs, activation_fn, scope):
-    gate_input = _subsample(constructor, tensor, scope)
-    # fc
-    fc_params = {
-        'kernel_size': 1,
+def _gate_network(
+        constructor, tensor, granularity,
+        kernel_size, padding, num_outputs, activation_fn, scope):
+    gate_input = _subsample(constructor, tensor, granularity, scope)
+    if granularity == 'channel':
+        kernel = 1
+    elif granularity == 'height':
+        if isinstance(kernel_size, int):
+            kernel_height = kernel_size
+        else:
+            kernel_height, _ = kernel_size
+        kernel = [kernel_height, 1]
+    else:
+        raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
+    params = {
+        'kernel_size': kernel,
+        'padding': padding,
         'num_outputs': num_outputs,
         'biases_initializer': tf.zeros_initializer(),
         'weights_initializer': tf.truncated_normal_initializer(stddev=0.01),
         'activation_fn': activation_fn,
         'scope': scope,
     }
-    return constructor.instantiate_convolution(None, gate_input, fc_params)
+    tensor = constructor.instantiate_numeric_padding(None, gate_input, params)
+    return constructor.instantiate_convolution(None, tensor, params)
 
 
-def _descriminate_by_density(to_gate, density):
+def _descriminate_by_density(tensor, density, granularity):
+    """
+    Mark a portion of top elements in tensor to true, where the portion is
+    approximately the specified density.
+
+    tensor (tf.Tensor): the input tensor.
+    density (float): the percentage of elements to mark as true.
+    granularity (str):
+        The target granularity, can either be `channel` or `height`.
+    """
     if not (0 < density <= 1):
         raise ValueError(
             'Gate density value {} is out of range (0, 1].'.format(density))
     # not training with the output as we train the predictor `gate`
-    to_gate = tf.stop_gradient(to_gate)
-    # number of active channels
-    channels = to_gate.shape[-1]
-    num_active = math.ceil(int(channels) * density)
+    tensor = tf.stop_gradient(tensor)
+    # number of active elemetns
+    num, height, width, channels = tensor.shape
+    if granularity == 'channel':
+        num_elements = channels
+    elif granularity == 'height':
+        num_elements = width * channels
+    else:
+        raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
+    num_active = math.ceil(int(num_elements) * density)
+    # reshape the last dimensions into one
+    reshaped = tf.reshape(tensor, [num, -1])
     # top_k, where k is the number of active channels
-    top, _ = tf.nn.top_k(to_gate, k=num_active)
+    top, _ = tf.nn.top_k(reshaped, k=num_active)
     # disable channels with smaller activations
-    threshold = tf.reduce_min(top, axis=[1, 2, 3], keep_dims=True)
-    return tf.stop_gradient(to_gate >= threshold)
+    threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
+    active = tf.stop_gradient(reshaped >= threshold)
+    active = tf.reshape(active, [num, height, width, channels])
+    return active
 
 
 def _regularized_gate(
-        constructor, node, conv_input, conv_output, density,
-        activation_fn, online, weight, scope):
+        constructor, node, conv_input, conv_output, kernel_size, padding,
+        density, granularity, activation_fn, online, weight, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -59,7 +97,11 @@ def _regularized_gate(
     node (mayo.net.graph.LayerNode): The convolution layer node.
     conv_input (tf.Tensor): The input of the convolution layer.
     conv_output (tf.Tensor): The output from convolution layer.
+    kernel_size (tuple or int): The size of the convolutional kernel.
+    padding (str or int): The zero padding.
     density (float): The target density.
+    granularity (str):
+        The target granularity, can either be `channel` or `height`.
     activation_fn: The activation function used.
     weight (float): The weight of the gate regularizer loss.
     online (bool): The switch to compute top_k online or offline.
@@ -67,20 +109,17 @@ def _regularized_gate(
     Returns the regularized gate (1: enable, 0: disable).
     """
     # gating network
-    num_outputs = conv_output.shape[-1]
+    num_outputs = int(conv_output.shape[-1])
     gate_scope = '{}/gate'.format(scope)
     if not online:
         activation_fn = None
     gate_output = _gate_network(
-        constructor, conv_input, num_outputs, activation_fn, gate_scope)
-    # output pool
-    _, out_height, out_width, out_channels = conv_output.shape
-    pool_params = {
-        'padding': 'VALID',
-        'kernel_size': [out_height, out_width],
-    }
-    subsampled = constructor.instantiate_max_pool(
-        None, conv_output, pool_params)
+        constructor, conv_input, granularity, kernel_size, padding,
+        num_outputs, activation_fn, gate_scope)
+    # output subsample
+    subsample_scope = '{}/subsample'.format(scope)
+    subsampled = _subsample(
+        constructor, conv_output, granularity, subsample_scope)
 
     # training
     if online:
@@ -89,7 +128,7 @@ def _regularized_gate(
     else:
         # offline descriminator: we train the gate to produce 1 for active
         # channels and -1 for gated channels
-        match = _descriminate_by_density(subsampled, density)
+        match = _descriminate_by_density(subsampled, density, granularity)
         ones = tf.ones(match.shape)
         match = tf.where(match, ones, -ones)
 
@@ -100,7 +139,7 @@ def _regularized_gate(
     constructor.estimator.register(loss, 'loss', node)
 
     if online:
-        return _descriminate_by_density(gate_output, density)
+        return _descriminate_by_density(gate_output, density, granularity)
     return gate_output > 0
 
 
@@ -142,16 +181,20 @@ class GateLayers(object):
 
     def instantiate_gated_convolution(self, node, tensor, params):
         density = params.pop('density')
+        granularity = params.pop('granularity', 'channel')
         online = params.pop('online', False)
-        should_gate = params.pop('should_gate', True)
         weight = params.pop('weight', 0.01)
+        should_gate = params.pop('should_gate', True)
+        kernel_size = params['kernel_size']
+        padding = params.get('padding', 'same')
         activation_fn = params.get('activation_fn', tf.nn.relu)
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
         gate = _regularized_gate(
-            self, node, tensor, output, density, activation_fn, online,
-            weight, params['scope'])
+            self, node, tensor, output, kernel_size, padding,
+            density, granularity, activation_fn, online, weight,
+            params['scope'])
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters()
@@ -163,14 +206,17 @@ class GateLayers(object):
 
     def instantiate_gate(self, node, tensor, params):
         gate_scope = '{}/gate'.format(params['scope'])
-        subsampled = _subsample(self, tensor, gate_scope)
-        gate = _descriminate_by_density(subsampled, params['density'])
+        subsample_scope = '{}/subsample'.format(gate_scope)
+        subsampled = _subsample(self, tensor, subsample_scope)
+        granularity = params.get('granularity', 'channel')
+        gate = _descriminate_by_density(
+            subsampled, params['density'], granularity)
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters()
         # actual gating
         gate = tf.stop_gradient(tf.cast(gate, tf.float32))
-        if not params['should_gate']:
+        if not params.get('should_gate', True):
             with tf.control_dependencies([gate]):
                 return tensor
         return tensor * gate
