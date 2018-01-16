@@ -10,9 +10,10 @@ model:
             online: true
             weight: 0.0001
         _dsconv: &dsconv
-            kwargs: {should_gate: null}
+            kwargs: {should_gate: null, trainable: null}
             layers:
-                pointwise: {<<: *gated_conv, should_gate: ^(should_gate)}
+                depthwise: {trainable: ^(trainable)}
+                pointwise: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
         conv0: {<<: *gated_conv, should_gate: false}
         conv1: {<<: *dsconv, should_gate: false}
         conv2: {<<: *dsconv, should_gate: false}
