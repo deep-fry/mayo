@@ -28,6 +28,7 @@ model:
         conv11: {<<: *dsconv, should_gate: false, trainable: false}
         conv12: {<<: *dsconv, should_gate: false, trainable: false}
         conv13: {<<: *dsconv, should_gate: false, trainable: false}
+        fc: {trainable: false}
         # conv2: {<<: *dsconv}
         # conv3: {<<: *dsconv}
         # conv4: {<<: *dsconv}
