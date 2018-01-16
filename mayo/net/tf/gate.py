@@ -151,7 +151,7 @@ def _regularized_gate(
     loss = tf.losses.mean_squared_error(
         match, gate_output, weights=weight,
         loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-    constructor.estimator.register(loss, 'loss', node)
+    constructor.estimator.register(loss, 'gate.loss', node)
 
     if online:
         return _descriminate_by_density(gate_output, density, granularity)
@@ -168,7 +168,7 @@ class GateLayers(object):
     @staticmethod
     def _gate_loss_formatter(estimator):
         # gating loss for printing
-        losses = estimator.get_histories('loss')
+        losses = estimator.get_histories('gate.loss')
         total_losses = None
         for loss_history in losses.values():
             if total_losses is None:
