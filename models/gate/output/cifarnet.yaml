@@ -8,7 +8,8 @@ model:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: $(model._density)
-            online: true
+            granularity: vector
+            online: false
             trainable: true
             should_gate: true
         conv0: {<<: *gated_conv}
