@@ -1,0 +1,27 @@
+---
+_import: ../../vgg16.yaml
+model:
+    name: vgg16
+    layers:
+        _gated_conv: &gated_conv
+            type: gated_convolution
+            density: 0.5
+            trainable: false
+            online: true
+            weight: 0.0001
+        conv1_1: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv1_2: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv2_1: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv2_2: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv3_1: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv3_2: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv3_3: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv4_1: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv4_2: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv4_3: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv5_1: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv5_2: {<<: *gated_conv, should_gate: false, trainable: false}
+        conv5_3: {<<: *gated_conv, should_gate: false, trainable: false}
+        fc6: {<<: *gated_conv, should_gate: false, trainable: false}
+        fc7: {<<: *gated_conv, should_gate: false, trainable: false}
+        fc8: {trainable: false}
