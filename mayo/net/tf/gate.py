@@ -18,6 +18,7 @@ def _subsample(constructor, tensor, granularity, scope):
     pool_params = {
         'padding': 'VALID',
         'kernel_size': kernel,
+        'stride': 1,
         'scope': scope,
     }
     # max pool is hardware-friendlier
@@ -50,10 +51,16 @@ def _gate_network(
             else:
                 padding_height, _ = padding
             padding = [padding, 0]
+        if isinstance(stride, int):
+            stride_height = stride
+        else:
+            stride_height, _ = stride
+        stride = [stride_height, 1]
     else:
         raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
     params = {
         'kernel_size': kernel,
+        'stride': stride,
         'padding': padding,
         'num_outputs': num_outputs,
         'biases_initializer': tf.zeros_initializer(),
