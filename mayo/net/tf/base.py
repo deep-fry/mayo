@@ -153,7 +153,7 @@ class TFNetBase(NetBase):
             paddings = [[0, 0], [pad, pad], [pad, pad], [0, 0]]
         elif isinstance(pad, collections.Sequence):
             pad_h, pad_w = pad
-            paddings = [[0, 0], pad_h, pad_w, [0, 0]]
+            paddings = [[0, 0], [pad_h] * 2, [pad_w] * 2, [0, 0]]
         else:
             raise ValueError(
                 'We do not know what to do with a padding {!r}, we accept an '

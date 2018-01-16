@@ -10,7 +10,7 @@ def _subsample(constructor, tensor, granularity, scope):
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
         kernel = [height, width]
-    elif granularity == 'height':
+    elif granularity == 'vector':
         kernel = [1, width]
     else:
         raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
@@ -20,23 +20,36 @@ def _subsample(constructor, tensor, granularity, scope):
         'kernel_size': kernel,
         'scope': scope,
     }
-    gate_input = tf.stop_gradient(tensor)
     # max pool is hardware-friendlier
-    return constructor.instantiate_max_pool(None, gate_input, pool_params)
+    subsampled = constructor.instantiate_max_pool(None, tensor, pool_params)
+    num, height, width, channels = subsampled.shape
+    if granularity == 'channel' and not (height == width == 1):
+        raise ValueError(
+            'We expect subsampled image for channel granularity to be 1x1.')
+    if granularity == 'vector' and width != 1:
+        raise ValueError(
+            'We expect subsampled width for vector granularity to be 1.')
+    return tf.stop_gradient(subsampled)
 
 
 def _gate_network(
         constructor, tensor, granularity,
-        kernel_size, padding, num_outputs, activation_fn, scope):
-    gate_input = _subsample(constructor, tensor, granularity, scope)
+        kernel_size, stride, padding, num_outputs, activation_fn, scope):
+    subsampled = _subsample(constructor, tensor, granularity, scope)
     if granularity == 'channel':
         kernel = 1
-    elif granularity == 'height':
+    elif granularity == 'vector':
         if isinstance(kernel_size, int):
             kernel_height = kernel_size
         else:
             kernel_height, _ = kernel_size
         kernel = [kernel_height, 1]
+        if not isinstance(padding, str):
+            if isinstance(padding, int):
+                padding_height = padding
+            else:
+                padding_height, _ = padding
+            padding = [padding, 0]
     else:
         raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
     params = {
@@ -48,8 +61,8 @@ def _gate_network(
         'activation_fn': activation_fn,
         'scope': scope,
     }
-    tensor = constructor.instantiate_numeric_padding(None, gate_input, params)
-    return constructor.instantiate_convolution(None, tensor, params)
+    padded = constructor.instantiate_numeric_padding(None, subsampled, params)
+    return constructor.instantiate_convolution(None, padded, params)
 
 
 def _descriminate_by_density(tensor, density, granularity):
@@ -71,7 +84,7 @@ def _descriminate_by_density(tensor, density, granularity):
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
         num_elements = channels
-    elif granularity == 'height':
+    elif granularity == 'vector':
         num_elements = width * channels
     else:
         raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
@@ -88,7 +101,8 @@ def _descriminate_by_density(tensor, density, granularity):
 
 
 def _regularized_gate(
-        constructor, node, conv_input, conv_output, kernel_size, padding,
+        constructor, node, conv_input, conv_output,
+        kernel_size, stride, padding,
         density, granularity, activation_fn, online, weight, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
@@ -98,6 +112,7 @@ def _regularized_gate(
     conv_input (tf.Tensor): The input of the convolution layer.
     conv_output (tf.Tensor): The output from convolution layer.
     kernel_size (tuple or int): The size of the convolutional kernel.
+    stride (int): The stride size.
     padding (str or int): The zero padding.
     density (float): The target density.
     granularity (str):
@@ -114,7 +129,7 @@ def _regularized_gate(
     if not online:
         activation_fn = None
     gate_output = _gate_network(
-        constructor, conv_input, granularity, kernel_size, padding,
+        constructor, conv_input, granularity, kernel_size, stride, padding,
         num_outputs, activation_fn, gate_scope)
     # output subsample
     subsample_scope = '{}/subsample'.format(scope)
@@ -186,13 +201,14 @@ class GateLayers(object):
         weight = params.pop('weight', 0.01)
         should_gate = params.pop('should_gate', True)
         kernel_size = params['kernel_size']
-        padding = params.get('padding', 'same')
+        stride = params.get('stride', 1)
+        padding = params.get('padding', 'SAME')
         activation_fn = params.get('activation_fn', tf.nn.relu)
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
         gate = _regularized_gate(
-            self, node, tensor, output, kernel_size, padding,
+            self, node, tensor, output, kernel_size, stride, padding,
             density, granularity, activation_fn, online, weight,
             params['scope'])
         # register gate sparsity for printing
