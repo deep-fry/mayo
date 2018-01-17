@@ -53,7 +53,8 @@ class ResourceEstimator(object):
             value) for print formatting; if it is not specified, this statistic
             will not be printed.
         """
-        self.formatters.append(func)
+        if func not in self.formatters:
+            self.formatters.append(func)
 
     def add(self, statistics):
         """
