@@ -36,12 +36,10 @@ class EvaluateBase(Session):
             accuracy = Percent(sum(history) / (self.batch_size * len(history)))
             return '{}: {}'.format(name, accuracy)
 
-        self.estimator.register(
-            top1s, 'top1', history='infinite',
-            formatter=functools.partial(formatter, name='top1'))
-        self.estimator.register(
-            top5s, 'top5', history='infinite',
-            formatter=functools.partial(formatter, name='top5'))
+        for tensor, name in ((top1s, 'top1'), (top5s, 'top5')):
+            self.estimator.register(
+                tensor, name, history='infinite',
+                formatter=functools.partial(formatter, name=name))
 
     def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint

@@ -12,13 +12,11 @@ from mayo.net.tf.util import ParameterTransformer
 class TFNetBase(NetBase):
     """ Utility functions to create a TensorFlow network.  """
 
-    def __init__(
-            self, model, images, labels, num_classes, is_training, reuse,
-            estimator):
-        self.estimator = estimator
-        self.is_training = is_training
+    def __init__(self, session, model, images, labels, num_classes, reuse):
+        self.session = session
+        self.is_training = session.is_training
         self._transformer = ParameterTransformer(
-            num_classes, is_training, reuse)
+            num_classes, session.is_training, reuse)
         super().__init__(model, {'input': images})
         self._labels = labels
         self._verify_io()

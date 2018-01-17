@@ -334,8 +334,8 @@ class Session(object, metaclass=SessionMeta):
             log.debug('Instantiating graph for GPU #{}...'.format(i))
             with self._gpu_context(i):
                 net = TFNet(
-                    self.config.model, images, labels, num_classes,
-                    self.is_training, bool(nets), self.estimator)
+                    self, self.config.model, images, labels, num_classes,
+                    bool(nets))
             nets.append(net)
         return nets
 

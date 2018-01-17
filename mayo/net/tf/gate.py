@@ -6,6 +6,18 @@ import tensorflow as tf
 from mayo.util import Percent, memoize_method
 
 
+class GateError(Exception):
+    """Gating-related exceptions.  """
+
+
+class GateParameterValueError(GateError):
+    """Incorrect parameters used.  """
+
+
+class GateGranularityTypeError(GateError):
+    """Incorrect granularity used.  """
+
+
 def _subsample(constructor, tensor, granularity, scope):
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
@@ -13,7 +25,8 @@ def _subsample(constructor, tensor, granularity, scope):
     elif granularity == 'vector':
         kernel = [1, width]
     else:
-        raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
+        raise GateGranularityTypeError(
+            'Unrecognized granularity {!r}.'.format(granularity))
     # pool
     pool_params = {
         'padding': 'VALID',
@@ -25,10 +38,10 @@ def _subsample(constructor, tensor, granularity, scope):
     subsampled = constructor.instantiate_max_pool(None, tensor, pool_params)
     num, height, width, channels = subsampled.shape
     if granularity == 'channel' and not (height == width == 1):
-        raise ValueError(
+        raise GateParameterValueError(
             'We expect subsampled image for channel granularity to be 1x1.')
     if granularity == 'vector' and width != 1:
-        raise ValueError(
+        raise GateParameterValueError(
             'We expect subsampled width for vector granularity to be 1.')
     return tf.stop_gradient(subsampled)
 
@@ -57,7 +70,8 @@ def _gate_network(
             stride_height, _ = stride
         stride = [stride_height, 1]
     else:
-        raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
+        raise GateGranularityTypeError(
+            'Unrecognized granularity {!r}.'.format(granularity))
     params = {
         'kernel_size': kernel,
         'stride': stride,
@@ -83,7 +97,7 @@ def _descriminate_by_density(tensor, density, granularity):
         The target granularity, can either be `channel` or `height`.
     """
     if not (0 < density <= 1):
-        raise ValueError(
+        raise GateParameterValueError(
             'Gate density value {} is out of range (0, 1].'.format(density))
     # not training with the output as we train the predictor `gate`
     tensor = tf.stop_gradient(tensor)
@@ -94,7 +108,8 @@ def _descriminate_by_density(tensor, density, granularity):
     elif granularity == 'vector':
         num_elements = width * channels
     else:
-        raise TypeError('Unrecognized granularity {!r}.'.format(granularity))
+        raise GateGranularityTypeError(
+            'Unrecognized granularity {!r}.'.format(granularity))
     num_active = math.ceil(int(num_elements) * density)
     # reshape the last dimensions into one
     reshaped = tf.reshape(tensor, [num, -1])
@@ -158,7 +173,7 @@ def _regularized_gate(
     loss = tf.losses.mean_squared_error(
         match, gate_output, weights=weight,
         loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-    constructor.estimator.register(loss, 'gate.loss', node)
+    constructor.session.estimator.register(loss, 'gate.loss', node)
 
     if online:
         return _descriminate_by_density(gate_output, density, granularity)
@@ -170,7 +185,7 @@ class GateLayers(object):
 
     def _register_gate_density(self, node, gate, in_channels):
         history = None if self.is_training else 'infinite'
-        self.estimator.register(gate, 'gate', node, history=history)
+        self.session.estimator.register(gate, 'gate', node, history=history)
 
     @staticmethod
     def _gate_loss_formatter(estimator):
@@ -198,8 +213,8 @@ class GateLayers(object):
 
     @memoize_method
     def _register_gate_formatters(self):
-        self.estimator.register_formatter(self._gate_loss_formatter)
-        self.estimator.register_formatter(self._gate_density_formatter)
+        self.session.estimator.register_formatter(self._gate_loss_formatter)
+        self.session.estimator.register_formatter(self._gate_density_formatter)
 
     def instantiate_gated_convolution(self, node, tensor, params):
         density = params.pop('density')
