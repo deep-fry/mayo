@@ -21,10 +21,11 @@ class Train(Session):
     def visualize(self):
         params = self.config.visualize
         image_cnt = params.pop('image_cnt', 0)
+        model_name = params.pop('model_name', None)
         if image_cnt <= self.imgs_seen.eval():
             layers = params.pop('layers', None)
             plotter = GraphPlot(
-                self.nets[0], self.trainable_variables(), layers)
+                self.nets[0], self.trainable_variables(), model_name, layers)
             fmaps = params.pop('fmaps', None)
             weights = params.pop('weights', None)
             plotter.plot(
