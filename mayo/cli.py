@@ -186,20 +186,7 @@ Arguments:
             f.write(chrome_trace)
 
     def cli_visualize(self):
-        import pandas as pd
-        import ggplot
-        # collect all info
-        session = self._get_session('train')
-        overriders = session.nets[0].overriders
-        results = {o.name: session.run(o.after) for o in overriders}
-        for name, data in results.items():
-            df = pd.DataFrame({name: results[name].flatten()})
-            df = pd.melt(df)
-            p = ggplot.ggplot(ggplot.aes(x='value', color='variable'), data=df)
-            p += ggplot.geom_histogram(bins=1024)
-            directory = './plots/'
-            name = name.replace('/', '_')
-            p.save(directory + "{}.png".format(name))
+        return self._get_session('train').visualize()
 
     def cli_train(self):
         """Performs training.  """
