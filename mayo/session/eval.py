@@ -16,11 +16,6 @@ class EvaluateBase(Session):
         self._setup()
 
     def _setup(self):
-        # moving average decay
-        avg_op = self.moving_average_op()
-        using = 'Using' if avg_op else 'Not using'
-        log.debug(using + ' exponential moving averages.')
-
         # setup metrics
         metrics_func = lambda net: (net.top(1), net.top(5))
         top1s, top5s = zip(*self.net_map(metrics_func))

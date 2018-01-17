@@ -1,7 +1,6 @@
 ---
 _import: exponential.yaml
 train:
-    moving_average_decay: 0.9999
     learning_rate:
         decay_steps: 20.0
     optimizer:

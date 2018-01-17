@@ -1,7 +1,6 @@
 ---
 _import: exponential.yaml
 train:
-    moving_average_decay: 0.9999
     optimizer:
         type: tensorflow.train.RMSPropOptimizer
         decay: 0.9

@@ -92,9 +92,6 @@ class Train(Session):
     def _setup_train_operation(self):
         ops = {}
         ops['app_grad'] = self.optimizer.apply_gradients(self._gradients)
-        ma_op = self.moving_average_op()
-        if ma_op:
-            ops['avg'] = ma_op
         # update ops
         update_ops = list(self.get_collection(tf.GraphKeys.UPDATE_OPS))
         ops['update'] = tf.group(*update_ops, name='update')

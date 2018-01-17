@@ -8,8 +8,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    ensure_list, memoize_method, memoize_property, flatten,
-    Change, Table, Percent)
+    ensure_list, memoize_property, flatten, Change, Table, Percent)
 from mayo.net.tf import TFNet
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
@@ -190,9 +189,6 @@ class Session(object, metaclass=SessionMeta):
     def trainable_variables(self):
         return tf.trainable_variables()
 
-    def moving_average_variables(self):
-        return tf.moving_average_variables()
-
     def get_collection(self, key):
         func = lambda net: tf.get_collection(key)
         return flatten(self.net_map(func))
@@ -216,17 +212,6 @@ class Session(object, metaclass=SessionMeta):
         if isinstance(tensor, (tf.Variable, tf.Tensor)):
             tensor = run_func(tensor)
         run_func(op, feed_dict={placeholder: tensor})
-
-    @memoize_method
-    def moving_average_op(self):
-        decay = self.config.get('train.moving_average_decay', 0)
-        if not decay:
-            return None
-        # instantiate moving average if moving_average_decay is supplied
-        var_avgs = tf.train.ExponentialMovingAverage(
-            self.config.train.moving_average_decay, self.num_steps)
-        avg_vars = tf.trainable_variables() + tf.moving_average_variables()
-        return var_avgs.apply(avg_vars)
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
