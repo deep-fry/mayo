@@ -212,7 +212,7 @@ class ResourceEstimator(object):
             in_density = self._gated_density(pred)
         stats = self.estimate_convolution(
             node, input_shape, output_shape, params)
-        stats['MACs'] *= int(in_density * out_density)
+        stats['MACs'] = int(stats['MACs'] * in_density * out_density)
         # gating network overhead
         # io channels
         overhead = int(input_shape[-1] * output_shape[-1])
