@@ -1,0 +1,10 @@
+---
+visualize:
+  model_name: 'lenet5'
+  layers: ['conv0']
+  image_cnt: 100
+  fmaps:
+    style: 'image'
+  weights:
+    smooth: true
+    smooth_scale: 20
