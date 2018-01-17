@@ -1,12 +1,14 @@
 ---
 _import: ../../mobilenet.yaml
+_gate:
+  trainable: false
 model:
     name: mobilenet_v1
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: 0.5
-            trainable: false
+            trainable: $(_gate.trainable)
             online: true
             weight: 0.0001
         _dsconv: &dsconv
@@ -14,21 +16,21 @@ model:
             layers:
                 depthwise: {trainable: ^(trainable)}
                 pointwise: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
-        conv0: {<<: *gated_conv, should_gate: false, trainable: false}
-        conv1: {<<: *dsconv, should_gate: false, trainable: false}
-        conv2: {<<: *dsconv, should_gate: false, trainable: false}
-        conv3: {<<: *dsconv, should_gate: false, trainable: false}
-        conv4: {<<: *dsconv, should_gate: false, trainable: false}
-        conv5: {<<: *dsconv, should_gate: false, trainable: false}
-        conv6: {<<: *dsconv, should_gate: false, trainable: false}
-        conv7: {<<: *dsconv, should_gate: false, trainable: false}
-        conv8: {<<: *dsconv, should_gate: false, trainable: false}
-        conv9: {<<: *dsconv, should_gate: false, trainable: false}
-        conv10: {<<: *dsconv, should_gate: false, trainable: false}
-        conv11: {<<: *dsconv, should_gate: false, trainable: false}
-        conv12: {<<: *dsconv, should_gate: false, trainable: false}
-        conv13: {<<: *dsconv, should_gate: false, trainable: false}
-        fc: {trainable: false}
+        conv0: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        conv1: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv2: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv3: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv4: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv5: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv6: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv7: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv8: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv9: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv10: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv11: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv12: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv13: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        fc: {trainable: $(_gate.trainable)}
         # conv2: {<<: *dsconv}
         # conv3: {<<: *dsconv}
         # conv4: {<<: *dsconv}
