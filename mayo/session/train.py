@@ -19,13 +19,19 @@ class Train(Session):
         self._checkpoint_epoch = ''
 
     def visualize(self):
-        # params = self.config.visualize
-        imgs_seen = self.imgs_seen.eval()
-        plotter = GraphPlot(self.nets[0], ['conv0'])
-        plotter.plot(self)
-
-        # if params.get('imgs_cnt', 0) <= self.imgs_seen.eval():
-        #     pass
+        params = self.config.visualize
+        image_cnt = params.pop('image_cnt', 0)
+        if image_cnt <= self.imgs_seen.eval():
+            layers = params.pop('layers', None)
+            plotter = GraphPlot(
+                self.nets[0], self.trainable_variables(), layers)
+            fmaps = params.pop('fmaps', None)
+            weights = params.pop('weights', None)
+            plotter.plot(
+                self, batch=image_cnt, weights_params=dict(weights),
+                fmaps_params=dict(fmaps), **dict(params))
+            return
+        self._iteration()
 
     @memoize_property
     def learning_rate(self):
