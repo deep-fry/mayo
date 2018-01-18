@@ -3,7 +3,9 @@ visualize:
   model_name: 'lenet5'
   layers: ['conv0', 'conv1']
   image_cnt: 100
+  overrider: 0
   fmaps:
     style: 'image'
   weights:
     non_zeros: true
+    bins_method: 100

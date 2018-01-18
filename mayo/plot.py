@@ -26,13 +26,17 @@ class GraphPlot(object):
                     self._plot_fmaps(fmaps, name, batch, **fmaps_params)
         if weights_params is not None:
             if overrider is not None:
-                for tensor in self.net.overriders:
+                for o in self.net.overriders:
                     if not isinstance(tensor, list):
-                        tensor = tensor.after
+                        tensor = o.after
+                        name = self._name_match(o.name, self.layers)
+                        is_weights = 'weights' in o.name
                     else:
-                        tensor = tensor[overrider].after
-                    name = self._name_match(tensor.name, self.layers)
-                    if name is not None:
+                        tensor = o[overrider].after
+                        name = self._name_match(
+                            [t.name for t in o], self.layers)
+                        is_weights = True
+                    if name is not None and is_weights:
                         weights = session.run(tensor)
                         self._plot_weights(weights, name, **weights_params)
             else:
@@ -90,8 +94,12 @@ class GraphPlot(object):
             start += step
 
     def _name_match(self, name, partial_names):
+        list_mode = isinstance(name, list)
         for pname in partial_names:
-            if pname in name:
-                # self._dir += re.split(r'/', name)[-2]
+            if pname in name and not list_mode:
                 return pname
+            if list_mode:
+                for n in name:
+                    if pname in name:
+                        return pname
         return None
