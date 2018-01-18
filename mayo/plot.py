@@ -1,9 +1,7 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
-import re
 import os
-from scipy.interpolate import spline
 matplotlib.use
 plt.style.use('ggplot')
 
@@ -44,8 +42,8 @@ class GraphPlot(object):
                         weights = session.run(tensor)
                         self._plot_weights(weights, name, **weights_params)
 
-    def _plot_weights(self, raw_data, name, smooth=True, smooth_scale=20):
-        self._plot_histogram(raw_data.flatten(), name, smooth, smooth_scale)
+    def _plot_weights(self, raw_data, name, non_zeros=True, bins_method='fd'):
+        self._plot_histogram(raw_data.flatten(), name, non_zeros, bins_method)
 
     def _plot_fmaps(self, raw_data, name, batch=0, style='image'):
         if style == 'image':
@@ -68,34 +66,23 @@ class GraphPlot(object):
         for i in range(raw_data.shape[2]):
             image = raw_data[:, :, i]
             image = image / float(np.max(image)) * 255.0
-            yield (image, self._dir + '/' + name + '_fmap' + str(i))
+            sub_dir = self._dir + '/' + name
+            if not os.path.exists(sub_dir):
+                os.makedirs(sub_dir)
+            yield (image, sub_dir + '/' + 'fmap' + str(i))
 
-    def _plot_histogram(self, raw_data, name, smooth=True, smooth_scale=20):
-        figure = plt.figure()
-        x_axis, y_axis = self._reform(raw_data, smooth, smooth_scale)
-        plt.plot(x_axis, y_axis)
-        plt.savefig(self._dir + '/' + name + 'weights' '.png')
-
-    def _reform(self, value, smooth, smooth_scale, scale=1):
-        assert isinstance(value, np.ndarray), 'np array is required!'
-        x_axis = []
-        y_axis = []
-        start = int(np.min(value) - scale)
-        end = int(np.max(value) + scale)
-        for interval in self._range(start, end, 2 * scale):
-            x_axis.append(interval)
-            indexing = np.logical_and(
-                value > interval - scale, value < interval + scale)
-            y_axis.append(value[indexing].size)
-        x_axis = np.array(x_axis)
-        y_axis = np.array(y_axis)
-        if smooth:
-            x_tmp = np.linspace(
-                x_axis.min(), x_axis.max(), x_axis.size * smooth_scale)
-            import pdb; pdb.set_trace()
-            y_axis = spline(x_axis, y_axis, x_tmp)
-            x_axis = x_tmp
-        return (x_axis, y_axis)
+    def _plot_histogram(
+            self, raw_data, name, non_zeros=True, bins_method='fd'):
+        if non_zeros:
+            raw_data = raw_data[raw_data != 0]
+        fig = plt.figure()
+        # hist
+        n, bins, patches = plt.hist(raw_data, bins=bins_method)
+        sub_dir = self._dir + '/' + name
+        if not os.path.exists(sub_dir):
+            os.makedirs(sub_dir)
+        plt.savefig(sub_dir + '/' + 'weights.png')
+        plt.close(fig)
 
     def _range(self, start, end, step):
         while start <= end:
