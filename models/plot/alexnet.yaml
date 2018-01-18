@@ -1,0 +1,9 @@
+---
+visualize:
+  model_name: 'alexnet'
+  layers: ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']
+  image_cnt: 100
+  fmaps:
+    style: 'image'
+  weights:
+    non_zeros: true

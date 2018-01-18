@@ -23,7 +23,9 @@ class GraphPlot(object):
                 name = self._name_match(key, self.layers)
                 if name is not None:
                     fmaps = session.run(tensor)
-                    self._plot_fmaps(fmaps, name, batch, **fmaps_params)
+                    input_img = session.run(self.net.inputs()['input'])[batch]
+                    self._plot_fmaps(
+                        fmaps, name, input_img, batch, **fmaps_params)
         if weights_params is not None:
             if overrider is not None:
                 for o in self.net.overriders:
@@ -49,8 +51,9 @@ class GraphPlot(object):
     def _plot_weights(self, raw_data, name, non_zeros=True, bins_method='fd'):
         self._plot_histogram(raw_data.flatten(), name, non_zeros, bins_method)
 
-    def _plot_fmaps(self, raw_data, name, batch=0, style='image'):
+    def _plot_fmaps(self, raw_data, name, input_img, batch=0, style='image'):
         if style == 'image':
+            # save input
             if len(raw_data.shape) != 4:
                 raise ValueError(
                     'targeted layer does not have feature maps for plotting!')
@@ -59,6 +62,15 @@ class GraphPlot(object):
             # check dir
             if not os.path.exists(self._dir):
                 os.makedirs(self._dir)
+            # plot input image
+            input_img = 1 / float(np.max(input_img) - np.min(input_img)) \
+                * (input_img - np.max(input_img)) + 1
+            if input_img.shape[2] == 3:
+                matplotlib.image.imsave(
+                    self._dir + 'input.png', input_img)
+            else:
+                matplotlib.image.imsave(
+                    self._dir + 'input.png', input_img, cmap='gray')
             # plot fmaps
             for data, name in self._prepare_image_plot(raw_data, name):
                 matplotlib.image.imsave(name + '.png', data, cmap='gray')
@@ -69,7 +81,7 @@ class GraphPlot(object):
     def _prepare_image_plot(self, raw_data, name):
         for i in range(raw_data.shape[2]):
             image = raw_data[:, :, i]
-            image = image / float(np.max(image)) * 255.0
+            image = image / float(np.max(np.abs(image))) * 255.0
             sub_dir = self._dir + '/' + name
             if not os.path.exists(sub_dir):
                 os.makedirs(sub_dir)
