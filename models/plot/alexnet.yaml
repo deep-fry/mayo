@@ -3,7 +3,7 @@ visualize:
   model_name: 'alexnet'
   layers: ['conv1', 'conv2', 'conv3', 'conv4', 'conv5']
   image_cnt: 100
-  # overrider: 0
+  overrider: 0
   fmaps:
     style: 'image'
   weights:

@@ -2,6 +2,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import os
+import math
 matplotlib.use
 plt.style.use('ggplot')
 
@@ -53,7 +54,9 @@ class GraphPlot(object):
     def _plot_weights(self, raw_data, name, non_zeros=True, bins_method='fd'):
         self._plot_histogram(raw_data.flatten(), name, non_zeros, bins_method)
 
-    def _plot_fmaps(self, raw_data, name, input_img, batch=0, style='image'):
+    def _plot_fmaps(
+            self, raw_data, name, input_img, batch=0, grids=False,
+            style='image'):
         if style == 'image':
             # save input
             if len(raw_data.shape) != 4:
@@ -77,14 +80,32 @@ class GraphPlot(object):
                 matplotlib.image.imsave(
                     self._dir + 'input.png', input_img, cmap='gray')
             # plot fmaps
-            for data, name in self._prepare_image_plot(raw_data, name):
-                matplotlib.image.imsave(name + '.png', data, cmap='gray')
+            if grids:
+                # plot all fmaps in one image
+                fig_width = math.ceil(math.sqrt(raw_data.shape[2]))
+                fig = plt.figure(figsize= (fig_width, fig_width))
+                for fig_pos, data, name in self._prepare_image_plot(raw_data, name):
+                    # matplotlib.image.imsave(name + '.png', data, cmap='gray')
+                    ax = fig.add_subplot(*fig_pos)
+                    ax.set_axis_off()
+                    ax.imshow(data, cmap='gray')
+                    ax.set_xticklabels([])
+                    ax.set_yticklabels([])
+                    ax.set_aspect('equal')
+                fig.subplots_adjust(wspace=0.025, hspace=0.005)
+                plt.savefig(name + '.png')
+            else:
+                # save fmaps one by one
+                for fig_pos, data, name in self._prepare_image_plot(raw_data, name):
+                    matplotlib.image.imsave(name + '.png', data, cmap='gray')
         if style == 'histogram':
             raw_data = raw_data[batch]
             self._plot_histogram(raw_data.flatten())
 
     def _prepare_image_plot(self, raw_data, name):
-        for i in range(raw_data.shape[2]):
+        max_imgs = raw_data.shape[2]
+        max_row = max_col = math.ceil(math.sqrt(max_imgs))
+        for i in range(max_imgs):
             image = raw_data[:, :, i]
             max_pixel = np.max(np.abs(image))
             if max_pixel != 0:
@@ -92,7 +113,8 @@ class GraphPlot(object):
             sub_dir = self._dir + '/' + name
             if not os.path.exists(sub_dir):
                 os.makedirs(sub_dir)
-            yield (image, sub_dir + '/' + 'fmap' + str(i))
+            yield (
+                (max_row, max_col, i+1), image, sub_dir + '/' + 'fmap' + str(i))
 
     def _plot_histogram(
             self, raw_data, name, non_zeros=True, bins_method='fd'):
