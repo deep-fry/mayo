@@ -1,0 +1,27 @@
+---
+_import: ../../resnet18.yaml
+_gate:
+  trainable: false
+model:
+    name: resnet18
+    layers:
+        _gated_conv: &gated_conv
+            type: gated_convolution
+            density: 0.5
+            trainable: $(_gate.trainable)
+            online: true
+            weight: 0.0001
+        _basic_block: &bb
+            kwargs: {should_gate: null, trainable: null}
+            layers:
+                conv1: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
+                conv2: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
+        conv1: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        b11: {<<: *bb, should_gate: false, trainable: $(_gate.trainable)}
+        b12: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        b21: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        b31: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        b32: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        b41: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        b42: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+        fc5: {trainable: $(_gate.trainable)}
