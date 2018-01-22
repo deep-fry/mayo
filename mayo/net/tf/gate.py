@@ -116,7 +116,8 @@ def _descriminate_by_density(tensor, density, granularity, online=True):
         raise GateParameterValueError(
             'Gate density value {} is out of range (0, 1].'.format(density))
     # not training with the output as we train the predictor `gate`
-    tensor = tf.stop_gradient(tensor)
+    if online:
+        tensor = tf.stop_gradient(tensor)
     # number of active elemetns
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
