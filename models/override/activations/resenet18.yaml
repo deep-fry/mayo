@@ -1,0 +1,26 @@
+_import: ../../resnet18.yaml
+model:
+    name: resnet18
+    layers:
+        _basic_block: &bb
+            layers:
+                conv1: &overrider
+                    weights_overrider:
+                        - {type: mayo.override.FixedPointQuantizer, point: 1, width: 8}
+                    biases_overrider:
+                        - {type: mayo.override.FixedPointQuantizer, point: 1, width: 8}
+                    activation_overrider: &shift
+                        type: mayo.override.ShiftQuantizer
+                        width: 4
+                        bias: 4
+                        overflow_rate: 0.0
+                        should_update: true
+                conv2: {<<: *overrider}
+        conv1: {<<: *overrider}
+        b11: {<<: *bb}
+        b12: {<<: *bb}
+        b21: {<<: *bb}
+        b31: {<<: *bb}
+        b32: {<<: *bb}
+        b41: {<<: *bb}
+        b42: {<<: *bb}
