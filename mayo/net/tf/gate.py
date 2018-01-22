@@ -18,7 +18,7 @@ class GateGranularityTypeError(GateError):
     """Incorrect granularity used.  """
 
 
-def _subsample(constructor, tensor, granularity, scope):
+def _subsample(constructor, tensor, granularity, feature_extraction, scope):
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
         kernel = [height, width]
@@ -35,7 +35,11 @@ def _subsample(constructor, tensor, granularity, scope):
         'scope': scope,
     }
     # max pool is hardware-friendlier
-    subsampled = constructor.instantiate_max_pool(None, tensor, pool_params)
+    if feature_extraction == 'max':
+        subsampled = constructor.instantiate_max_pool(None, tensor, pool_params)
+    elif feature_extraction == 'l2':
+        tensor = tf.square(tensor)
+        subsampled = constructor.instantiate_average_pool(None, tensor, pool_params)
     num, height, width, channels = subsampled.shape
     if granularity == 'channel' and not (height == width == 1):
         raise GateParameterValueError(
@@ -47,9 +51,10 @@ def _subsample(constructor, tensor, granularity, scope):
 
 
 def _gate_network(
-        constructor, tensor, granularity,
+        constructor, tensor, granularity, feature_extraction,
         kernel_size, stride, padding, num_outputs, activation_fn, scope):
-    subsampled = _subsample(constructor, tensor, granularity, scope)
+    subsampled = _subsample(
+        constructor, tensor, granularity, feature_extraction, scope)
     if granularity == 'channel':
         kernel = 1
     elif granularity == 'vector':
@@ -125,7 +130,8 @@ def _descriminate_by_density(tensor, density, granularity):
 def _regularized_gate(
         constructor, node, conv_input, conv_output,
         kernel_size, stride, padding,
-        density, granularity, activation_fn, online, weight, scope):
+        density, granularity, feature_extraction, activation_fn,
+        online, weight, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -139,6 +145,9 @@ def _regularized_gate(
     density (float): The target density.
     granularity (str):
         The target granularity, can either be `channel` or `height`.
+    granularity (str):
+        The preferred feature extraction method,
+        can either be `max` or `l1`.
     activation_fn: The activation function used.
     weight (float): The weight of the gate regularizer loss.
     online (bool): The switch to compute top_k online or offline.
@@ -151,12 +160,13 @@ def _regularized_gate(
     if not online:
         activation_fn = None
     gate_output = _gate_network(
-        constructor, conv_input, granularity, kernel_size, stride, padding,
-        num_outputs, activation_fn, gate_scope)
+        constructor, conv_input, granularity, feature_extraction, kernel_size,
+        stride, padding, num_outputs, activation_fn, gate_scope)
     # output subsample
     subsample_scope = '{}/subsample'.format(scope)
     subsampled = _subsample(
-        constructor, conv_output, granularity, subsample_scope)
+        constructor, conv_output, granularity, feature_extraction,
+        subsample_scope)
 
     # training
     if online:
@@ -219,6 +229,7 @@ class GateLayers(object):
     def instantiate_gated_convolution(self, node, tensor, params):
         density = params.pop('density')
         granularity = params.pop('granularity', 'channel')
+        feature_extraction = params.pop('feature_extraction', 'max')
         online = params.pop('online', False)
         weight = params.pop('weight', 0.01)
         should_gate = params.pop('should_gate', True)
@@ -231,8 +242,8 @@ class GateLayers(object):
         # predictor policy
         gate = _regularized_gate(
             self, node, tensor, output, kernel_size, stride, padding,
-            density, granularity, activation_fn, online, weight,
-            params['scope'])
+            density, granularity, feature_extraction,
+            activation_fn, online, weight, params['scope'])
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters()
@@ -245,7 +256,8 @@ class GateLayers(object):
     def instantiate_gate(self, node, tensor, params):
         gate_scope = '{}/gate'.format(params['scope'])
         subsample_scope = '{}/subsample'.format(gate_scope)
-        subsampled = _subsample(self, tensor, subsample_scope)
+        subsampled = _subsample(
+            self, tensor, feature_extraction, subsample_scope)
         granularity = params.get('granularity', 'channel')
         gate = _descriminate_by_density(
             subsampled, params['density'], granularity)
