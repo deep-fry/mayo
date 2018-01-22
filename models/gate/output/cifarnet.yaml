@@ -1,9 +1,11 @@
 ---
 _import: ../../cifarnet.yaml
 _gate:
-    online: true
+    # online: true
+    online: false
     density: 0.5
     trainable: false
+    feature_extraction: 'avg'
 model:
     description: |
         A variant of cifarnet that performs online gating.

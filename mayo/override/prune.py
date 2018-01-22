@@ -92,7 +92,8 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         off_mask = util.abs(var) > self.off_factor * threshold
         return util.logical_and(mask, off_mask)
 
-class ChannelPruner(PrunerBase):
+
+class FilterPruner(PrunerBase):
     # TODO: finish channel pruner
     alpha = Parameter('alpha', -2, [], tf.float32)
 

@@ -18,7 +18,8 @@ class GateGranularityTypeError(GateError):
     """Incorrect granularity used.  """
 
 
-def _subsample(constructor, tensor, granularity, feature_extraction, scope):
+def _subsample(
+        constructor, tensor, granularity, feature_extraction, online, scope):
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
         kernel = [height, width]
@@ -36,10 +37,18 @@ def _subsample(constructor, tensor, granularity, feature_extraction, scope):
     }
     # max pool is hardware-friendlier
     if feature_extraction == 'max':
-        subsampled = constructor.instantiate_max_pool(None, tensor, pool_params)
+        subsampled = constructor.instantiate_max_pool(
+            None, tensor, pool_params)
     elif feature_extraction == 'l2':
         tensor = tf.square(tensor)
-        subsampled = constructor.instantiate_average_pool(None, tensor, pool_params)
+        subsampled = constructor.instantiate_average_pool(
+            None, tensor, pool_params)
+    elif feature_extraction == 'avg':
+        subsampled = constructor.instantiate_average_pool(
+            None, tensor, pool_params)
+    else:
+        raise GateParameterValueError(
+            'feature extract type not supported.')
     num, height, width, channels = subsampled.shape
     if granularity == 'channel' and not (height == width == 1):
         raise GateParameterValueError(
@@ -47,14 +56,16 @@ def _subsample(constructor, tensor, granularity, feature_extraction, scope):
     if granularity == 'vector' and width != 1:
         raise GateParameterValueError(
             'We expect subsampled width for vector granularity to be 1.')
-    return tf.stop_gradient(subsampled)
+    if online:
+        return tf.stop_gradient(subsampled)
+    return subsampled
 
 
 def _gate_network(
-        constructor, tensor, granularity, feature_extraction,
+        constructor, tensor, granularity, feature_extraction, online,
         kernel_size, stride, padding, num_outputs, activation_fn, scope):
     subsampled = _subsample(
-        constructor, tensor, granularity, feature_extraction, scope)
+        constructor, tensor, granularity, feature_extraction, online, scope)
     if granularity == 'channel':
         kernel = 1
     elif granularity == 'vector':
@@ -91,7 +102,7 @@ def _gate_network(
     return constructor.instantiate_convolution(None, padded, params)
 
 
-def _descriminate_by_density(tensor, density, granularity):
+def _descriminate_by_density(tensor, density, granularity, online=True):
     """
     Mark a portion of top elements in tensor to true, where the portion is
     approximately the specified density.
@@ -122,7 +133,10 @@ def _descriminate_by_density(tensor, density, granularity):
     top, _ = tf.nn.top_k(reshaped, k=num_active)
     # disable channels with smaller activations
     threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
-    active = tf.stop_gradient(reshaped >= threshold)
+    if online:
+        active = tf.stop_gradient(reshaped >= threshold)
+    else:
+        active = reshaped >= threshold
     active = tf.reshape(active, [num, height, width, channels])
     return active
 
@@ -160,34 +174,32 @@ def _regularized_gate(
     if not online:
         activation_fn = None
     gate_output = _gate_network(
-        constructor, conv_input, granularity, feature_extraction, kernel_size,
-        stride, padding, num_outputs, activation_fn, gate_scope)
+        constructor, conv_input, granularity, feature_extraction, online,
+        kernel_size, stride, padding, num_outputs, activation_fn, gate_scope)
     # output subsample
     subsample_scope = '{}/subsample'.format(scope)
     subsampled = _subsample(
-        constructor, conv_output, granularity, feature_extraction,
+        constructor, conv_output, granularity, feature_extraction, online,
         subsample_scope)
 
     # training
     if online:
         # online descriminator: we simply match max values in each channel
         match = subsampled
+        # loss regularizer
+        loss = tf.losses.mean_squared_error(
+            match, gate_output, weights=weight,
+            loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+        constructor.session.estimator.register(loss, 'gate.loss', node)
     else:
         # offline descriminator: we train the gate to produce 1 for active
         # channels and -1 for gated channels
-        match = _descriminate_by_density(subsampled, density, granularity)
-        ones = tf.ones(match.shape)
-        match = tf.where(match, ones, -ones)
+        match = _descriminate_by_density(
+            subsampled, density, granularity, online)
+        match = tf.cast(match, tf.float32)
+        return match * subsampled
 
-    # loss regularizer
-    loss = tf.losses.mean_squared_error(
-        match, gate_output, weights=weight,
-        loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-    constructor.session.estimator.register(loss, 'gate.loss', node)
-
-    if online:
-        return _descriminate_by_density(gate_output, density, granularity)
-    return gate_output > 0
+    return _descriminate_by_density(gate_output, density, granularity)
 
 
 class GateLayers(object):
@@ -217,13 +229,15 @@ class GateLayers(object):
         gates = estimator.get_values('gate')
         valid = total = 0
         for layer, gate in gates.items():
-            valid += np.sum(gate.astype(np.float32))
+            valid += np.sum(gate.astype(np.float32) != 0)
             total += gate.size
         return 'gate: {}'.format(Percent(valid / total))
 
     @memoize_method
-    def _register_gate_formatters(self):
-        self.session.estimator.register_formatter(self._gate_loss_formatter)
+    def _register_gate_formatters(self, online=True):
+        if online:
+            self.session.estimator.register_formatter(
+                self._gate_loss_formatter)
         self.session.estimator.register_formatter(self._gate_density_formatter)
 
     def instantiate_gated_convolution(self, node, tensor, params):
@@ -246,18 +260,21 @@ class GateLayers(object):
             activation_fn, online, weight, params['scope'])
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
-        self._register_gate_formatters()
+        self._register_gate_formatters(online)
         if not should_gate:
             return output
         # actual gating
-        gate = tf.stop_gradient(tf.cast(gate, tf.float32))
+        if online:
+            gate = tf.stop_gradient(tf.cast(gate, tf.float32))
         return output * gate
 
     def instantiate_gate(self, node, tensor, params):
         gate_scope = '{}/gate'.format(params['scope'])
         subsample_scope = '{}/subsample'.format(gate_scope)
+        feature_extraction = params.get('feature_extraction', 'max')
+        online = params.get('online', True)
         subsampled = _subsample(
-            self, tensor, feature_extraction, subsample_scope)
+            self, tensor, feature_extraction, online, subsample_scope)
         granularity = params.get('granularity', 'channel')
         gate = _descriminate_by_density(
             subsampled, params['density'], granularity)
