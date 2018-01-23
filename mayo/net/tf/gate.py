@@ -58,7 +58,6 @@ def _subsample(
             'We expect subsampled width for vector granularity to be 1.')
     if online:
         return tf.stop_gradient(subsampled)
-    return tf.stop_gradient(subsampled)
     return subsampled
 
 
@@ -94,7 +93,7 @@ def _gate_network(
         'stride': stride,
         'padding': padding,
         'num_outputs': num_outputs,
-        'biases_initializer': tf.constant_initializer(1.0),
+        'biases_initializer': tf.constant_initializer(0.0),
         'weights_initializer': tf.truncated_normal_initializer(stddev=0.01),
         'activation_fn': activation_fn,
         'scope': scope,
@@ -173,8 +172,6 @@ def _regularized_gate(
     # gating network
     num_outputs = int(conv_output.shape[-1])
     gate_scope = '{}/gate'.format(scope)
-    if not online:
-        activation_fn = None
     gate_output = _gate_network(
         constructor, conv_input, granularity, feature_extraction, online,
         kernel_size, stride, padding, num_outputs, activation_fn, gate_scope)
@@ -198,7 +195,6 @@ def _regularized_gate(
         match = _descriminate_by_density(
             gate_output, density, granularity, online)
         return tf.cast(match, tf.float32)
-
     return _descriminate_by_density(gate_output, density, granularity)
 
 
@@ -250,7 +246,7 @@ class GateLayers(object):
         kernel_size = params['kernel_size']
         stride = params.get('stride', 1)
         padding = params.get('padding', 'SAME')
-        activation_fn = params.get('activation_fn', tf.nn.relu6)
+        activation_fn = params.get('activation_fn', tf.nn.sigmoid)
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
@@ -258,6 +254,12 @@ class GateLayers(object):
             self, node, tensor, output, kernel_size, stride, padding,
             density, granularity, feature_extraction,
             activation_fn, online, weight, params['scope'])
+        ''' Testing snippet
+        if not hasattr(self, 'test_list'):
+            self.test_list = []
+        self.test_list.append(gate)
+        gate = gate[0]
+        '''
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters(online)
