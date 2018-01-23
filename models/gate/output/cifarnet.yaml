@@ -3,7 +3,7 @@ _import: ../../cifarnet.yaml
 _gate:
     # online: true
     online: false
-    density: 0.5
+    density: 1.0
     trainable: false
     feature_extraction: 'avg'
 model:
