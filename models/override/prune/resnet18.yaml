@@ -1,0 +1,20 @@
+---
+_import: ../../resnet18.yaml
+model:
+    name: resnet18
+    layers:
+        _basic_block: &bb
+            layers:
+                conv1: &conv_prune
+                    weights_overrider:
+                        type: mayo.override.DynamicNetworkSurgeryPruner
+                        alpha: -2
+                conv2: {<<: *conv_prune}
+        conv1: {<<: *conv_prune}
+        b11: {<<: *bb}
+        b12: {<<: *bb}
+        b21: {<<: *bb}
+        b31: {<<: *bb}
+        b32: {<<: *bb}
+        b41: {<<: *bb}
+        b42: {<<: *bb}
