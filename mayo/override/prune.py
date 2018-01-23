@@ -109,15 +109,14 @@ class ChannelPruner(PrunerBase):
     def _apply(self, value):
         if self.gate_on:
             super._apply(value)
-        import pdb; pdb.set_trace()
         self._parameter_config = {
             'scaling_factors': {
                 'trainable': True,
-                'initial': tf.
+                # 'initial': tf.
                 'shape': value.shape
             }
         }
-        return value * scaling_factors
+        return value
 
     def _info(self, session):
         _, mask, density, count = super()._info(session)
