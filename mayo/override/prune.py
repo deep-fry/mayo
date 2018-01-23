@@ -93,6 +93,44 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         return util.logical_and(mask, off_mask)
 
 
+class ChannelPruner(PrunerBase):
+    # This pruner only works on activations
+    alpha = Parameter('alpha', -2, [], tf.float32)
+    scaling_factors = Parameter('scaling_factors', None, None, tf.float32)
+
+    def __init__(self, alpha=None, should_update=True):
+        super().__init__(should_update)
+        if alpha is None:
+            self.gate_on = False
+        else:
+            self.gate_on = True
+        self.alpha = alpha
+
+    def _apply(self, value):
+        if self.gate_on:
+            super._apply(value)
+        import pdb; pdb.set_trace()
+        self._parameter_config = {
+            'scaling_factors': {
+                'trainable': True,
+                'initial': tf.
+                'shape': value.shape
+            }
+        }
+        return value * scaling_factors
+
+    def _info(self, session):
+        _, mask, density, count = super()._info(session)
+        alpha = session.run(self.alpha)
+        return self._info_tuple(
+            mask=mask, alpha=alpha, density=density, count_=count)
+
+    @classmethod
+    def finalize_info(cls, table):
+        footer = super().finalize_info(table)
+        table.set_footer([None] + footer)
+
+
 class FilterPruner(PrunerBase):
     # TODO: finish channel pruner
     alpha = Parameter('alpha', -2, [], tf.float32)
