@@ -68,7 +68,6 @@ class Parameter(object):
         except KeyError:
             pass
         kwargs = self._getter_kwargs(instance)
-        import pdb; pdb.set_trace()
         var = instance._getter(**kwargs)
         instance._parameter_variables[self.name] = var
         return var
