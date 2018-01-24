@@ -135,11 +135,14 @@ def _descriminate_by_density(tensor, density, granularity, online=True):
     # disable channels with smaller activations
     threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
     if not online:
-        active = tf.cast(reshaped >= threshold, tf.float32) * reshaped
+        active = tf.cast(reshaped >= threshold, tf.float32)
     if online:
         active = tf.stop_gradient(reshaped >= threshold)
     active = tf.reshape(active, [num, height, width, channels])
-    return active
+    if online:
+        return active
+    else:
+        return active * tensor
 
 
 def _regularized_gate(
