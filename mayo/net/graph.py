@@ -61,6 +61,9 @@ class NodeBase(object):
     def successors(self):
         return list(self.graph().nx_graph.successors(self))
 
+    def formatted_name(self):
+        return '{}/{}'.format('/'.join(self.module), self.name)
+
     def _eq_key(self):
         return (self.__class__, self.name, self.module)
 

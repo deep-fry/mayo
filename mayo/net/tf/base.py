@@ -43,6 +43,10 @@ class TFNetBase(NetBase):
     def overriders(self):
         return self._transformer.overriders
 
+    @property
+    def variables(self):
+        return self._transformer.variables
+
     @memoize_method
     def loss(self):
         logits = self.logits()
@@ -116,8 +120,7 @@ class TFNetBase(NetBase):
 
     def _instantiate_layer(self, node, tensors, params):
         # transform parameters
-        params, scope = self._transformer.transform(
-            node.name, params, node.module)
+        params, scope = self._transformer.transform(node, params)
         with scope:
             tensors = self.instantiate_numeric_padding(node, tensors, params)
             layer_type = params['type']

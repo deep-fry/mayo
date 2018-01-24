@@ -231,15 +231,14 @@ class Session(object, metaclass=SessionMeta):
         # layer info
         layer_info = Table(['layer', 'shape', '#macs'])
         self.estimator.add_estimate(net.shapes)
-        for n in net._graph.layer_nodes():
-            tensors = ensure_list(net._tensors[n])
-            name = '{}/{}'.format('/'.join(n.module), n.name)
+        for node, tensors in net.layers().items():
+            tensors = ensure_list(tensors)
             try:
-                macs = self.estimator.get_value('MACs', n)
+                macs = self.estimator.get_value('MACs', node)
             except KeyError:
                 macs = 0
             for tensor in tensors:
-                layer_info.add_row((name, tensor.shape, macs))
+                layer_info.add_row((node.formatted_name(), tensor.shape, macs))
         layer_info.set_footer(
             ['', '    total:', sum(layer_info.get_column('#macs'))])
         info_dict['layers'] = layer_info
@@ -332,3 +331,7 @@ class Session(object, metaclass=SessionMeta):
     def interact(self):
         from IPython import embed
         embed()
+
+    def visualize(self):
+        from mayo.plot import Plot
+        Plot(self, self.config).plot()

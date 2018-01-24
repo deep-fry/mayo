@@ -1,3 +1,4 @@
+import re
 import itertools
 import contextlib
 
@@ -22,6 +23,7 @@ class ParameterTransformer(object):
         self.is_training = is_training
         self.reuse = reuse
         self.overriders = []
+        self.variables = {}
 
     def _create_hyperobjects(self, params):
         def _create_object_for_key(params, key):
@@ -92,28 +94,31 @@ class ParameterTransformer(object):
         scope = slim.arg_scope([params['normalizer_fn']], **norm_params)
         scope_list.append(scope)
 
-    def _add_var_scope(self, params, module_path, scope_list):
-        if not module_path:
+    def _add_var_scope(self, layer_node, params, scope_list):
+        path = '/'.join(layer_node.module)
+        if not path:
             raise ValueError('Module path is empty.')
-        path = '/'.join(module_path)
 
         biases_overrider = params.pop('biases_overrider', None)
         weights_overrider = params.pop('weights_overrider', None)
 
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
-            name = v.op.name
+            name = re.findall(r'/([A-Za-z0-9_]+)$', v.op.name)
+            if not name or len(name) > 1:
+                raise ValueError('Unable to get variable name.')
+            name = name.pop(0)
             overrider = None
-            if 'biases' in name:
+            if name.endswith('/biases'):
                 overrider = biases_overrider
-            elif 'weights' in name:
+            elif name.endswith('/weights'):
                 overrider = weights_overrider
-            if overrider is None:
-                return v
-            log.debug('Overriding {!r} with {!r}'.format(v.op.name, overrider))
-            ov = overrider.apply(name, getter, v)
-            self.overriders.append(overrider)
-            return ov
+            if overrider:
+                log.debug('Overriding {!r} with {!r}'.format(name, overrider))
+                v = overrider.apply(name, getter, v)
+                self.overriders.append(overrider)
+            self.variables.setdefault(layer_node, {})[name] = v
+            return v
 
         @contextlib.contextmanager
         def custom_scope():
@@ -137,7 +142,7 @@ class ParameterTransformer(object):
                 scope_stack.enter_context(scope)
             yield
 
-    def _scope(self, params, module_path):
+    def _scope(self, layer_node, params):
         # scopes
         scope_list = []
         # pin variables on cpu
@@ -146,16 +151,16 @@ class ParameterTransformer(object):
         # normalization arg_scope
         self._add_norm_scope(params, scope_list)
         # variable scope with custom getter for overriders
-        self._add_var_scope(params, module_path, scope_list)
+        self._add_var_scope(layer_node, params, scope_list)
         # custom nested scope
         return self._scope_functional(scope_list)
 
-    def transform(self, name, params, module_path):
+    def transform(self, layer_node, params):
         params = dict(params)
         # weight and bias hyperparams
         self._create_hyperobjects(params)
         # layer configs
-        self._config_layer(name, params)
+        self._config_layer(layer_node.name, params)
         # nested scopes
-        scope = self._scope(params, module_path)
+        scope = self._scope(layer_node, params)
         return params, scope

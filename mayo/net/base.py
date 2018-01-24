@@ -25,11 +25,7 @@ class NetBase(object):
         return {n.name: self._tensors[n] for n in self._graph.output_nodes()}
 
     def layers(self):
-        layers = {}
-        for n in self._graph.layer_nodes():
-            name = '{}/{}'.format('/'.join(n.module), n.name)
-            layers[name] = self._tensors[n]
-        return layers
+        return {n: self._tensors[n] for n in self._graph.layer_nodes()}
 
     def info(self):
         return {}
