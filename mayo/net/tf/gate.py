@@ -40,9 +40,13 @@ def _subsample(
         subsampled = constructor.instantiate_max_pool(
             None, tensor, pool_params)
     elif feature_extraction == 'l2':
-        tensor = tf.square(tensor)
+        subsampled = tf.nn.l2_loss(tensor)
+        # tensor = tf.square(tensor)
+        # subsampled = constructor.instantiate_average_pool(
+        #     None, tensor, pool_params)
+    elif feature_extraction == 'l1':
         subsampled = constructor.instantiate_average_pool(
-            None, tensor, pool_params)
+            None, tf.abs(tensor), pool_params)
     elif feature_extraction == 'avg':
         subsampled = constructor.instantiate_average_pool(
             None, tensor, pool_params)
@@ -197,6 +201,9 @@ def _regularized_gate(
         # channels and -1 for gated channels
         match = _descriminate_by_density(
             gate_output, density, granularity, online)
+        gate_reg_loss = weight * tf.nn.l2_loss(gate_output)
+        tf.losses.add_loss(gate_reg_loss)
+        constructor.session.estimator.register(gate_reg_loss, 'gate.loss', node)
         return tf.cast(match, tf.float32)
     return _descriminate_by_density(gate_output, density, granularity)
 
