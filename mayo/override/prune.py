@@ -95,28 +95,37 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
 
 class ChannelPruner(PrunerBase):
     # This pruner only works on activations
-    alpha = Parameter('alpha', -2, [], tf.float32)
-    scaling_factors = Parameter('scaling_factors', None, None, tf.float32)
+    alpha = Parameter('density', 0.5, [], tf.float32)
+    # scaling_factors = Parameter('scaling_factors', None, None, tf.float32)
 
-    def __init__(self, alpha=None, should_update=True):
+    def __init__(self, density=None, should_update=True):
         super().__init__(should_update)
-        if alpha is None:
+        if density is None:
             self.gate_on = False
         else:
             self.gate_on = True
-        self.alpha = alpha
+        self.density= density
 
     def _apply(self, value):
-        if self.gate_on:
-            super._apply(value)
+        masked = super()._apply(value)
+        channel_shape = value.shape[3]
         self._parameter_config = {
             'scaling_factors': {
                 'trainable': True,
-                # 'initial': tf.
-                'shape': value.shape
+                'initial': tf.ones_initializer(dtype=tf.float32),
+                'shape': channel_shape
             }
         }
-        return value
+        return value * util.cast(self.mask, float) * self.scaling_factors
+
+    def _updated_mask(self, var, mask, session):
+        mask, scaling_factors, density = session.run(
+            mask, self.scaling_factors, self.density)
+        chosen = int(len(scaling_factors) * density)
+        threshold = scaling_factors.sort()[chosen]
+        # top_k, where k is the number of active channels
+        # disable channels with smaller activations
+        return mask * (scaling_factors > threshold)
 
     def _info(self, session):
         _, mask, density, count = super()._info(session)

@@ -23,14 +23,12 @@ model.layers:
     conv0: &overrider
         weights_overrider: &quantizer
             type: mayo.override.FixedPointQuantizer
-            width: 4
+            width: 16
             point: 1
             should_update: true
         biases_overrider: *quantizer
         activation_overrider: &shift
-            type: mayo.override.ShiftQuantizer
-            width: 8
-            bias: 250
-            overflow_rate: 0.0
-            should_update: true
+            type: mayo.override.ChannelPruner
+            density: 0.1
+            # should_update: true
     conv1: {<<: *overrider}
