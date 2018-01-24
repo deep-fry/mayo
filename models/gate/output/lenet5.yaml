@@ -6,7 +6,7 @@ model:
             type: gated_convolution
             density: 0.5
             # online: true
-            online: false
+            online: true
             trainable: true
             should_gate: true
             feature_extraction: 'avg'

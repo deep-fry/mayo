@@ -68,6 +68,19 @@ class ResourceEstimator(object):
             for key, value in stats.items():
                 values = curr_stats.setdefault(key, [])
                 history = prop[key]['history']
+                if history == 'avg':
+                    sq_value = np.squeeze(value).astype(float)
+                    mean = curr_stats.setdefault(
+                        key + '_mean', np.zeros(sq_value.shape[1]))
+                    curr_sum = np.sum(sq_value, axis=0)
+                    num_elements = curr_stats.setdefault(
+                        key + '_num_elements', 0)
+                    curr_elements = sq_value.shape[0]
+                    curr_stats[key + '_mean'] = \
+                        (mean * num_elements + curr_sum) / \
+                        float(num_elements + curr_elements)
+                    curr_stats[key + '_num_elements'] += curr_elements
+                    history = 10
                 if history != 'infinite':
                     while len(values) >= history:
                         values.pop(0)
