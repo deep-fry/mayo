@@ -20,9 +20,5 @@ model.layers:
     fc6: {<<: *overrider}
     fc7: {<<: *overrider}
     logits:
-        weights_overrider: &quantizer
-            type: mayo.override.FixedPointQuantizer
-            width: 4
-            point: 1
-            should_update: true
+        weights_overrider: *quantizer
         biases_overrider: *quantizer
