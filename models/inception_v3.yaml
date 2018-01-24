@@ -60,7 +60,11 @@ model:
                 c1: {<<: *conv_same, kernel_size: 1, num_outputs: 64}
                 c2: {<<: *conv_same, kernel_size: 3, num_outputs: 96}
                 c3: {<<: *conv_same, kernel_size: 3, num_outputs: 96}
-                d1: {type: average_pool, kernel_size: 3, padding: same}
+                d1: &mixed_pool
+                    type: average_pool
+                    kernel_size: 3
+                    stride: 1
+                    padding: same
                 d2: {<<: *conv_same, kernel_size: 1, num_outputs: ^(d_depth)}
                 concat: &concat {type: concat, axis: 3}
             graph:
@@ -108,7 +112,7 @@ model:
                 c3: *c1x7
                 c4: *c7x1
                 c5: {<<: *c1x7, num_outputs: ^(final_depth)}
-                d1: {type: average_pool, kernel_size: 3, padding: same}
+                d1: *mixed_pool
                 d2: {<<: *conv_same, kernel_size: 1,
                      num_outputs: ^(final_depth)}
                 concat: *concat
@@ -159,7 +163,7 @@ model:
                 c3a: *m7b_a
                 c3b: *m7b_b
                 c4: *concat
-                d1: {type: average_pool, kernel_size: 3, padding: same}
+                d1: *mixed_pool
                 d2: {<<: *conv_same, kernel_size: 1, num_outputs: 192}
                 concat: *concat
             graph:
