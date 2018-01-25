@@ -2,20 +2,22 @@
 _import: ../../cifarnet.yaml
 _gate:
     # online: true
-    online: false
+    # online: false
+    policy: 'online'
     density: 0.6
     trainable: false
-    feature_extraction: 'avg'
+    pool: 'avg'
 model:
     description: |
         A variant of cifarnet that performs online gating.
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            online: $(_gate.online)
+            policy: $(_gate.policy)
             granularity: channel
             density: $(_gate.density)
             trainable: $(_gate.trainable)
+            pool: $(_gate.pool)
             should_gate: true
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
