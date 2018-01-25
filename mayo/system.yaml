@@ -21,7 +21,6 @@ system:
     summary:
         save: {interval: 0.1}
     plot:
-        format: eps
         features: true
         parameters: true
     search_path:
