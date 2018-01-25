@@ -194,8 +194,8 @@ def _regularized_gate(
         loss = tf.losses.mean_squared_error(
             subsampled, gate_output, weights=weight,
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-        gate = _descriminate_by_density(gate_output, density,
-                                        granularity, policy)
+        gate = _descriminate_by_density(
+            gate_output, density, granularity, policy)
     else:
         loss = weight * tf.nn.l2_loss(gate_output)
         if weight > 0:
