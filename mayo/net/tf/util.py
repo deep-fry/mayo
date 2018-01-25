@@ -104,10 +104,7 @@ class ParameterTransformer(object):
 
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
-            name = re.findall(r'/([A-Za-z0-9_]+)$', v.op.name)
-            if not name or len(name) > 1:
-                raise ValueError('Unable to get variable name.')
-            name = name.pop(0)
+            name = v.op.name
             overrider = None
             if name.endswith('biases'):
                 overrider = biases_overrider

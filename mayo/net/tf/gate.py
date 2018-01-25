@@ -198,8 +198,9 @@ def _regularized_gate(
                                         granularity, policy)
     else:
         loss = weight * tf.nn.l2_loss(gate_output)
-        tf.losses.add_loss(
-            loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+        if weight > 0:
+            tf.losses.add_loss(
+                loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         gate = _descriminate_by_density(
             gate_output, density, granularity, policy)
     constructor.session.estimator.register(loss, 'gate.loss', node)
