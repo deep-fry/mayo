@@ -104,7 +104,7 @@ class ChannelPruner(PrunerBase):
             self.gate_on = False
         else:
             self.gate_on = True
-        self.density= density
+        self.density = density
 
     def _apply(self, value):
         masked = super()._apply(value)
@@ -116,7 +116,7 @@ class ChannelPruner(PrunerBase):
                 'shape': channel_shape
             }
         }
-        return value * util.cast(self.mask, float) * self.scaling_factors
+        return value * util.cast(masked, float) * self.scaling_factors
 
     def _updated_mask(self, var, mask, session):
         mask, scaling_factors, density = session.run(
@@ -125,7 +125,7 @@ class ChannelPruner(PrunerBase):
         threshold = scaling_factors.sort()[chosen]
         # top_k, where k is the number of active channels
         # disable channels with smaller activations
-        return mask * (scaling_factors > threshold)
+        return mask * util.cast((scaling_factors > threshold), float)
 
     def _info(self, session):
         _, mask, density, count = super()._info(session)

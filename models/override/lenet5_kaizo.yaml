@@ -27,8 +27,9 @@ model.layers:
             point: 1
             should_update: true
         biases_overrider: *quantizer
-        activation_overrider: &shift
-            type: mayo.override.ChannelPruner
-            density: 0.1
+        activation_overrider: *quantizer
+        # activation_overrider: &shift
+        #     type: mayo.override.ChannelPruner
+        #     density: 0.1
             # should_update: true
     conv1: {<<: *overrider}
