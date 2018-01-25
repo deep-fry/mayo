@@ -109,15 +109,17 @@ class ParameterTransformer(object):
                 raise ValueError('Unable to get variable name.')
             name = name.pop(0)
             overrider = None
-            if name.endswith('/biases'):
+            if name.endswith('biases'):
                 overrider = biases_overrider
-            elif name.endswith('/weights'):
+            elif name.endswith('weights'):
                 overrider = weights_overrider
             if overrider:
                 log.debug('Overriding {!r} with {!r}'.format(name, overrider))
                 v = overrider.apply(name, getter, v)
                 self.overriders.append(overrider)
-            self.variables.setdefault(layer_node, {})[name] = v
+            node_name = layer_node.formatted_name()
+            var_name = name.replace('{}/'.format(node_name), '')
+            self.variables.setdefault(layer_node, {})[var_name] = v
             return v
 
         @contextlib.contextmanager

@@ -24,6 +24,8 @@ system:
             load: *cp_paths
         summary:
             - summaries/$(model.name)/$(dataset.name)/
+        plot:
+            - plots/$(model.name)/$(dataset.name)/
     checkpoint:
         load: latest
         save: {interval: 1, countdown: 3}

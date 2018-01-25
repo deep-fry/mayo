@@ -5,7 +5,6 @@ import tensorflow as tf
 from mayo.log import log
 from mayo.util import Percent, memoize_property, object_from_params
 from mayo.session.base import Session
-from mayo.plot import GraphPlot
 
 
 class Train(Session):
@@ -17,23 +16,6 @@ class Train(Session):
         self._setup_summaries()
         self._init()
         self._checkpoint_epoch = ''
-
-    def visualize(self):
-        params = self.config.visualize
-        image_cnt = params.pop('image_cnt', 0)
-        model_name = params.pop('model_name', None)
-        self.run(self.imgs_seen.initializer)
-        while self._iteration():
-            if image_cnt <= self.imgs_seen.eval():
-                layers = params.pop('layers', None)
-                plotter = GraphPlot(
-                    self.nets[0], self.trainable_variables(), model_name, layers)
-                fmaps = params.pop('fmaps', None)
-                weights = params.pop('weights', None)
-                plotter.plot(
-                    self, batch=image_cnt, weights_params=dict(weights),
-                    fmaps_params=dict(fmaps), **dict(params))
-                return
 
     @memoize_property
     def learning_rate(self):
