@@ -8,12 +8,12 @@ from mayo.log import log
 
 class Plot(object):
     def __init__(self, session, config):
+        super().__init__()
         import matplotlib
         matplotlib.use("Agg")
         from matplotlib import pyplot
-        super().__init__()
-        self.pyplot = pyplot
         pyplot.style.use('ggplot')
+        self.pyplot = pyplot
         self.session = session
         self.config = config
         self.net = session.nets[0]
