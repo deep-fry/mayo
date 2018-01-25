@@ -264,7 +264,6 @@ class Preprocess(object):
         dataset = tf.data.Dataset.from_tensor_slices(files)
         if self.mode == 'train':
             # shuffle .tfrecord files
-            __import__('ipdb').set_trace()
             dataset = dataset.shuffle(buffer_size=len(files))
         # tfrecord files to images
         dataset = dataset.flat_map(tf.data.TFRecordDataset)
