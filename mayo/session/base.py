@@ -332,6 +332,6 @@ class Session(object, metaclass=SessionMeta):
         from IPython import embed
         embed()
 
-    def visualize(self):
+    def plot(self):
         from mayo.plot import Plot
         Plot(self, self.config).plot()

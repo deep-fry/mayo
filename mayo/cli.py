@@ -185,8 +185,9 @@ Arguments:
         with open('timeline.json', 'w') as f:
             f.write(chrome_trace)
 
-    def cli_visualize(self):
-        return self._get_session('train').visualize()
+    def cli_plot(self):
+        """Plots activation maps as images and parameters as histograms."""
+        return self._get_session('validate').plot()
 
     def cli_train(self):
         """Performs training.  """

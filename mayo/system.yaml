@@ -15,6 +15,15 @@ system:
         level: info
         frame: false
         tensorflow: 2
+    checkpoint:
+        load: latest
+        save: {interval: 1, countdown: 3}
+    summary:
+        save: {interval: 0.1}
+    plot:
+        format: eps
+        features: true
+        parameters: true
     search_path:
         dataset:
             - datasets/
@@ -26,8 +35,3 @@ system:
             - summaries/$(model.name)/$(dataset.name)/
         plot:
             - plots/$(model.name)/$(dataset.name)/
-    checkpoint:
-        load: latest
-        save: {interval: 1, countdown: 3}
-    summary:
-        save: {interval: 0.1}
