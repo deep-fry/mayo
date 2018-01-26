@@ -152,7 +152,7 @@ class ChannelPruner(PrunerBase):
             [mask, scaling_factors])
         chosen = int(len(scaling_factors) * self.density)
         sorted_factors = sorted(scaling_factors)
-        threshold = sorted_factors[chosen]
+        threshold = sorted_factors[len(sorted_factors) - chosen - 1]
         # top_k, where k is the number of active channels
         # disable channels with smaller activation,
         (n, h, w, c) = mask.shape
