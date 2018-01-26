@@ -1,0 +1,7 @@
+---
+profile:
+    mode: 'validate'
+    gate: True
+    activations: True
+    weights: True
+    save_dir: './profile_stats/'
