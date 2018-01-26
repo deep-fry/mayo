@@ -95,43 +95,75 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
 
 class ChannelPruner(PrunerBase):
     # This pruner only works on activations
-    alpha = Parameter('density', 0.5, [], tf.float32)
-    # scaling_factors = Parameter('scaling_factors', None, None, tf.float32)
+    # density = Parameter('density', 1.0, [], tf.float32)
+    scaling_factors = Parameter(
+        'scaling_factors', None, None, tf.float32, trainable=True)
 
-    def __init__(self, density=None, should_update=True):
+    def __init__(self, density=None, should_update=True, weight=0.01):
         super().__init__(should_update)
         if density is None:
             self.gate_on = False
         else:
             self.gate_on = True
         self.density = density
+        self.weight = weight
 
     def _apply(self, value):
         masked = super()._apply(value)
         channel_shape = value.shape[3]
         self._parameter_config = {
             'scaling_factors': {
-                'trainable': True,
                 'initial': tf.ones_initializer(dtype=tf.float32),
                 'shape': channel_shape
             }
         }
-        return value * util.cast(masked, float) * self.scaling_factors
+        # add reg
+        if self._has_batch_norm(value):
+            gamma = self._pick_gamma(value)
+            if gamma is None:
+                raise ValueError(
+                    'No BatchNorm scaling factors found for {}'.format(
+                        value.name))
+            loss = self.weight * tf.reduce_mean(tf.abs(gamma))
+        else:
+            loss = self.weight * tf.reduce_mean(tf.abs(self.scaling_factors))
+        tf.losses.add_loss(
+            loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+        if self._has_batch_norm(value):
+            return masked
+        return masked * self.scaling_factors
+
+    def _pick_gamma(self, value):
+        layer = value.name.split('/')[2]
+        for variable in tf.trainable_variables():
+            if layer in variable.name and 'BatchNorm/gamma' in variable.name:
+                return variable
+        return None
+
+    def _has_batch_norm(self, value):
+        return 'BatchNorm' in value.name
 
     def _updated_mask(self, var, mask, session):
-        mask, scaling_factors, density = session.run(
-            mask, self.scaling_factors, self.density)
-        chosen = int(len(scaling_factors) * density)
-        threshold = scaling_factors.sort()[chosen]
+        if self._has_batch_norm(var):
+            scaling_factors = self._pick_gamma(var)
+        else:
+            scaling_factors = self.scaling_factors
+        mask, scaling_factors = session.run(
+            [mask, scaling_factors])
+        chosen = int(len(scaling_factors) * self.density)
+        sorted_factors = sorted(scaling_factors)
+        threshold = sorted_factors[chosen]
         # top_k, where k is the number of active channels
-        # disable channels with smaller activations
-        return mask * util.cast((scaling_factors > threshold), float)
+        # disable channels with smaller activation,
+        (n, h, w, c) = mask.shape
+        reshaped = mask.reshape((-1, c))
+        reshaped = reshaped * util.cast((scaling_factors > threshold), float)
+        return reshaped.reshape((n, h, w, c))
 
     def _info(self, session):
         _, mask, density, count = super()._info(session)
-        alpha = session.run(self.alpha)
         return self._info_tuple(
-            mask=mask, alpha=alpha, density=density, count_=count)
+            mask=mask, density=density, count_=count)
 
     @classmethod
     def finalize_info(cls, table):
