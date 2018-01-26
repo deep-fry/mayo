@@ -10,7 +10,8 @@ from docopt import docopt
 from mayo.log import log
 from mayo.config import Config
 from mayo.session import (
-    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain)
+    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain,
+    Profile_stats)
 
 _root = os.path.dirname(__file__)
 
@@ -156,6 +157,9 @@ Arguments:
         elif action == 'fast-validate':
             cls = FastEvaluate
             keys += self._validate_keys
+        elif action == 'profile-stats':
+            cls = Profile_stats
+            keys += self._validate_keys
         else:
             raise TypeError('Action {!r} not recognized.'.format(action))
         self._validate_config(keys, action)
@@ -164,7 +168,10 @@ Arguments:
             self.session = cls(self.config)
         return self.session
 
-    def cli_profile(self):
+    def cli_profile_stats(self):
+        return self._get_session('profile-stats').profile()
+
+    def cli_profile_timeline(self):
         """Performs training profiling to produce timeline.json.  """
         from tensorflow.python.client import timeline
         options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
