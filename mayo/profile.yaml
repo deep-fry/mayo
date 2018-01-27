@@ -1,7 +1,7 @@
 ---
 profile:
     mode: 'validate'
-    gate: True
+    gate: False
     activations: True
     history: 2000
     weights: True

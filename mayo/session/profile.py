@@ -68,17 +68,25 @@ class Profile_stats(EvaluateBase):
             pickle.dump(np_variables, f)
 
     def _profile_activations(self, directory, history=1000):
+        all_layers = {}
         for node, item in self.net.layers().items():
-            self.estimator.register(
-                item, 'activations', node, history=history)
+            all_layers[node.name] = item
+
+        self.estimator.register(
+            all_layers, 'activations', history=history)
+        # moving_mean = 0.99 *
+        # self.estimator.register(
+        #     item, 'actvations_mean', node, history=1
+        # )
 
     def _store_actiations(self, directory):
-        layers = {}
-        for node, item in self.net.layers().items():
-            layers[node.name] = self.estimator.get_history(
-                'activations', node)
+        # layers = {}
+        # for node, item in self.net.layers().items():
+        #     layers[node.name] = self.estimator.get_history(
+        #         'activations', node)
+        all_layers = self.estimator.get_history('activations')
         with open(directory + 'activations.pkl', 'wb') as f:
-            pickle.dump(layers, f)
+            pickle.dump(all_layers, f)
 
     def _store_gates(self, directory):
         # check whether gate density exisits
