@@ -9,21 +9,23 @@ model:
             type: gated_convolution
             density: 0.5
             trainable: $(_gate.trainable)
-            online: true
+            policy: 'online'
             weight: 0.0001
-        conv1_1: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv1_2: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv2_1: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv2_2: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv3_1: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv3_2: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv3_3: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv4_1: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv4_2: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv4_3: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv5_1: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv5_2: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv5_3: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        fc6: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        fc7: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
+            pool: 'avg'
+            should_update: false
+        conv1_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv1_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv2_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv2_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv3_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv3_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv3_3: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv4_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv4_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv4_3: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv5_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv5_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        conv5_3: {<<: *gated_conv, trainable: $(_gate.trainable)}
+        fc6: {trainable: $(_gate.trainable)}
+        fc7: {trainable: $(_gate.trainable)}
         fc8: {trainable: $(_gate.trainable)}
