@@ -48,8 +48,12 @@ class Train(Session):
         average_grads = []
         for grad_and_vars in zip(*tower_grads):
             grads = []
-            for g, _ in grad_and_vars:
+            for g, v in grad_and_vars:
                 # add 0 dimension to the gradients to represent the tower
+                if g is None:
+                    raise ValueError(
+                        'Gradient for variable {} is None, please check '
+                        'connection.'.format(v))
                 g = tf.expand_dims(g, 0)
                 grads.append(g)
             # average over the 'tower' dimension.
