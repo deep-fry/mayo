@@ -101,10 +101,6 @@ class ChannelPruner(PrunerBase):
 
     def __init__(self, density=None, should_update=True, weight=0.01):
         super().__init__(should_update)
-        if density is None:
-            self.gate_on = False
-        else:
-            self.gate_on = True
         self.density = density
         self.weight = weight
 
@@ -124,9 +120,9 @@ class ChannelPruner(PrunerBase):
                 raise ValueError(
                     'No BatchNorm scaling factors found for {}'.format(
                         value.name))
-            loss = self.weight * tf.reduce_mean(tf.abs(gamma))
+            loss = self.weight * tf.reduce_sum(tf.abs(gamma))
         else:
-            loss = self.weight * tf.reduce_mean(tf.abs(self.scaling_factors))
+            loss = self.weight * tf.reduce_sum(tf.abs(self.scaling_factors))
         tf.losses.add_loss(
             loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         if self._has_batch_norm(value):
