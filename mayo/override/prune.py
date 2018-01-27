@@ -1,3 +1,5 @@
+import math
+
 import tensorflow as tf
 
 from mayo.util import Percent
@@ -99,10 +101,23 @@ class ChannelPruner(PrunerBase):
     scaling_factors = Parameter(
         'scaling_factors', None, None, tf.float32, trainable=True)
 
-    def __init__(self, density=None, should_update=True, weight=0.01):
+    def __init__(self, density=None, weight=0.01, should_update=True):
         super().__init__(should_update)
         self.density = density
         self.weight = weight
+
+    def _has_batch_norm(self, value):
+        # FIXME a hack to determine this layer has batch norm
+        return 'BatchNorm' in value.name
+
+    def scale(self, value):
+        if not self._has_batch_norm(value):
+            return self.scaling_factors
+        layer = value.name.split('/')[2]
+        for variable in tf.trainable_variables():
+            if layer in variable.name and 'BatchNorm/gamma' in variable.name:
+                return variable
+        raise ValueError('Unable to find gamma from BatchNorm')
 
     def _apply(self, value):
         masked = super()._apply(value)
@@ -110,50 +125,28 @@ class ChannelPruner(PrunerBase):
         self._parameter_config = {
             'scaling_factors': {
                 'initial': tf.ones_initializer(dtype=tf.float32),
-                'shape': channel_shape
+                'shape': channel_shape,
             }
         }
         # add reg
-        if self._has_batch_norm(value):
-            gamma = self._pick_gamma(value)
-            if gamma is None:
-                raise ValueError(
-                    'No BatchNorm scaling factors found for {}'.format(
-                        value.name))
-            loss = self.weight * tf.reduce_sum(tf.abs(gamma))
-        else:
-            loss = self.weight * tf.reduce_sum(tf.abs(self.scaling_factors))
+        scale = self.scale(value)
         tf.losses.add_loss(
-            loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+            self.weight * tf.reduce_sum(tf.abs(scale)),
+            loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         if self._has_batch_norm(value):
             return masked
-        return masked * self.scaling_factors
-
-    def _pick_gamma(self, value):
-        layer = value.name.split('/')[2]
-        for variable in tf.trainable_variables():
-            if layer in variable.name and 'BatchNorm/gamma' in variable.name:
-                return variable
-        return None
-
-    def _has_batch_norm(self, value):
-        return 'BatchNorm' in value.name
+        return masked * scale
 
     def _updated_mask(self, var, mask, session):
-        if self._has_batch_norm(var):
-            scaling_factors = self._pick_gamma(var)
-        else:
-            scaling_factors = self.scaling_factors
-        mask, scaling_factors = session.run(
-            [mask, scaling_factors])
-        chosen = int(len(scaling_factors) * self.density)
-        sorted_factors = sorted(scaling_factors)
-        threshold = sorted_factors[len(sorted_factors) - chosen - 1]
+        scale = self.scale(var)
+        mask, scale = session.run([mask, scale])
+        num_active = math.ceil(len(scale) * self.density)
+        threshold = sorted(scale)[-num_active]
         # top_k, where k is the number of active channels
         # disable channels with smaller activation,
         (n, h, w, c) = mask.shape
         reshaped = mask.reshape((-1, c))
-        reshaped = reshaped * util.cast((scaling_factors > threshold), float)
+        reshaped = reshaped * util.cast((scale > threshold), float)
         return reshaped.reshape((n, h, w, c))
 
     def _info(self, session):
