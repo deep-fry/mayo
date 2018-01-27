@@ -12,7 +12,7 @@ model:
             policy: 'online'
             weight: 0.0001
             pool: 'avg'
-            should_update: false
+            should_gate: false
         conv1_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
         conv1_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
         conv2_1: {<<: *gated_conv, trainable: $(_gate.trainable)}

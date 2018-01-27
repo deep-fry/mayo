@@ -31,7 +31,8 @@ class Profile_stats(EvaluateBase):
             os.makedirs(save_dir)
 
         if self.profile_config.get('activations', False):
-            self._profile_activations(save_dir)
+            history = self.profile_config.get('hisotry', 1000)
+            self._profile_activations(save_dir, history)
         try:
             for step in range(num_iterations):
                 self.run([], batch=True)
@@ -66,10 +67,10 @@ class Profile_stats(EvaluateBase):
         with open(directory + 'variables.pkl', 'wb') as f:
             pickle.dump(np_variables, f)
 
-    def _profile_activations(self, directory):
+    def _profile_activations(self, directory, history=1000):
         for node, item in self.net.layers().items():
             self.estimator.register(
-                item, 'activations', node, history='infinite')
+                item, 'activations', node, history=history)
 
     def _store_actiations(self, directory):
         layers = {}
