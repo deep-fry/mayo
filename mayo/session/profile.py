@@ -1,5 +1,6 @@
 import os
 import pickle
+import tensorflow as tf
 
 from mayo.log import log
 from mayo.session.train import Train
@@ -29,14 +30,15 @@ class Profile(Train):
     def _register_activations(self):
         history = self.config.dataset.num_examples_per_epoch.get(self.mode)
         for node, tensor in self.net.layers().items():
-            # [Xitong to Aaron]
-            # FIXME this consumes a huge amount of memory, please consider
-            # using the correct statistics for your use case.
-            # I would suggest registering the statistics required in profiling
-            # mode in the corresponding activation overriders,
-            # if isinstance(session, Profile).
+            # FIXME
+            # store max values only for now
+            # self.estimator.register(
+            #     tensor, 'activation', node=node, history=history)
+            # store the topk
+            values, indices = tf.nn.top_k(tf.abs(tensor), k=10)
+            # tensor = tf.cast(tensor, tf.float32)
             self.estimator.register(
-                tensor, 'activation', node=node, history=history)
+                values, 'activation', node=node, history=history)
 
     def info(self):
         pass
