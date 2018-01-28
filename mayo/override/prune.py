@@ -148,16 +148,16 @@ class ChannelPruner(PrunerBase):
         reshaped = mask.reshape((-1, c))
         reshaped = reshaped * util.cast((scale > threshold), float)
         return reshaped.reshape((n, h, w, c))
-
-    def _info(self, session):
-        _, mask, density, count = super()._info(session)
-        return self._info_tuple(
-            mask=mask, density=density, count_=count)
-
-    @classmethod
-    def finalize_info(cls, table):
-        footer = super().finalize_info(table)
-        table.set_footer([None] + footer)
+    #
+    # def _info(self, session):
+    #     _, mask, density, count = super()._info(session)
+    #     return self._info_tuple(
+    #         mask=mask, density=density, count_=count)
+    #
+    # @classmethod
+    # def finalize_info(cls, table):
+    #     footer = super().finalize_info(table)
+    #     table.set_footer([None] + footer)
 
 
 class FilterPruner(PrunerBase):

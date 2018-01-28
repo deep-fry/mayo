@@ -85,5 +85,14 @@ class Layers(TFNetBase):
         func = getattr(tf.nn, mode)
         return func(tensors, name=params['scope'])
 
+    def instantiate_normalize(self, node, tensors, params):
+        if len(tensors.shape) != 4:
+            raise ValueError('Input tensor has incorrect shape')
+        N, h, w, c = tensors.shape
+        epsilon = params.get('epsilon', 0.0001)
+        batch_mean, batch_var = tf.nn.moments(tensors, axes=3, keep_dims=True)
+        normed = (tensors - batch_mean) / tf.sqrt(batch_var + epsilon)
+        return normed
+
     def instantiate_identity(self, node, tensors, params):
         return tensors
