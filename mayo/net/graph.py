@@ -53,6 +53,13 @@ class NodeBase(object):
         self.module = tuple(module)
         self.graph = weakref.ref(graph)
 
+    def __getstate__(self):
+        return {
+            'name': self.name,
+            'module': self.module,
+            'graph': None,
+        }
+
     @property
     def predecessors(self):
         return list(self.graph().nx_graph.predecessors(self))

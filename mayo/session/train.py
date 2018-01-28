@@ -12,6 +12,7 @@ class Train(Session):
 
     def __init__(self, config):
         super().__init__(config)
+        self._run_train_ops = True
         self._setup_train_operation()
         self._setup_summaries()
         self._init()
@@ -131,7 +132,8 @@ class Train(Session):
         self.change.reset('step')
 
     def once(self):
-        tasks = [self._train_op, self.loss, self.num_epochs]
+        train_op = self._train_op if self._run_train_ops else []
+        tasks = [train_op, self.loss, self.num_epochs]
         noop, loss, num_epochs = self.run(tasks, batch=True)
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')

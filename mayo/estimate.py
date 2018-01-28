@@ -17,6 +17,12 @@ class ResourceEstimator(object):
         self.properties = {}
         self.formatters = []
 
+    def __getstate__(self):
+        return {
+            'statistics': self.statistics,
+            'properties': self.properties,
+        }
+
     def register(self, tensor, name, node=None, history=None, formatter=None):
         """
         Register statistic tensors to be run by session.

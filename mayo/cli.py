@@ -10,8 +10,7 @@ from docopt import docopt
 from mayo.log import log
 from mayo.config import Config
 from mayo.session import (
-    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain,
-    Profile_stats)
+    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain, Profile)
 
 _root = os.path.dirname(__file__)
 
@@ -131,6 +130,23 @@ Arguments:
         'train.optimizer',
     ]
 
+    _session_map = {
+        'train': Train,
+        'profile': Profile,
+        'retrain-layer': LayerwiseRetrain,
+        'retrain-global': GlobalRetrain,
+        'validate': Evaluate,
+        'fast-validate': FastEvaluate,
+    }
+    _keys_map = {
+        'train': _train_keys,
+        'profile': _train_keys,
+        'retrain-layer': _train_keys,
+        'retrain-global': _train_keys,
+        'validate': _validate_keys,
+        'fast-validate': _validate_keys,
+    }
+
     def _get_session(self, action=None):
         if not action:
             if self.session:
@@ -142,25 +158,11 @@ Arguments:
                 self.session = self._get_session('validate')
             return self.session
         keys = self._model_keys + self._dataset_keys
-        if action == 'train':
-            cls = Train
-            keys += self._train_keys
-        elif action == 'retrain-layer':
-            cls = LayerwiseRetrain
-            keys += self._train_keys
-        elif action == 'retrain-global':
-            cls = GlobalRetrain
-            keys += self._train_keys
-        elif action == 'validate':
-            cls = Evaluate
-            keys += self._validate_keys
-        elif action == 'fast-validate':
-            cls = FastEvaluate
-            keys += self._validate_keys
-        elif action == 'profile-stats':
-            cls = Profile_stats
-            keys += self._validate_keys
-        else:
+
+        try:
+            cls = self._session_map[action]
+            keys += self._keys_map[action]
+        except KeyError:
             raise TypeError('Action {!r} not recognized.'.format(action))
         self._validate_config(keys, action)
         if not isinstance(self.session, cls):
@@ -168,11 +170,13 @@ Arguments:
             self.session = cls(self.config)
         return self.session
 
-    def cli_profile_stats(self):
-        return self._get_session('profile-stats').profile()
+    def cli_profile(self):
+        """Performs training profiling for run-time statistics.  """
+        return self._get_session('profile').profile()
 
     def cli_profile_timeline(self):
         """Performs training profiling to produce timeline.json.  """
+        # TODO integrate this into Profile.
         from tensorflow.python.client import timeline
         options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
         run_metadata = tf.RunMetadata()
