@@ -194,18 +194,14 @@ def _regularized_gate(
         loss = tf.losses.mean_squared_error(
             subsampled, gate_output, weights=weight,
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-        gate = _descriminate_by_density(
-            gate_output, density, granularity, policy)
     else:
         loss = weight * tf.nn.l2_loss(gate_output)
         if weight > 0:
             tf.losses.add_loss(
                 loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-        gate = _descriminate_by_density(
-            gate_output, density, granularity, policy)
+    gate = _descriminate_by_density(
+        gate_output, density, granularity, policy)
     constructor.session.estimator.register(loss, 'gate.loss', node)
-    if policy == 'online':
-        gate = tf.stop_gradient(gate)
     return tf.cast(gate, tf.float32)
 
 
@@ -268,5 +264,7 @@ class GateLayers(object):
         self._register_gate_formatters()
         if not should_gate:
             return output
+        if policy == 'online':
+            gate = tf.stop_gradient(tf.cast(gate, tf.float32))
         # actual gating
         return output * gate
