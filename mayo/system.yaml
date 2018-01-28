@@ -23,6 +23,9 @@ system:
     plot:
         features: true
         parameters: true
+    profile:
+        activations: true
+        weights: true
     search_path:
         dataset:
             - datasets/
@@ -34,3 +37,5 @@ system:
             - summaries/$(model.name)/$(dataset.name)/
         plot:
             - plots/$(model.name)/$(dataset.name)/
+        profile:
+            - profiles/$(model.name)/$(dataset.name)/
