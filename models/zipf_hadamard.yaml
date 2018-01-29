@@ -1,0 +1,57 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 32
+            width: 32
+            channels: 3
+        validate:
+            - {type: crop_or_pad}
+        final_cpu:
+            - {type: standardize_image}
+model:
+    name: zipf_hadamard
+    description: Zipf-Hadamard CifarNet
+    layers:
+        _conv: &conv
+            type: zipf_hadamard_convolution
+            padding: same
+            kernel_size: 3
+            weights_initializer:
+                type: tensorflow.variance_scaling_initializer
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0001
+            normalizer_fn:
+                type: tensorflow.contrib.slim.batch_norm
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
+        conv0: {<<: *conv, type: convolution, num_outputs: 64, padding: valid}
+        conv1: {<<: *conv, num_outputs: 64}
+        conv2: {<<: *conv, num_outputs: 128, stride: 2}
+        conv3: {<<: *conv, num_outputs: 128}
+        dropout3: {type: dropout, keep_prob: 0.5}
+        conv4: {<<: *conv, num_outputs: 128}
+        conv5: {<<: *conv, num_outputs: 256, stride: 2}
+        conv6: {<<: *conv, num_outputs: 256}
+        dropout6: {type: dropout, keep_prob: 0.5}
+        conv7: {<<: *conv, num_outputs: 256}
+        pool7: {type: average_pool, kernel_size: 8}
+        logits:
+            <<: *conv
+            type: convolution
+            kernel_size: 1
+            num_outputs: num_classes
+            activation_fn: null
+            normalizer_fn: null
+        squeeze: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: input
+        with: [
+            conv0, conv1, conv2, conv3, dropout3,
+            conv4, conv5, conv6, dropout6,
+            conv7, pool7, logits, squeeze]
+        to: output
