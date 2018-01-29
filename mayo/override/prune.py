@@ -55,8 +55,9 @@ class MeanStdPruner(PrunerBase):
 
     def _threshold(self, tensor):
         # axes = list(range(len(tensor.get_shape()) - 1))
-        axes = list(range(len(tensor.get_shape())))
-        mean, var = tf.nn.moments(util.abs(tensor), axes=axes)
+        tensor_shape = util.get_shape(tensor)
+        axes = list(range(len(tensor_shape)))
+        mean, var = util.moments(util.abs(tensor), axes)
         return mean + self.alpha * util.sqrt(var)
 
     def _updated_mask(self, var, mask, session):
@@ -88,10 +89,12 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         self.off_factor = off_factor
 
     def _updated_mask(self, var, mask, session):
+        var = session.run(var)
         threshold = self._threshold(var)
         on_mask = util.abs(var) > self.on_factor * threshold
         mask = util.logical_or(mask, on_mask)
         off_mask = util.abs(var) > self.off_factor * threshold
+        # import pdb; pdb.set_trace()
         return util.logical_and(mask, off_mask)
 
 

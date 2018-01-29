@@ -190,3 +190,17 @@ def top_k(tensor, k):
         topk = tf.nn.top_k(tensor, k)
         return tf.reduce_min(cast(topk.values, float))
     return sorted(value)[k]
+
+
+def moments(tensor, axes):
+    if is_tensor(tensor):
+        return tf.nn.moments(util.abs(tensor), axes=axes)
+    mean = np.mean(tensor, axis=tuple(axes))
+    var = np.var(tensor, axis=tuple(axes))
+    return (mean, var)
+
+
+def get_shape(tensor):
+    if is_tensor(tensor):
+        return tensor.get_shape()
+    return tensor.shape
