@@ -5,9 +5,11 @@ model:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: 0.5
-            policy: 'not-online'
+            policy: 'bn_online'
             trainable: true
             should_gate: true
+            stop_grad: true
             pool: 'avg'
+            weight: 0.000001
         conv0: {<<: *gated_conv, trainable: false}
         conv1: {<<: *gated_conv, trainable: false}

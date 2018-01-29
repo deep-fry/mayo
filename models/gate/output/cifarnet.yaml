@@ -3,9 +3,10 @@ _import: ../../cifarnet.yaml
 _gate:
     # online: true
     # online: false
-    policy: 'not-online'
+    policy: 'bn_online'
     density: 1.0
     trainable: false
+    stop_grad: true
     pool: 'avg'
 model:
     description: |
