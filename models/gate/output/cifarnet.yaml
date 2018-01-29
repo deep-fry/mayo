@@ -3,8 +3,8 @@ _import: ../../cifarnet.yaml
 _gate:
     # online: true
     # online: false
-    policy: 'online'
-    density: 0.6
+    policy: 'not-online'
+    density: 1.0
     trainable: false
     pool: 'avg'
 model:
@@ -19,6 +19,7 @@ model:
             trainable: $(_gate.trainable)
             pool: $(_gate.pool)
             should_gate: true
+            weight: 0.000001
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}

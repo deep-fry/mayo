@@ -68,7 +68,7 @@ def _subsample(
 
 def _gate_network(
         constructor, tensor, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn,
+        kernel_size, stride, padding, num_outputs, activation_fn, is_training,
         scope):
     subsampled = _subsample(
         constructor, tensor, granularity, pool, policy, scope)
@@ -103,7 +103,7 @@ def _gate_network(
         'stride': stride,
         'padding': padding,
         'num_outputs': num_outputs,
-        'biases_initializer': tf.constant_initializer(0.0),
+        'biases_initializer': tf.constant_initializer(1.0),
         'weights_initializer': tf.truncated_normal_initializer(stddev=0.01),
         'activation_fn': conv_activation_fn,
         'scope': scope,
@@ -111,6 +111,7 @@ def _gate_network(
     padded = constructor.instantiate_numeric_padding(None, subsampled, params)
     conved = constructor.instantiate_convolution(None, padded, params)
     return conved
+    # if policy == 'online':
     # params = {
     #     'scale': False,
     #     'center': True,
@@ -170,7 +171,7 @@ def _descriminate_by_density(tensor, density, granularity, policy):
 def _regularized_gate(
         constructor, node, conv_input, conv_output,
         kernel_size, stride, padding, density, granularity, pool,
-        activation_fn, policy, weight, scope):
+        activation_fn, policy, weight, is_training, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -198,7 +199,7 @@ def _regularized_gate(
     gate_scope = '{}/gate'.format(scope)
     gate_output = _gate_network(
         constructor, conv_input, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn,
+        kernel_size, stride, padding, num_outputs, activation_fn, is_training,
         gate_scope)
     if policy == 'online':
         # output subsample
@@ -214,9 +215,8 @@ def _regularized_gate(
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
     else:
         loss = weight * tf.nn.l2_loss(gate_output)
-        if weight > 0:
-            tf.losses.add_loss(
-                loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+        tf.losses.add_loss(
+            loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
     gate = _descriminate_by_density(
         gate_output, density, granularity, policy)
     constructor.session.estimator.register(loss, 'gate.loss', node)
@@ -269,17 +269,20 @@ class GateLayers(object):
         kernel_size = params['kernel_size']
         stride = params.get('stride', 1)
         padding = params.get('padding', 'SAME')
-        activation_fn = params.pop('activation_fn', tf.nn.sigmoid)
-        normalizer_fn = params.pop('normalizer_fn', None)
-        if normalizer_fn is not None:
-            log.debug('Orignal batchnorm {} is disabled'.format(normalizer_fn))
+        if policy != 'online':
+            activation_fn = params.pop('activation_fn', tf.nn.relu)
+            params['activation_fn'] = None
+            normalizer_fn = params.pop('normalizer_fn', None)
+            if normalizer_fn is not None:
+                log.debug(
+                    'Orignal batchnorm {} is disabled'.format(normalizer_fn))
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
         gate = _regularized_gate(
             self, node, tensor, output, kernel_size, stride, padding,
             density, granularity, pool, activation_fn, policy, weight,
-            params['scope'])
+            self.is_training, params['scope'])
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters()
@@ -287,15 +290,18 @@ class GateLayers(object):
             return output
         if policy == 'online':
             gate = tf.stop_gradient(tf.cast(gate, tf.float32))
+            return output * gate
         else:
             params = {
                 'scale': False,
                 'center': True,
-                'activation_fn': activation_fn,
+                'activation_fn': None,
                 'scope': params['scope'],
                 'is_training': self.is_training
             }
             output = self.instantiate_batch_normalization(
                 None, output, params)
-        # actual gating
-        return output * gate
+            # actual gating
+            if activation_fn is not None:
+                return activation_fn(output * gate)
+            return output * gate
