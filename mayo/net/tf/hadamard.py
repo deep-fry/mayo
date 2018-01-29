@@ -1,9 +1,20 @@
 import math
 
+import numpy as np
 import tensorflow as tf
 
 
 class HadamardLayers(object):
+    @staticmethod
+    def _is_power_of_two(num):
+        return 2 ** int(math.log(num, 2)) == num
+
+    def instantiate_zipf(self, node, tensor, params):
+        channels = int(tensor.shape[-1])
+        scales = np.array([1 / (n + 1) for n in range(channels)])
+        scales = scales / np.sum(scales)
+        return tensor * np.reshape(scales, [1, 1, 1, channels])
+
     def instantiate_hadamard(self, node, tensor, params):
         def fwht(value):
             if value.shape[-1] == 1:
@@ -17,16 +28,14 @@ class HadamardLayers(object):
             raise ValueError(
                 'Number of channels must be a power of 2 for hadamard layer.')
         # scale channels
-        scale = 1.0 / math.sqrt(channels)
         if params.get('variable_scales', False):
             # ensures correct broadcasting behaviour
             shape = (1, 1, 1, channels)
+            scale = 1.0 / math.sqrt(channels)
             init = tf.truncated_normal_initializer(mean=scale, stddev=0.001)
             channel_scales = tf.get_variable(
                 name='channel_scale', shape=shape, initializer=init)
             tensor *= channel_scales
-        else:
-            tensor *= scale
         # hadamard transform
         tensor = fwht(tensor)
         # activation
@@ -34,3 +43,27 @@ class HadamardLayers(object):
         if activation_function is not None:
             tensor = activation_function(tensor)
         return tensor
+
+    def instantiate_zipf_hadamard_convolution(self, node, tensor, params):
+        channels = int(tensor.shape[-1])
+        out_channels = params.pop('num_outputs', channels)
+        activation_fn = params.pop('activation_fn', tf.nn.relu)
+        params['activation_fn'] = None
+        if not self._is_power_of_two(channels):
+            raise ValueError('Number of input channels must be 2^n.')
+        if not self._is_power_of_two(out_channels):
+            raise ValueError('Number of output channels must be 2^n.')
+        if out_channels == channels:
+            conv = self.instantiate_depthwise_convolution(node, tensor, params)
+        elif out_channels > channels:
+            conv_params = {
+                'num_groups': channels,
+                'num_outputs': out_channels / channels,
+            }
+            params.update(conv_params)
+            conv = self.instantiate_convolution(node, tensor, params)
+        zipf = self.instantiate_zipf(node, conv, None)
+        hadamard_params = {
+            'activation_fn': activation_fn,
+        }
+        return self.instantiate_hadamard(node, zipf, hadamard_params)

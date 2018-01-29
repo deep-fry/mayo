@@ -9,7 +9,29 @@ class Layers(TFNetBase):
     """ Create a TensorFlow graph from "config.model" model definition.  """
 
     def instantiate_convolution(self, node, tensor, params):
-        return slim.conv2d(tensor, **params)
+        groups = params.pop('num_groups', 1)
+        if groups == 1:
+            return slim.conv2d(tensor, **params)
+        channels = int(tensor.shape[-1])
+        if channels % groups:
+            raise ValueError(
+                'Number of input channels must be divisible by '
+                'the number of groups.')
+        normalizer_fn = params.pop('normalizer_fn', None)
+        activation_fn = params.pop('activation_fn', tf.nn.relu)
+        params['activation_fn'] = None
+        output_slices = []
+        input_slices = tf.split(tensor, groups, axis=-1)
+        scope = params.pop('scope')
+        for i, each in enumerate(input_slices):
+            each = slim.conv2d(each, **params, scope='{}_{}'.format(scope, i))
+            output_slices.append(each)
+        output = tf.concat(output_slices, axis=-1)
+        if normalizer_fn:
+            output = normalizer_fn(output, scope=scope)
+        if activation_fn:
+            output = activation_fn(output)
+        return output
 
     def instantiate_depthwise_convolution(self, node, tensor, params):
         multiplier = params.pop('depth_multiplier', 1)
@@ -84,15 +106,6 @@ class Layers(TFNetBase):
                 .format(self, mode))
         func = getattr(tf.nn, mode)
         return func(tensors, name=params['scope'])
-
-    def instantiate_normalize(self, node, tensors, params):
-        if len(tensors.shape) != 4:
-            raise ValueError('Input tensor has incorrect shape')
-        N, h, w, c = tensors.shape
-        epsilon = params.get('epsilon', 0.0001)
-        batch_mean, batch_var = tf.nn.moments(tensors, axes=3, keep_dims=True)
-        normed = (tensors - batch_mean) / tf.sqrt(batch_var + epsilon)
-        return normed
 
     def instantiate_identity(self, node, tensors, params):
         return tensors
