@@ -61,6 +61,7 @@ class HadamardLayers(object):
         channels = int(tensor.shape[-1])
         out_channels = params.pop('num_outputs', channels)
         activation_fn = params.pop('activation_fn', tf.nn.relu)
+        block = params.pop('block', False)
         params['activation_fn'] = None
         if not self._is_power_of_two(channels):
             raise ValueError('Number of input channels must be 2^n.')
@@ -77,6 +78,7 @@ class HadamardLayers(object):
             conv = self.instantiate_convolution(node, tensor, params)
         zipf = self.instantiate_zipf(node, conv, None)
         hadamard_params = {
+            'block': block,
             'activation_fn': activation_fn,
         }
         return self.instantiate_hadamard(node, zipf, hadamard_params)

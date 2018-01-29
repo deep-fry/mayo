@@ -15,7 +15,7 @@ model:
     description: Zipf-Hadamard CifarNet
     layers:
         _conv: &conv
-            type: zipf_hadamard_convolution
+            type: convolution
             padding: same
             kernel_size: 3
             weights_initializer:
@@ -29,16 +29,18 @@ model:
                 scale: true
                 decay: 0.9997
                 epsilon: 0.001
-        conv0: {<<: *conv, type: convolution, num_outputs: 64, padding: valid}
-        conv1: {<<: *conv, num_outputs: 64}
-        conv2: {<<: *conv, num_outputs: 128, stride: 2}
-        conv3: {<<: *conv, num_outputs: 128}
-        dropout3: {type: dropout, keep_prob: 0.5}
-        conv4: {<<: *conv, num_outputs: 128}
-        conv5: {<<: *conv, num_outputs: 256, stride: 2}
-        conv6: {<<: *conv, num_outputs: 256}
-        dropout6: {type: dropout, keep_prob: 0.5}
-        conv7: {<<: *conv, num_outputs: 256}
+        _zh: &zh
+            <<: *conv
+            type: zipf_hadamard_convolution
+            block: true
+        conv0: {<<: *conv, num_outputs: 64, padding: valid}
+        conv1: {<<: *zh, num_outputs: 64}
+        conv2: {<<: *zh, num_outputs: 128, stride: 2}
+        conv3: {<<: *zh, num_outputs: 128}
+        conv4: {<<: *zh, num_outputs: 128}
+        conv5: {<<: *zh, num_outputs: 256, stride: 2}
+        conv6: {<<: *zh, num_outputs: 256}
+        conv7: {<<: *zh, num_outputs: 256}
         pool7: {type: average_pool, kernel_size: 8}
         logits:
             <<: *conv
@@ -51,7 +53,6 @@ model:
     graph:
         from: input
         with: [
-            conv0, conv1, conv2, conv3, dropout3,
-            conv4, conv5, conv6, dropout6,
+            conv0, conv1, conv2, conv3, conv4, conv5, conv6,
             conv7, pool7, logits, squeeze]
         to: output
