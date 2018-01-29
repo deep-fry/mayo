@@ -11,7 +11,10 @@ model:
                         type: mayo.override.DynamicNetworkSurgeryPruner
                         alpha: ^(alpha)
                 conv2: {<<: *conv_prune}
-        conv1: {<<: *conv_prune}
+        conv1:
+            weights_overrider:
+                type: mayo.override.DynamicNetworkSurgeryPruner
+                alpha: 0.0
         b11: {<<: *bb}
         b12: {<<: *bb}
         b21: {<<: *bb}
