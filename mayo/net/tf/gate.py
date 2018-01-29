@@ -67,7 +67,8 @@ def _subsample(
 
 def _gate_network(
         constructor, tensor, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn, scope):
+        kernel_size, stride, padding, num_outputs, activation_fn, is_training,
+        scope):
     subsampled = _subsample(
         constructor, tensor, granularity, pool, policy, scope)
     if granularity == 'channel':
@@ -92,6 +93,10 @@ def _gate_network(
     else:
         raise GateGranularityTypeError(
             'Unrecognized granularity {!r}.'.format(granularity))
+    if policy != 'online':
+        conv_activation_fn = None
+    else:
+        conv_activation_fn = activation_fn
     params = {
         'kernel_size': kernel,
         'stride': stride,
@@ -99,11 +104,23 @@ def _gate_network(
         'num_outputs': num_outputs,
         'biases_initializer': tf.constant_initializer(0.0),
         'weights_initializer': tf.truncated_normal_initializer(stddev=0.01),
-        'activation_fn': activation_fn,
+        'activation_fn': conv_activation_fn,
         'scope': scope,
     }
     padded = constructor.instantiate_numeric_padding(None, subsampled, params)
-    return constructor.instantiate_convolution(None, padded, params)
+    conved = constructor.instantiate_convolution(None, padded, params)
+    if policy == 'online':
+        return conved
+    params = {
+        'scale': False,
+        'center': True,
+        'activation_fn': activation_fn,
+        'scope': scope,
+        'is_training': is_training
+    }
+    normalized = constructor.instantiate_batch_normalization(
+        None, conved, params)
+    return normalized
 
 
 def _descriminate_by_density(tensor, density, granularity, policy):
@@ -153,7 +170,7 @@ def _descriminate_by_density(tensor, density, granularity, policy):
 def _regularized_gate(
         constructor, node, conv_input, conv_output,
         kernel_size, stride, padding, density, granularity, pool,
-        activation_fn, policy, weight, scope):
+        activation_fn, policy, weight, is_training, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -181,7 +198,8 @@ def _regularized_gate(
     gate_scope = '{}/gate'.format(scope)
     gate_output = _gate_network(
         constructor, conv_input, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn, gate_scope)
+        kernel_size, stride, padding, num_outputs, activation_fn,
+        is_training, gate_scope)
     if policy == 'online':
         # output subsample
         subsample_scope = '{}/subsample'.format(scope)
@@ -258,7 +276,7 @@ class GateLayers(object):
         gate = _regularized_gate(
             self, node, tensor, output, kernel_size, stride, padding,
             density, granularity, pool, activation_fn, policy, weight,
-            params['scope'])
+            self.is_training, params['scope'])
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters()

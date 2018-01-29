@@ -42,5 +42,5 @@ model:
         logits: {<<: *fc, activation_fn: null, num_outputs: num_classes}
     graph:
         from: input
-        with: [conv0, norm0, pool0, conv1, pool1, flatten, dropout, fc1, logits]
+        with: [conv0, pool0, conv1, pool1, flatten, dropout, fc1, logits]
         to: output
