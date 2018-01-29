@@ -276,6 +276,7 @@ class GateLayers(object):
             if normalizer_fn is not None:
                 log.debug(
                     'Orignal batchnorm {} is disabled'.format(normalizer_fn))
+            params['biases_initializer'] = None
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
         # predictor policy
@@ -296,7 +297,7 @@ class GateLayers(object):
                 'scale': False,
                 'center': True,
                 'activation_fn': None,
-                'scope': params['scope'],
+                'scope': params['scope'] + '/BatchNorm',
                 'is_training': self.is_training
             }
             output = self.instantiate_batch_normalization(
