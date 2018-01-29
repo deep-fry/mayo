@@ -35,8 +35,9 @@ class Profile(Train):
             # self.estimator.register(
             #     tensor, 'activation', node=node, history=history)
             # store the topk
-            values, indices = tf.nn.top_k(tf.abs(tensor), k=10)
+            # values, indices = tf.nn.top_k(tf.abs(tensor), k=10)
             # tensor = tf.cast(tensor, tf.float32)
+            values = tf.reduce_max(tf.abs(tensor))
             self.estimator.register(
                 values, 'activation', node=node, history=history)
 
