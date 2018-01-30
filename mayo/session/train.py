@@ -173,7 +173,7 @@ class Train(Session):
             self._checkpoint_epoch = floor_epoch
         if system.max_epochs and floor_epoch >= system.max_epochs:
             log.info('Maximum epoch count reached.')
-            if self._checkpoint_epoch and floor_epoch > self._checkpoing_epoch:
+            if self._checkpoint_epoch and floor_epoch > self._checkpoint_epoch:
                 log.info('Saving final checkpoint...')
                 self.save_checkpoint(floor_epoch)
             return False
