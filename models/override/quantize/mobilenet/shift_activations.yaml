@@ -1,0 +1,37 @@
+model:
+    name: mobilenet_v1
+    layers:
+        _dsconv: &dsconv
+            layers:
+                depthwise: &quantized_conv
+                    weights_overrider:
+                        - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
+                    biases_overrider:
+                        - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
+                    activation_overrider: &shift
+                        type: mayo.override.ShiftQuantizer
+                        width: 3
+                        bias: 2
+                        overflow_rate: 0.0
+                        should_update: true
+                pointwise:
+                    {<<: *quantized_conv}
+        conv0: {<<: *quantized_conv}
+        conv1: {<<: *dsconv}
+        conv2: {<<: *dsconv}
+        conv3: {<<: *dsconv}
+        conv4: {<<: *dsconv}
+        conv5: {<<: *dsconv}
+        conv6: {<<: *dsconv}
+        conv7: {<<: *dsconv}
+        conv8: {<<: *dsconv}
+        conv9: {<<: *dsconv}
+        conv10: {<<: *dsconv}
+        conv11: {<<: *dsconv}
+        conv12: {<<: *dsconv}
+        conv13: {<<: *dsconv}
+        fc:
+            weights_overrider:
+                - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
+            biases_overrider:
+                - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
