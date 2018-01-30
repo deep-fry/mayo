@@ -2,13 +2,17 @@ import math
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.contrib import slim
 
 from mayo.util import Percent, memoize_method
-from mayo.log import log
 
 
 class GateError(Exception):
     """Gating-related exceptions.  """
+
+
+class GatePolicyError(GateError):
+    """Unrecognized policy.  """
 
 
 class GateParameterValueError(GateError):
@@ -19,8 +23,20 @@ class GateGranularityTypeError(GateError):
     """Incorrect granularity used.  """
 
 
-def _subsample(
-        constructor, tensor, granularity, pool, policy, stop_grad, scope):
+_accepted_policies = [
+    'naive', 'parametric_gamma',
+]
+
+
+def _check_policy(policy):
+    if policy in _accepted_policies:
+        return policy
+    raise GatePolicyError(
+        'Unrecognized policy {}, we accept one of {}.'
+        .format(policy, ', '.join(_accepted_policies)))
+
+
+def _subsample(constructor, tensor, granularity, pool, policy, scope):
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
         kernel = [height, width]
@@ -61,17 +77,14 @@ def _subsample(
     if granularity == 'vector' and width != 1:
         raise GateParameterValueError(
             'We expect subsampled width for vector granularity to be 1.')
-    if stop_grad:
-        return tf.stop_gradient(subsampled)
-    return subsampled
+    return tf.stop_gradient(subsampled)
 
 
 def _gate_network(
         constructor, tensor, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn,
-        is_training, stop_grad, scope):
+        kernel_size, stride, padding, num_outputs, activation_fn, scope):
     subsampled = _subsample(
-        constructor, tensor, granularity, pool, policy, stop_grad, scope)
+        constructor, tensor, granularity, pool, policy, scope)
     if granularity == 'channel':
         kernel = 1
     elif granularity == 'vector':
@@ -106,21 +119,9 @@ def _gate_network(
     }
     padded = constructor.instantiate_numeric_padding(None, subsampled, params)
     return constructor.instantiate_convolution(None, padded, params)
-    # if policy == 'online':
-    # params = {
-    #     'scale': False,
-    #     'center': True,
-    #     'activation_fn': activation_fn,
-    #     'scope': scope,
-    #     'is_training': is_training
-    # }
-    # normalized = constructor.instantiate_batch_normalization(
-    #     None, conved, params)
-    # return normalized
 
 
-def _descriminate_by_density(tensor, density, granularity, policy,
-        stop_grad):
+def _descriminate_by_density(tensor, density, granularity):
     """
     Mark a portion of top elements in tensor to true, where the portion is
     approximately the specified density.
@@ -129,14 +130,12 @@ def _descriminate_by_density(tensor, density, granularity, policy,
     density (float): the percentage of elements to mark as true.
     granularity (str):
         The target granularity, can either be `channel` or `height`.
-    policy (str): The policy used.
     """
     if not (0 < density <= 1):
         raise GateParameterValueError(
             'Gate density value {} is out of range (0, 1].'.format(density))
     # not training with the output as we train the predictor `gate`
-    if stop_grad:
-        tensor = tf.stop_gradient(tensor)
+    tensor = tf.stop_gradient(tensor)
     # number of active elemetns
     num, height, width, channels = tensor.shape
     if granularity == 'channel':
@@ -153,20 +152,14 @@ def _descriminate_by_density(tensor, density, granularity, policy,
     top, _ = tf.nn.top_k(reshaped, k=num_active)
     # disable channels with smaller activations
     threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
-    active = reshaped >= threshold
-    if stop_grad:
-        active = tf.stop_gradient(active)
-    active = tf.reshape(active, [num, height, width, channels])
-    active = tf.cast(active, tf.float32)
-    if policy == 'bn_online':
-        active *= tensor
-    return active
+    active = tf.reshape(reshaped >= threshold, tensor.shape)
+    return tf.stop_gradient(tf.cast(active, tf.float32))
 
 
 def _regularized_gate(
         constructor, node, conv_input, conv_output,
         kernel_size, stride, padding, density, granularity, pool,
-        activation_fn, policy, weight, is_training, stop_grad, scope):
+        activation_fn, policy, weight, is_training, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -194,9 +187,8 @@ def _regularized_gate(
     gate_scope = '{}/gate'.format(scope)
     gate_output = _gate_network(
         constructor, conv_input, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn,
-        is_training, stop_grad, gate_scope)
-    if policy == 'naive_online':
+        kernel_size, stride, padding, num_outputs, activation_fn, gate_scope)
+    if policy == 'naive':
         # output subsample
         subsample_scope = '{}/subsample'.format(scope)
         subsampled = _subsample(
@@ -208,14 +200,18 @@ def _regularized_gate(
         loss = tf.losses.mean_squared_error(
             subsampled, gate_output, weights=weight,
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-    else:
+    elif policy == 'parametric_gamma':
+        # is L2 the correct norm?
         loss = weight * tf.nn.l2_loss(gate_output)
         tf.losses.add_loss(
             loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-    gate = _descriminate_by_density(
-        gate_output, density, granularity, policy, stop_grad)
+    else:
+        raise GatePolicyError
     constructor.session.estimator.register(loss, 'gate.loss', node)
-    return tf.cast(gate, tf.float32)
+    active = _descriminate_by_density(gate_output, density, granularity)
+    if policy == 'parametric_gamma':
+        return active * gate_output
+    return active
 
 
 class GateLayers(object):
@@ -258,52 +254,55 @@ class GateLayers(object):
         density = params.pop('density')
         granularity = params.pop('granularity', 'channel')
         pool = params.pop('pool', 'max')
-        policy = params.pop('policy', 'bn_online')
+        policy = _check_policy(params.pop('policy', 'parametric_gamma'))
         weight = params.pop('weight', 0.01)
         should_gate = params.pop('should_gate', True)
         kernel_size = params['kernel_size']
         stride = params.get('stride', 1)
         padding = params.get('padding', 'SAME')
+
+        # delay activation
         activation_fn = params.get('activation_fn', tf.nn.relu)
-        stop_grad = params.pop('stop_grad', True)
-        if policy == 'bn_online':
-            params['activation_fn'] = None
+        params['activation_fn'] = None
+
+        # delay batch_norm for parametric_gamma
+        if policy == 'parametric_gamma':
             normalizer_fn = params.pop('normalizer_fn', None)
-            if normalizer_fn is not None:
-                log.debug(
-                    'Orignal batchnorm {} is disabled'.format(normalizer_fn))
+            # disable bias
             params['biases_initializer'] = None
+            if normalizer_fn is not slim.batch_norm:
+                raise GatePolicyError(
+                    'Policy "{}" is used, we expect slim.batch_norm to '
+                    'be used but absent in {}.'.format(policy, node))
+
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
-        # predictor policy
+
+        # predictor gate network
         gate = _regularized_gate(
             self, node, tensor, output, kernel_size, stride, padding,
             density, granularity, pool, activation_fn, policy, weight,
-            self.is_training, stop_grad, params['scope'])
+            self.is_training, params['scope'])
         # register gate sparsity for printing
         self._register_gate_density(node, gate, tensor.shape[-1])
         self._register_gate_formatters()
-        if not should_gate:
-            return output
-        if policy == 'naive_online':
-            if stop_grad:
-                gate = tf.stop_gradient(tf.cast(gate, tf.float32))
-            return output * gate
-        elif policy == 'bn_online':
+
+        # create batch_norm for parametric_gamma
+        if policy == 'parametric_gamma':
             params = {
                 'scale': False,
                 'center': True,
                 'activation_fn': None,
-                'scope': params['scope'] + '/BatchNorm',
-                'is_training': self.is_training
+                'scope': '{}/BatchNorm'.format(params['scope']),
+                'is_training': self.is_training,
             }
-            output = self.instantiate_batch_normalization(
-                None, output, params)
-            # actual gating
-            if activation_fn is not None:
-                if stop_grad:
-                    gate = tf.stop_gradient(tf.cast(gate, tf.float32))
-                return activation_fn(output * gate)
-            if stop_grad:
-                gate = tf.stop_gradient(tf.cast(gate, tf.float32))
-            return output * gate
+            output = self.instantiate_batch_normalization(None, output, params)
+
+        # actual gating
+        if should_gate:
+            output *= gate
+
+        # activation
+        if activation_fn is not None:
+            output = activation_fn(output)
+        return output

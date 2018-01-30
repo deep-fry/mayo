@@ -1,13 +1,10 @@
 ---
 _import: ../../cifarnet.yaml
 _gate:
-    # online: true
-    # online: false
-    policy: 'bn_online'
+    policy: parametric_gamma
     density: 1.0
     trainable: false
-    stop_grad: true
-    pool: 'avg'
+    pool: avg
 model:
     description: |
         A variant of cifarnet that performs online gating.
@@ -20,7 +17,7 @@ model:
             trainable: $(_gate.trainable)
             pool: $(_gate.pool)
             should_gate: true
-            weight: 0.000001
+            weight: 0.0001
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}

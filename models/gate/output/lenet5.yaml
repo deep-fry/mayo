@@ -5,11 +5,16 @@ model:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: 0.5
-            policy: 'bn_online'
+            weight: 0.0001
+            policy: parametric_gamma
             trainable: true
             should_gate: true
-            stop_grad: true
-            pool: 'avg'
-            weight: 0.000001
+            pool: avg
+            normalizer_fn:
+                type: tensorflow.contrib.slim.batch_norm
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
         conv0: {<<: *gated_conv, trainable: false}
         conv1: {<<: *gated_conv, trainable: false}
