@@ -180,7 +180,7 @@ def _regularized_gate(
     weight (float): The weight of the gate regularizer loss.
     policy (str): The policy used.
 
-    Returns the regularized gate (0: disable).
+    Returns regularized gate output.
     """
     # gating network
     num_outputs = int(conv_output.shape[-1])
@@ -211,16 +211,13 @@ def _regularized_gate(
         raise GatePolicyError
     if loss is not None:
         constructor.session.estimator.register(loss, 'gate.loss', node)
-    active = _descriminate_by_density(gate_output, density, granularity)
-    if policy == 'parametric_gamma':
-        return active * gate_output
-    return active
+    return gate_output
 
 
 class GateLayers(object):
     """Layer implementations for gated convolution.  """
 
-    def _register_gate_density(self, node, gate, in_channels):
+    def _register_gate_density(self, node, gate):
         history = None if self.is_training else 'infinite'
         self.session.estimator.register(gate, 'gate', node, history=history)
 
@@ -292,9 +289,6 @@ class GateLayers(object):
             self, node, tensor, output, kernel_size, stride, padding,
             density, granularity, pool, activation_fn, policy, weight,
             self.is_training, params['scope'])
-        # register gate sparsity for printing
-        self._register_gate_density(node, gate, tensor.shape[-1])
-        self._register_gate_formatters()
 
         # create batch_norm for parametric_gamma
         if policy == 'parametric_gamma':
@@ -306,10 +300,20 @@ class GateLayers(object):
                 'is_training': self.is_training,
             }
             output = self.instantiate_batch_normalization(None, output, params)
+            beta = tf.get_variable(
+                '{}/beta'.format(params['scope']),
+                shape=output.shape[-1], dtype=tf.float32,
+                initializer=tf.constant_initializer(1.0), trainable=True)
+            # gate output is the parametric gamma value
+            output = gate * output + beta
 
-        # actual gating
         if should_gate:
-            output *= gate
+            active = _descriminate_by_density(gate, density, granularity)
+            # register gate sparsity for printing
+            self._register_gate_density(node, active)
+            self._register_gate_formatters()
+            # actual gating
+            output *= active
 
         # activation
         if activation_fn is not None:
