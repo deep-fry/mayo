@@ -8,16 +8,24 @@ from mayo.log import log
 from mayo.util import memoize_property
 
 
-class OverrideNotAppliedError(Exception):
+class OverriderError(Exception):
+    """All overrider-related exceptions.  """
+
+
+class OverrideNotAppliedError(OverriderError):
     """Always invoke .apply() before .update().  """
 
 
-class OverrideAlreadyAppliedError(Exception):
+class OverrideAlreadyAppliedError(OverriderError):
     """Do not repeatly invoke .apply().  """
 
 
-class GetterInvokedOutsideApplyError(Exception):
+class GetterInvokedOutsideApplyError(OverriderError):
     """Function getter() is invoked not in apply().  """
+
+
+class ReadOnlyGraphChangedError(OverriderError):
+    """Graph should be read-only, but changes are made to the graph.  """
 
 
 def _getter_not_initialized(*args, **kwargs):
@@ -181,7 +189,13 @@ class OverriderBase(object):
         if not self._applied:
             raise OverrideNotAppliedError(
                 'Method "apply" must be invoked before call "update".')
+        ops = session.graph.get_operations()
         self._update(session)
+        new_ops = [o for o in session.graph.get_operations() if o not in ops]
+        if new_ops:
+            raise ReadOnlyGraphChangedError(
+                '{}.update() adds new operations {} to a read-only graph.'
+                .format(self.__class__.__name__, new_ops))
         log.debug('Updated overrider {!r}'.format(self.info(session)))
 
     def assign(self, session):
