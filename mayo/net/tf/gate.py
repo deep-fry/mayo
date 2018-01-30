@@ -180,7 +180,7 @@ def _regularized_gate(
     weight (float): The weight of the gate regularizer loss.
     policy (str): The policy used.
 
-    Returns the regularized gate (1: enable, 0: disable).
+    Returns the regularized gate (0: disable).
     """
     # gating network
     num_outputs = int(conv_output.shape[-1])
@@ -189,6 +189,7 @@ def _regularized_gate(
         constructor, conv_input, granularity, pool, policy,
         kernel_size, stride, padding, num_outputs, activation_fn, gate_scope)
     loss = None
+    loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
     if policy == 'naive':
         # output subsample
         subsample_scope = '{}/subsample'.format(scope)
@@ -201,12 +202,11 @@ def _regularized_gate(
         if weight > 0:
             loss = tf.losses.mean_squared_error(
                 subsampled, gate_output, weights=weight,
-                loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+                loss_collection=loss_name)
     elif policy == 'parametric_gamma':
         if weight > 0:
             loss = weight * tf.nn.l2_loss(gate_output)
-            tf.add_to_collection(
-                loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+            tf.add_to_collection(loss_name, loss)
     else:
         raise GatePolicyError
     if loss is not None:
@@ -300,7 +300,7 @@ class GateLayers(object):
         if policy == 'parametric_gamma':
             params = {
                 'scale': False,
-                'center': True,
+                'center': False,
                 'activation_fn': None,
                 'scope': '{}/BatchNorm'.format(params['scope']),
                 'is_training': self.is_training,
