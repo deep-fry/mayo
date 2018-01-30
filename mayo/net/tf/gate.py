@@ -188,6 +188,7 @@ def _regularized_gate(
     gate_output = _gate_network(
         constructor, conv_input, granularity, pool, policy,
         kernel_size, stride, padding, num_outputs, activation_fn, gate_scope)
+    loss = None
     if policy == 'naive':
         # output subsample
         subsample_scope = '{}/subsample'.format(scope)
@@ -197,17 +198,19 @@ def _regularized_gate(
         # training
         # policy descriminator: we simply match max values in each channel
         # using a loss regularizer
-        loss = tf.losses.mean_squared_error(
-            subsampled, gate_output, weights=weight,
-            loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+        if weight > 0:
+            loss = tf.losses.mean_squared_error(
+                subsampled, gate_output, weights=weight,
+                loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
     elif policy == 'parametric_gamma':
-        # is L2 the correct norm?
-        loss = weight * tf.nn.l2_loss(gate_output)
-        tf.losses.add_loss(
-            loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
+        if weight > 0:
+            loss = weight * tf.nn.l2_loss(gate_output)
+            tf.add_to_collection(
+                loss, loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
     else:
         raise GatePolicyError
-    constructor.session.estimator.register(loss, 'gate.loss', node)
+    if loss is not None:
+        constructor.session.estimator.register(loss, 'gate.loss', node)
     active = _descriminate_by_density(gate_output, density, granularity)
     if policy == 'parametric_gamma':
         return active * gate_output
@@ -232,8 +235,14 @@ class GateLayers(object):
             else:
                 total_losses = [
                     a + b for a, b in zip(total_losses, loss_history)]
-        loss_mean = np.mean(total_losses)
-        loss_std = Percent(np.std(total_losses) / loss_mean)
+        if total_losses is None:
+            loss_mean = 0
+        else:
+            loss_mean = np.mean(total_losses)
+        if loss_mean > 0:
+            loss_std = Percent(np.std(total_losses) / loss_mean)
+        else:
+            loss_std = '?%'
         return 'gate.loss: {:.5f}±{}'.format(loss_mean, loss_std)
 
     @staticmethod
