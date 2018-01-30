@@ -21,14 +21,6 @@ model:
             kernel_size: 5
             padding: valid
             num_outputs: 20
-            # normalizer_fn:
-            #     type: tensorflow.contrib.slim.batch_norm
-            #     center: true
-            #     scale: true
-            #     decay: 0.9997
-            #     epsilon: 0.001
-        # norm0: &norm
-        #      type: normalize
         pool0: &pool
             type: max_pool
             kernel_size: 2
