@@ -192,11 +192,23 @@ class OverriderBase(object):
         ops = session.graph.get_operations()
         self._update(session)
         new_ops = [o for o in session.graph.get_operations() if o not in ops]
-        if new_ops:
+        check_ops = all(
+            self._check_tf_type(
+                a, ('Placeholder', 'Assign', 'NoOp')) for a in new_ops)
+        if check_ops:
+            log.info(
+                '{}.update() adds new operations {} to a graph. Ignored.'
+                .format(self.__class__.__name__, new_ops))
+        if new_ops and (not check_ops):
             raise ReadOnlyGraphChangedError(
                 '{}.update() adds new operations {} to a read-only graph.'
                 .format(self.__class__.__name__, new_ops))
         log.debug('Updated overrider {!r}'.format(self.info(session)))
+
+    def _check_tf_type(self, op, types):
+        if op.type not in types:
+            return False
+        return True
 
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """

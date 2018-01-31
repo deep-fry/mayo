@@ -10,11 +10,13 @@ model:
                     weights_overrider:
                         type: mayo.override.DynamicNetworkSurgeryPruner
                         alpha: ^(alpha)
+                        should_update: true
                 conv2: {<<: *conv_prune}
         conv1:
             weights_overrider:
                 type: mayo.override.DynamicNetworkSurgeryPruner
                 alpha: 0.0
+                should_update: true
         b11: {<<: *bb}
         b12: {<<: *bb}
         b21: {<<: *bb}

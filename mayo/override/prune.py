@@ -53,12 +53,14 @@ class MeanStdPruner(PrunerBase):
         super().__init__(should_update)
         self.alpha = alpha
 
-    def _threshold(self, tensor):
+    def _threshold(self, tensor, alpha):
         # axes = list(range(len(tensor.get_shape()) - 1))
         tensor_shape = util.get_shape(tensor)
         axes = list(range(len(tensor_shape)))
         mean, var = util.moments(util.abs(tensor), axes)
-        return mean + self.alpha * util.sqrt(var)
+        if alpha is None:
+            return mean + self.alpha * util.sqrt(var)
+        return mean + alpha * util.sqrt(var)
 
     def _updated_mask(self, var, mask, session):
         return util.abs(var) > self._threshold(var)
@@ -89,8 +91,8 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         self.off_factor = off_factor
 
     def _updated_mask(self, var, mask, session):
-        var = session.run(var)
-        threshold = self._threshold(var)
+        var, mask, alpha = session.run([var, mask, self.alpha])
+        threshold = self._threshold(var, alpha)
         on_mask = util.abs(var) > self.on_factor * threshold
         mask = util.logical_or(mask, on_mask)
         off_mask = util.abs(var) > self.off_factor * threshold
@@ -113,7 +115,7 @@ class ChannelPruner(PrunerBase):
         # FIXME a hack to determine this layer has batch norm
         return 'BatchNorm' in value.name
 
-    def scale(self, value):
+    def _compute_scale(self, value):
         if not self._has_batch_norm(value):
             return self.scaling_factors
         layer = value.name.split('/')[2]
@@ -132,17 +134,16 @@ class ChannelPruner(PrunerBase):
             }
         }
         # add reg
-        scale = self.scale(value)
+        self.scale = self._compute_scale(value)
         tf.losses.add_loss(
-            self.weight * tf.reduce_sum(tf.abs(scale)),
+            self.weight * tf.reduce_sum(tf.abs(self.scale)),
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         if self._has_batch_norm(value):
             return masked
-        return masked * scale
+        return masked * self.scale
 
     def _updated_mask(self, var, mask, session):
-        scale = self.scale(var)
-        mask, scale = session.run([mask, scale])
+        mask, scale = session.run([mask, self.scale])
         num_active = math.ceil(len(scale) * self.density)
         threshold = sorted(scale)[-num_active]
         # top_k, where k is the number of active channels
@@ -151,16 +152,6 @@ class ChannelPruner(PrunerBase):
         reshaped = mask.reshape((-1, c))
         reshaped = reshaped * util.cast((scale > threshold), float)
         return reshaped.reshape((n, h, w, c))
-    #
-    # def _info(self, session):
-    #     _, mask, density, count = super()._info(session)
-    #     return self._info_tuple(
-    #         mask=mask, density=density, count_=count)
-    #
-    # @classmethod
-    # def finalize_info(cls, table):
-    #     footer = super().finalize_info(table)
-    #     table.set_footer([None] + footer)
 
 
 class FilterPruner(PrunerBase):

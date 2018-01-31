@@ -117,7 +117,6 @@ def greater_equal(value1, value2):
         return tf.greater_equal(value1, value2)
 
 
-
 def abs(value):
     if is_constant(value):
         return abs(value)
@@ -189,12 +188,12 @@ def top_k(tensor, k):
         tensor = tf.reshape(tensor, [-1])
         topk = tf.nn.top_k(tensor, k)
         return tf.reduce_min(cast(topk.values, float))
-    return sorted(value)[k]
+    return sorted(tensor)[k]
 
 
 def moments(tensor, axes):
     if is_tensor(tensor):
-        return tf.nn.moments(util.abs(tensor), axes=axes)
+        return tf.nn.moments(tf.abs(tensor), axes=axes)
     mean = np.mean(tensor, axis=tuple(axes))
     var = np.var(tensor, axis=tuple(axes))
     return (mean, var)

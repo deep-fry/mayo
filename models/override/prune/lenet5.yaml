@@ -4,7 +4,7 @@ model.layers:
         weights_overrider: &pruner
             type: mayo.override.DynamicNetworkSurgeryPruner
             alpha: 0
-            should_update: false
+            should_update: true
     conv1: {<<: *overrider}
     fc1: {<<: *overrider}
     logits: {<<: *overrider}
