@@ -151,7 +151,7 @@ def _descriminate_by_density(tensor, density, granularity):
     # top_k, where k is the number of active channels
     top, _ = tf.nn.top_k(reshaped, k=num_active)
     # disable channels with smaller activations
-    threshold = tf.reduce_min(top, axis=[1], keepdims=True)
+    threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
     active = tf.reshape(reshaped >= threshold, tensor.shape)
     return tf.stop_gradient(active)
 
