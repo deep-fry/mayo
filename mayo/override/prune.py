@@ -100,9 +100,34 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         return util.logical_and(mask, off_mask)
 
 
-class ChannelPruner(PrunerBase):
+class ChannelPrunerBase(OverriderBase):
+    channel_mask = Parameter('channel_mask', None, None, tf.bool)
+
+    def __init__(self, should_update=True):
+        super().__init__(should_update)
+
+    def _apply(self, value):
+        self.channel_shape = value.shape[3]
+        self._parameter_config = {
+            'channel_mask': {
+                'initial': tf.ones_initializer(dtype=tf.bool),
+                'shape': self.channel_shape,
+            }
+        }
+        mask = tf.expand_dims(self.channel_mask, 0)
+        return value * util.cast(mask, float)
+
+    def _updated_mask(self, var, mask, session):
+        raise NotImplementedError(
+            'Method to compute an updated mask is not implemented.')
+
+    def _update(self, session):
+        channel_mask = self._updated_mask(self.before, self.channel_mask, session)
+        session.assign(self.channel_mask, channel_mask)
+
+
+class ChannelPruner(ChannelPrunerBase):
     # This pruner only works on activations
-    # density = Parameter('density', 1.0, [], tf.float32)
     scaling_factors = Parameter(
         'scaling_factors', None, None, tf.float32, trainable=True)
 
@@ -126,11 +151,10 @@ class ChannelPruner(PrunerBase):
 
     def _apply(self, value):
         masked = super()._apply(value)
-        channel_shape = value.shape[3]
         self._parameter_config = {
             'scaling_factors': {
                 'initial': tf.ones_initializer(dtype=tf.float32),
-                'shape': channel_shape,
+                'shape': self.channel_shape,
             }
         }
         # add reg
@@ -139,19 +163,17 @@ class ChannelPruner(PrunerBase):
             self.weight * tf.reduce_sum(tf.abs(self.scale)),
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         if self._has_batch_norm(value):
-            return masked
-        return masked * self.scale
+            return util.cast(masked, float)
+        return util.cast(masked, float) * self.scale
 
-    def _updated_mask(self, var, mask, session):
-        mask, scale = session.run([mask, self.scale])
+    def _updated_mask(self, var, channel_mask, session):
+        channel_mask, scale = session.run([channel_mask, self.scale])
         num_active = math.ceil(len(scale) * self.density)
         threshold = sorted(scale)[-num_active]
         # top_k, where k is the number of active channels
         # disable channels with smaller activation,
-        (n, h, w, c) = mask.shape
-        reshaped = mask.reshape((-1, c))
-        reshaped = reshaped * util.cast((scale > threshold), float)
-        return reshaped.reshape((n, h, w, c))
+        channel_mask = channel_mask * util.cast((scale > threshold), float)
+        return channel_mask
 
 
 class FilterPruner(PrunerBase):
