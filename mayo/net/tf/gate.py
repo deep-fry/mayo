@@ -151,9 +151,9 @@ def _descriminate_by_density(tensor, density, granularity):
     # top_k, where k is the number of active channels
     top, _ = tf.nn.top_k(reshaped, k=num_active)
     # disable channels with smaller activations
-    threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
+    threshold = tf.reduce_min(top, axis=[1], keepdims=True)
     active = tf.reshape(reshaped >= threshold, tensor.shape)
-    return tf.stop_gradient(tf.cast(active, tf.float32))
+    return tf.stop_gradient(active)
 
 
 def _regularized_gate(
@@ -217,9 +217,13 @@ def _regularized_gate(
 class GateLayers(object):
     """Layer implementations for gated convolution.  """
 
-    def _register_gate_density(self, node, gate):
+    def _register_gate(self, node, gate, active):
         history = None if self.is_training else 'infinite'
-        self.session.estimator.register(gate, 'gate', node, history=history)
+        self.session.estimator.register(
+            gate, 'gate.output', node, history=history)
+        if active is not None:
+            self.session.estimator.register(
+                active, 'gate.active', node, history=history)
 
     @staticmethod
     def _gate_loss_formatter(estimator):
@@ -244,7 +248,7 @@ class GateLayers(object):
 
     @staticmethod
     def _gate_density_formatter(estimator):
-        gates = estimator.get_values('gate')
+        gates = estimator.get_values('gate.active')
         valid = total = 0
         for layer, gate in gates.items():
             valid += np.sum(gate.astype(np.float32) != 0)
@@ -309,11 +313,13 @@ class GateLayers(object):
 
         if should_gate:
             active = _descriminate_by_density(gate, density, granularity)
-            # register gate sparsity for printing
-            self._register_gate_density(node, active)
-            self._register_gate_formatters()
             # actual gating
-            output *= active
+            output *= tf.cast(active, tf.float32)
+            # register gate sparsity for printing
+            self._register_gate_formatters()
+        else:
+            active = None
+        self._register_gate(node, gate, active)
 
         # activation
         if activation_fn is not None:
