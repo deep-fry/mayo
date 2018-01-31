@@ -107,6 +107,10 @@ class ChannelPrunerBase(OverriderBase):
         super().__init__(should_update)
 
     def _apply(self, value):
+        # check shape
+        if not len(value.shape) >= 3:
+            raise ValueError('Incorrect dimension {} for channel pruner'
+                             .format(value.shape))
         self.channel_shape = value.shape[3]
         self._parameter_config = {
             'channel_mask': {
@@ -122,15 +126,13 @@ class ChannelPrunerBase(OverriderBase):
             'Method to compute an updated mask is not implemented.')
 
     def _update(self, session):
-        channel_mask = self._updated_mask(self.before, self.channel_mask, session)
+        channel_mask = self._updated_mask(
+            self.before, self.channel_mask, session)
         session.assign(self.channel_mask, channel_mask)
 
 
 class ChannelPruner(ChannelPrunerBase):
     # This pruner only works on activations
-    scaling_factors = Parameter(
-        'scaling_factors', None, None, tf.float32, trainable=True)
-
     def __init__(self, density=None, weight=0.01, should_update=True):
         super().__init__(should_update)
         self.density = density
@@ -141,8 +143,6 @@ class ChannelPruner(ChannelPrunerBase):
         return 'BatchNorm' in value.name
 
     def _compute_scale(self, value):
-        if not self._has_batch_norm(value):
-            return self.scaling_factors
         layer = value.name.split('/')[2]
         for variable in tf.trainable_variables():
             if layer in variable.name and 'BatchNorm/gamma' in variable.name:
@@ -162,9 +162,7 @@ class ChannelPruner(ChannelPrunerBase):
         tf.losses.add_loss(
             self.weight * tf.reduce_sum(tf.abs(self.scale)),
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
-        if self._has_batch_norm(value):
-            return util.cast(masked, float)
-        return util.cast(masked, float) * self.scale
+        return util.cast(masked, float)
 
     def _updated_mask(self, var, channel_mask, session):
         channel_mask, scale = session.run([channel_mask, self.scale])
