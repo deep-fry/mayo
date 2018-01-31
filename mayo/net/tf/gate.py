@@ -149,10 +149,10 @@ def _descriminate_by_density(tensor, density, granularity):
     # reshape the last dimensions into one
     reshaped = tf.reshape(tensor, [num, -1])
     # top_k, where k is the number of active channels
-    top, _ = tf.nn.top_k(reshaped, k=num_active)
+    top, _ = tf.nn.top_k(reshaped, k=(num_active + 1))
     # disable channels with smaller activations
     threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
-    active = tf.reshape(reshaped >= threshold, tensor.shape)
+    active = tf.reshape(reshaped > threshold, tensor.shape)
     return tf.stop_gradient(active)
 
 
@@ -305,9 +305,9 @@ class GateLayers(object):
             }
             output = self.instantiate_batch_normalization(None, output, params)
             beta = tf.get_variable(
-                '{}/beta'.format(params['scope']),
+                '{}/gate/scale'.format(params['scope']),
                 shape=output.shape[-1], dtype=tf.float32,
-                initializer=tf.constant_initializer(1.0), trainable=True)
+                initializer=tf.constant_initializer(0.1), trainable=True)
             # gate output is the parametric gamma value
             output = gate * output + beta
 
