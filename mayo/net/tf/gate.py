@@ -283,7 +283,7 @@ class GateLayers(object):
             if normalizer_fn is not slim.batch_norm:
                 raise GatePolicyError(
                     'Policy "{}" is used, we expect slim.batch_norm to '
-                    'be used but absent in {}.'.format(policy, node))
+                    'be used but it is absent in {}.'.format(policy, node))
 
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
