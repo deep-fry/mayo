@@ -164,10 +164,34 @@ def _descriminate_by_density(tensor, density, granularity):
     return tf.stop_gradient(active)
 
 
+def instantiate_squeeze_excitation(constructor, node, tensor, params):
+    channels = int(tensor.shape[3])
+    se_factor = params.pop('squeeze_excitation_factor')
+    fc_params = {
+        'weights_initializer':
+            tf.truncated_normal_initializer(stddev=0.01),
+        'biases_initializer':
+            tf.constant_initializer(value=1.0),
+        'scope':
+            params['scope'] + '/fc_se1',
+        'num_outputs':
+            int(channels / float(se_factor))
+    }
+    fc_output = constructor.instantiate_fully_connected(
+        None, tensor, fc_params)
+    fc_params['num_outputs'] = channels
+    fc_params['scope'] = params['scope'] + '/fc_se2'
+    squeeze_excitation = constructor.instantiate_fully_connected(
+        None, fc_output, fc_params)
+    tensor *= tf.cast(squeeze_excitation, tf.float32)
+    return (tensor, squeeze_excitation)
+
+
 def _regularized_gate(
         constructor, node, conv_input, conv_output,
         kernel_size, stride, padding, density, granularity, pool, policy,
-        weight, normalizer_fn, normalizer_params, activation_fn, scope):
+        weight, normalizer_fn, normalizer_params, activation_fn, scope,
+        se_factor):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -200,14 +224,25 @@ def _regularized_gate(
         constructor, conv_input, granularity, pool, policy,
         kernel_size, stride, padding, num_outputs,
         normalizer_fn, normalizer_params, activation_fn, gate_scope)
+    # squeezze excitation path, acts at convout
+    if se_factor is not None:
+        se_params = {
+            'scope': scope,
+            'squeeze_excitation_factor': se_factor
+        }
+        conv_output, squeeze_excitation = instantiate_squeeze_excitation(
+            constructor, node, conv_output, se_params)
     loss = None
     loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
     if policy == 'naive':
-        # output subsample
-        subsample_scope = '{}/subsample'.format(scope)
-        subsampled = _subsample(
-            constructor, conv_output, granularity, pool, policy,
-            subsample_scope)
+        if se_factor is None:
+            # output subsample
+            subsample_scope = '{}/subsample'.format(scope)
+            subsampled = _subsample(
+                constructor, conv_output, granularity, pool, policy,
+                subsample_scope)
+        else:
+            subsampled = squeeze_excitation
         # training
         # policy descriminator: we simply match max values in each channel
         # using a loss regularizer
@@ -302,7 +337,8 @@ class GateLayers(object):
         gate = _regularized_gate(
             self, node, tensor, output, kernel_size, stride, padding,
             density, granularity, pool, policy, weight,
-            normalizer_fn, normalizer_params, activation_fn, params['scope'])
+            normalizer_fn, normalizer_params, activation_fn, params['scope'],
+            se_factor)
 
         if policy == 'parametric_gamma':
             if normalizer_fn is not slim.batch_norm:
@@ -338,29 +374,6 @@ class GateLayers(object):
         # activation of convolution
         if activation_fn is not None:
             output = activation_fn(output)
-
-        # TODO: fuse them to the gating layer....
-        # squeeze_excitation
-        if se_factor is not None:
-            channels = int(output.shape[3])
-            fc_params = {
-                'weights_initializer':
-                    tf.truncated_normal_initializer(stddev=0.01),
-                'biases_initializer':
-                    tf.constant_initializer(value=1.0),
-                'scope':
-                    params['scope'] + '/fc_se1',
-                'num_outputs':
-                    int(channels / float(se_factor))
-            }
-            fc_output = self.instantiate_fully_connected(
-                None, output, fc_params)
-            fc_params['num_outputs'] = channels
-            fc_params['scope'] = params['scope'] + '/fc_se2'
-            squeeze_excitation = self.instantiate_fully_connected(
-                None, fc_output, fc_params)
-            output *= tf.cast(squeeze_excitation, tf.float32)
-
         # gating
         if should_gate:
             active = _descriminate_by_density(gate, density, granularity)
