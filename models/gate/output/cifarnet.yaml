@@ -1,7 +1,8 @@
 ---
 _import: ../../cifarnet.yaml
 _gate:
-    policy: parametric_gamma
+    # policy: parametric_gamma
+    policy: naive
     density: 1.0
     trainable: false
     pool: avg
@@ -17,7 +18,8 @@ model:
             trainable: $(_gate.trainable)
             pool: $(_gate.pool)
             should_gate: true
-            weight: 0.0001
+            weight: 0.0
+            squeeze_excitation_factor: 8
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}

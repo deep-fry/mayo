@@ -108,6 +108,11 @@ def _gate_network(
         'is_training': constructor.is_training,
         'scope': None,  # use default scope
     })
+    if policy == 'naive':
+        # FIXME:
+        # I think naive should not include batch norm on its predicor?
+        normalizer_params = None
+        normalizer_fn = None
     params = {
         'kernel_size': kernel,
         'stride': stride,
@@ -277,6 +282,7 @@ class GateLayers(object):
         kernel_size = params['kernel_size']
         stride = params.get('stride', 1)
         padding = params.get('padding', 'SAME')
+        se_factor = params.pop('squeeze_excitation_factor', None)
 
         # delay normalization
         normalizer_fn = params.pop('normalizer_fn', None)
@@ -323,11 +329,37 @@ class GateLayers(object):
                 # gate output is the parametric gamma value
                 output = gate * output + beta
             else:
+                tmp = dict(normalizer_params)
+                normalizer_params = dict(normalizer_params, **{
+                    'scope': '{}/BatchNorm'.format(params['scope']),
+                })
                 output = normalizer_fn(output, **normalizer_params)
 
-        # activation
+        # activation of convolution
         if activation_fn is not None:
             output = activation_fn(output)
+
+        # TODO: fuse them to the gating layer....
+        # squeeze_excitation
+        if se_factor is not None:
+            channels = int(output.shape[3])
+            fc_params = {
+                'weights_initializer':
+                    tf.truncated_normal_initializer(stddev=0.01),
+                'biases_initializer':
+                    tf.constant_initializer(value=1.0),
+                'scope':
+                    params['scope'] + '/fc_se1',
+                'num_outputs':
+                    int(channels / float(se_factor))
+            }
+            fc_output = self.instantiate_fully_connected(
+                None, output, fc_params)
+            fc_params['num_outputs'] = channels
+            fc_params['scope'] = params['scope'] + '/fc_se2'
+            squeeze_excitation = self.instantiate_fully_connected(
+                None, fc_output, fc_params)
+            output *= tf.cast(squeeze_excitation, tf.float32)
 
         # gating
         if should_gate:
