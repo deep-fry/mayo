@@ -108,6 +108,10 @@ def _gate_network(
     else:
         raise GateGranularityTypeError(
             'Unrecognized granularity {!r}.'.format(granularity))
+    normalizer_params = dict(normalizer_params, **{
+        'is_training': constructor.is_training,
+        'scope': None,  # use default scope
+    })
     params = {
         'kernel_size': kernel,
         'stride': stride,
@@ -115,14 +119,11 @@ def _gate_network(
         'num_outputs': num_outputs,
         'biases_initializer': tf.constant_initializer(1.0),
         'weights_initializer': tf.truncated_normal_initializer(stddev=0.01),
+        'normalizer_fn': normalizer_fn,
+        'normalizer_params': normalizer_params,
         'activation_fn': activation_fn,
         'scope': scope,
     }
-    if normalizer_fn:
-        params.update({
-            'normalizer_fn': normalizer_fn,
-            'normalizer_params': normalizer_params,
-        })
     padded = constructor.instantiate_numeric_padding(None, subsampled, params)
     return constructor.instantiate_convolution(None, padded, params)
 
@@ -281,20 +282,16 @@ class GateLayers(object):
         stride = params.get('stride', 1)
         padding = params.get('padding', 'SAME')
 
+        # delay normalization
+        normalizer_fn = params.pop('normalizer_fn', None)
+        normalizer_params = params.pop('normalizer_params', None)
+        if normalizer_fn:
+            # disable bias
+            params['biases_initializer'] = None
+
         # delay activation
         activation_fn = params.get('activation_fn', tf.nn.relu)
         params['activation_fn'] = None
-
-        # delay batch_norm for parametric_gamma
-        if policy == 'parametric_gamma':
-            normalizer_fn = params.pop('normalizer_fn', None)
-            normalizer_params = params.pop('normalizer_params', {})
-            # disable bias
-            params['biases_initializer'] = None
-            if normalizer_fn is not slim.batch_norm:
-                raise GatePolicyError(
-                    'Policy "{}" is used, we expect slim.batch_norm to '
-                    'be used but it is absent in {}.'.format(policy, node))
 
         # convolution
         output = self.instantiate_convolution(None, tensor, params)
@@ -305,35 +302,44 @@ class GateLayers(object):
             density, granularity, pool, policy, weight,
             normalizer_fn, normalizer_params, activation_fn, params['scope'])
 
-        # create batch_norm for parametric_gamma
         if policy == 'parametric_gamma':
-            normalizer_params.update({
-                'scale': False,
-                'center': False,
-                'activation_fn': None,
-                'scope': '{}/BatchNorm'.format(params['scope']),
-                'is_training': self.is_training,
-            })
-            output = self.instantiate_batch_normalization(
-                None, output, normalizer_params)
-            beta = tf.get_variable(
-                '{}/gate/scale'.format(params['scope']),
-                shape=output.shape[-1], dtype=tf.float32,
-                initializer=tf.constant_initializer(0.1), trainable=True)
-            # gate output is the parametric gamma value
-            output = gate * output + beta
+            if normalizer_fn is not slim.batch_norm:
+                raise GatePolicyError(
+                    'Policy "{}" is used, we expect slim.batch_norm to '
+                    'be used but it is absent in {}.'.format(policy, node))
 
+        # normalization
+        if normalizer_fn:
+            if policy == 'parametric_gamma':
+                normalizer_params = dict(normalizer_params, **{
+                    'scale': False,
+                    'center': False,
+                    'activation_fn': None,
+                    'scope': '{}/BatchNorm'.format(params['scope']),
+                    'is_training': self.is_training,
+                })
+                output = self.instantiate_batch_normalization(
+                    None, output, normalizer_params)
+                beta_scope = '{}/gate/shift'.format(params['scope'])
+                beta = tf.get_variable(
+                    beta_scope, shape=output.shape[-1], dtype=tf.float32,
+                    initializer=tf.constant_initializer(0.1), trainable=True)
+                # gate output is the parametric gamma value
+                output = gate * output + beta
+            else:
+                output = normalizer_fn(output, **normalizer_params)
+
+        # activation
+        if activation_fn is not None:
+            output = activation_fn(output)
+
+        # gating
         if should_gate:
             active = _descriminate_by_density(gate, density, granularity)
-            # actual gating
             output *= tf.cast(active, tf.float32)
             # register gate sparsity for printing
             self._register_gate_formatters()
         else:
             active = None
         self._register_gate(node, gate, active)
-
-        # activation
-        if activation_fn is not None:
-            output = activation_fn(output)
         return output
