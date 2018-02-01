@@ -76,7 +76,8 @@ class ParameterTransformer(object):
         # activation
         activation_overrider = params.pop('activation_overrider', None)
         if activation_overrider:
-            params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
+            activation_fn = params.get('activation_fn', tf.nn.relu)
+            params['activation_fn'] = lambda x: activation_fn(
                 activation_overrider.apply('activations', tf.get_variable, x))
             self.overriders.append(activation_overrider)
         # num outputs

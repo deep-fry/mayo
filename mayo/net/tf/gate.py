@@ -23,12 +23,8 @@ class GateGranularityTypeError(GateError):
     """Incorrect granularity used.  """
 
 
-_accepted_policies = [
-    'naive', 'parametric_gamma',
-]
-
-
 def _check_policy(policy):
+    _accepted_policies = ['naive', 'parametric_gamma']
     if policy in _accepted_policies:
         return policy
     raise GatePolicyError(
