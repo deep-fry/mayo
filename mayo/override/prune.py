@@ -130,6 +130,12 @@ class ChannelPrunerBase(OverriderBase):
             self.before, self.channel_mask, session)
         session.assign(self.channel_mask, channel_mask)
 
+    def _info(self, session):
+        mask = util.cast(session.run(self.channel_mask), int)
+        density = Percent(util.sum(mask) / util.count(mask))
+        return self._info_tuple(
+            mask=self.channel_mask.name, density=density, count_=mask.size)
+
 
 class ChannelPruner(ChannelPrunerBase):
     # This pruner only works on activations
@@ -151,12 +157,6 @@ class ChannelPruner(ChannelPrunerBase):
 
     def _apply(self, value):
         masked = super()._apply(value)
-        self._parameter_config = {
-            'scaling_factors': {
-                'initial': tf.ones_initializer(dtype=tf.float32),
-                'shape': self.channel_shape,
-            }
-        }
         # add reg
         self.scale = self._compute_scale(value)
         tf.losses.add_loss(
