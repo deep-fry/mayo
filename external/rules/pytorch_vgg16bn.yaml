@@ -1,0 +1,105 @@
+# Rules to import pytorch alexnet pretrained model into checkpoints.
+#
+# Model:
+#     https://github.com/pytorch/vision/blob/master/torchvision/models/alexnet.py
+# Weights:
+#     https://download.pytorch.org/models/alexnet-owt-4df8aa71.pth
+#
+# Tensors require us to permute them, as their spatial ordering is different
+# from tensorflow.
+#
+# Convolution:
+#     torch:      [out_maps, in_maps, kernel_h, kernel_w]
+#     tensorflow: [kernel_h, kernel_w, in_maps, out_maps]
+# FC:
+#     torch:      [out, in]
+#     tensorflow: [in, out]
+#
+# Additionally, because the ordering of inputs are different between TensorFlow
+# [height, width, channels] and PyTorch [channels, height, width], flatten + FC
+# requires additional processing.  For instance, AlexNet fc6 in PyTorch uses
+# 4096x9216, where 9216 is flattened from 256x6x6.  In order to produce the
+# correct spatial ordering in TensorFlow, we need to first unflatten 4096x9216
+# into 4096x256x6x6, permute into 4096x6x6x256 and reflatten it to 4096x9216
+# and finally permute into 9216x4096.
+---
+permute:
+    2: [{type: transpose, axes: [1, 0]}]
+    4: [{type: transpose, axes: [2, 3, 1, 0]}]
+    classifier.0.weight:
+        - {type: reshape, newshape: [4096, 512, 7, 7]}
+        - {type: transpose, axes: [0, 2, 3, 1]}
+        - {type: reshape, newshape: [4096, 25088]}
+        - {type: transpose, axes: [1, 0]}
+rename:
+    \.: /
+    bias: biases
+    weight: weights
+    features/0/: vgg16_bn/conv1_1/
+    features/1/weights: vgg16_bn/conv1_1/BatchNorm/gamma
+    features/1/biases: vgg16_bn/conv1_1/BatchNorm/beta
+    features/1/running_mean: vgg16_bn/conv1_1/BatchNorm/moving_mean
+    features/1/running_var: vgg16_bn/conv1_1/BatchNorm/moving_variance
+    features/3/: vgg16_bn/conv1_2/
+    features/4/weights: vgg16_bn/conv1_2/BatchNorm/gamma
+    features/4/biases: vgg16_bn/conv1_2/BatchNorm/beta
+    features/4/running_mean: vgg16_bn/conv1_2/BatchNorm/moving_mean
+    features/4/running_var: vgg16_bn/conv1_2/BatchNorm/moving_variance
+    features/7/: vgg16_bn/conv2_1/
+    features/8/weights: vgg16_bn/conv2_1/BatchNorm/gamma
+    features/8/biases: vgg16_bn/conv2_1/BatchNorm/beta
+    features/8/running_mean: vgg16_bn/conv2_1/BatchNorm/moving_mean
+    features/8/running_var: vgg16_bn/conv2_1/BatchNorm/moving_variance
+    features/10/: vgg16_bn/conv2_2/
+    features/11/weights: vgg16_bn/conv2_2/BatchNorm/gamma
+    features/11/biases: vgg16_bn/conv2_2/BatchNorm/beta
+    features/11/running_mean: vgg16_bn/conv2_2/BatchNorm/moving_mean
+    features/11/running_var: vgg16_bn/conv2_2/BatchNorm/moving_variance
+    features/14/: vgg16_bn/conv3_1/
+    features/15/weights: vgg16_bn/conv3_1/BatchNorm/gamma
+    features/15/biases: vgg16_bn/conv3_1/BatchNorm/beta
+    features/15/running_mean: vgg16_bn/conv3_1/BatchNorm/moving_mean
+    features/15/running_var: vgg16_bn/conv3_1/BatchNorm/moving_variance
+    features/17/: vgg16_bn/conv3_2/
+    features/18/weights: vgg16_bn/conv3_2/BatchNorm/gamma
+    features/18/biases: vgg16_bn/conv3_2/BatchNorm/beta
+    features/18/running_mean: vgg16_bn/conv3_2/BatchNorm/moving_mean
+    features/18/running_var: vgg16_bn/conv3_2/BatchNorm/moving_variance
+    features/20/: vgg16_bn/conv3_3/
+    features/21/weights: vgg16_bn/conv3_3/BatchNorm/gamma
+    features/21/biases: vgg16_bn/conv3_3/BatchNorm/beta
+    features/21/running_mean: vgg16_bn/conv3_3/BatchNorm/moving_mean
+    features/21/running_var: vgg16_bn/conv3_3/BatchNorm/moving_variance
+    features/24/: vgg16_bn/conv4_1/
+    features/25/weights: vgg16_bn/conv4_1/BatchNorm/gamma
+    features/25/biases: vgg16_bn/conv4_1/BatchNorm/beta
+    features/25/running_mean: vgg16_bn/conv4_1/BatchNorm/moving_mean
+    features/25/running_var: vgg16_bn/conv4_1/BatchNorm/moving_variance
+    features/27/: vgg16_bn/conv4_2/
+    features/28/weights: vgg16_bn/conv4_2/BatchNorm/gamma
+    features/28/biases: vgg16_bn/conv4_2/BatchNorm/beta
+    features/28/running_mean: vgg16_bn/conv4_2/BatchNorm/moving_mean
+    features/28/running_var: vgg16_bn/conv4_2/BatchNorm/moving_variance
+    features/30/: vgg16_bn/conv4_3/
+    features/31/weights: vgg16_bn/conv4_3/BatchNorm/gamma
+    features/31/biases: vgg16_bn/conv4_3/BatchNorm/beta
+    features/31/running_mean: vgg16_bn/conv4_3/BatchNorm/moving_mean
+    features/31/running_var: vgg16_bn/conv4_3/BatchNorm/moving_variance
+    features/34/: vgg16_bn/conv5_1/
+    features/35/weights: vgg16_bn/conv5_1/BatchNorm/gamma
+    features/35/biases: vgg16_bn/conv5_1/BatchNorm/beta
+    features/35/running_mean: vgg16_bn/conv5_1/BatchNorm/moving_mean
+    features/35/running_var: vgg16_bn/conv5_1/BatchNorm/moving_variance
+    features/37/: vgg16_bn/conv5_2/
+    features/38/weights: vgg16_bn/conv5_2/BatchNorm/gamma
+    features/38/biases: vgg16_bn/conv5_2/BatchNorm/beta
+    features/38/running_mean: vgg16_bn/conv5_2/BatchNorm/moving_mean
+    features/38/running_var: vgg16_bn/conv5_2/BatchNorm/moving_variance
+    features/40/: vgg16_bn/conv5_3/
+    features/41/weights: vgg16_bn/conv5_3/BatchNorm/gamma
+    features/41/biases: vgg16_bn/conv5_3/BatchNorm/beta
+    features/41/running_mean: vgg16_bn/conv5_3/BatchNorm/moving_mean
+    features/41/running_var: vgg16_bn/conv5_3/BatchNorm/moving_variance
+    classifier/0/: vgg16_bn/fc6/
+    classifier/3/: vgg16_bn/fc7/
+    classifier/6/: vgg16_bn/fc8/

@@ -1,0 +1,77 @@
+---
+dataset:
+    background_class: {use: false}
+    preprocess:
+        shape:
+            height: 224
+            width: 224
+            channels: 3
+        validate: null
+        final_cpu:
+            - {type: subtract_channel_means}
+            - {type: linear_map, scale: 255.0}
+model:
+    name: vgg16_bn
+    layers:
+        _conv: &conv
+            type: convolution
+            kernel_size: [3, 3]
+            stride: 1
+            padding: same
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            biases_initializer:
+                type: tensorflow.constant_initializer
+                value: 0.1
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
+            normalizer_fn: &normalizer
+                type: tensorflow.contrib.slim.batch_norm
+                scale: true
+                decay: 0.997
+                epsilon: 0.00001
+        _fc: &fc
+            type: fully_connected
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            biases_initializer:
+                type: tensorflow.constant_initializer
+                value: 0.01
+        conv1_1: {<<: *conv, num_outputs: 64}
+        conv1_2: {<<: *conv, num_outputs: 64}
+        pool1: &pool
+            {type: max_pool, kernel_size: [2, 2], padding: valid, stride: 2}
+        conv2_1: {<<: *conv, num_outputs: 128}
+        conv2_2: {<<: *conv, num_outputs: 128}
+        pool2: *pool
+        conv3_1: {<<: *conv, num_outputs: 256}
+        conv3_2: {<<: *conv, num_outputs: 256}
+        conv3_3: {<<: *conv, num_outputs: 256}
+        pool3: *pool
+        conv4_1: {<<: *conv, num_outputs: 512}
+        conv4_2: {<<: *conv, num_outputs: 512}
+        conv4_3: {<<: *conv, num_outputs: 512}
+        pool4: *pool
+        conv5_1: {<<: *conv, num_outputs: 512}
+        conv5_2: {<<: *conv, num_outputs: 512}
+        conv5_3: {<<: *conv, num_outputs: 512}
+        pool5: *pool
+        flatten5: {type: flatten}
+        fc6: {<<: *fc, num_outputs: 4096}
+        dropout6: &dropout {type: dropout, keep_prob: 0.5}
+        fc7: {<<: *fc, num_outputs: 4096}
+        dropout7: *dropout
+        fc8: {<<: *fc, num_outputs: num_classes, activation_fn: null}
+    graph:
+        from: input
+        with: [
+            conv1_1, conv1_2, pool1,
+            conv2_1, conv2_2, pool2,
+            conv3_1, conv3_2, conv3_3, pool3,
+            conv4_1, conv4_2, conv4_3, pool4,
+            conv5_1, conv5_2, conv5_3, pool5, flatten5,
+            fc6, dropout6, fc7, dropout7, fc8]
+        to: output
