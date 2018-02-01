@@ -68,17 +68,20 @@ class ParameterTransformer(object):
             if isinstance(fn, str):
                 fn = import_from_string(fn)
             params[key] = fn
+        # insert is_training into normalizer_params
+        if params.get('normalizer_fn', None):
+            norm_params = params.setdefault('normalizer_params', {})
+            norm_params['is_training'] = self.is_training
         # activation
         activation_overrider = params.pop('activation_overrider', None)
         if activation_overrider:
             params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
                 activation_overrider.apply('activations', tf.get_variable, x))
             self.overriders.append(activation_overrider)
-
         # num outputs
         if params.get('num_outputs', None) == 'num_classes':
             params['num_outputs'] = self.num_classes
-        # set up parameters
+        # set up other parameters
         params['scope'] = name
         try:
             params['padding'] = params['padding'].upper()
