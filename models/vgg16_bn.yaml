@@ -6,10 +6,11 @@ dataset:
             height: 224
             width: 224
             channels: 3
-        validate: null
-        final_cpu:
-            - {type: subtract_channel_means}
-            - {type: linear_map, scale: 255.0}
+        validate:
+            - {type: central_crop, fraction: 0.875}
+        final_cpu: null
+        final_gpu:
+            - {type: normalize_channels}
 model:
     name: vgg16_bn
     layers:
@@ -27,8 +28,8 @@ model:
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.00004
-            normalizer_fn: &normalizer
-                type: tensorflow.contrib.slim.batch_norm
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params:
                 scale: true
                 decay: 0.997
                 epsilon: 0.00001
