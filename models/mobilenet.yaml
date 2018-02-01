@@ -24,8 +24,8 @@ model:
             kernel_size: 3
             stride: 2
             padding: same
-            normalizer_fn:
-                type: tensorflow.contrib.slim.batch_norm
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params:
                 center: true
                 scale: true
                 decay: 0.9997

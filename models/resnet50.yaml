@@ -24,9 +24,8 @@ model:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.0001
             activation_fn: &activator tensorflow.nn.relu
-            normalizer_fn: &normalizer
-                type: tensorflow.contrib.slim.batch_norm
-                scale: true
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params: &normalizer_params
                 decay: 0.997
                 epsilon: 0.00001
         _bottleneck: &neck
@@ -39,7 +38,7 @@ model:
                 shortcut: null
             layers:
                 norm: &norm
-                    <<: *normalizer
+                    <<: *normalizer_params
                     type: batch_normalization
                     activation_fn: *activator
                 conv_shortcut:

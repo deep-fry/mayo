@@ -25,7 +25,8 @@ model:
             stride: 1
             padding: valid
             normalizer_fn:
-                type: tensorflow.contrib.slim.batch_norm
+                tensorflow.contrib.slim.batch_norm
+            normalizer_params:
                 decay: 0.9997
                 epsilon: 0.001
             weights_initializer:

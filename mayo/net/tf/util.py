@@ -60,11 +60,15 @@ class ParameterTransformer(object):
             return overrider
 
     def _config_layer(self, name, params):
+        # normalizer_fn and activation_fn
+        for key in ['activation_fn', 'normalizer_fn']:
+            if key not in params:
+                continue
+            fn = params[key]
+            if isinstance(fn, str):
+                fn = import_from_string(fn)
+            params[key] = fn
         # activation
-        fn = params.get('activation_fn', None)
-        if fn is not None:
-            fn = import_from_string(fn)
-            params['activation_fn'] = fn
         activation_overrider = params.pop('activation_overrider', None)
         if activation_overrider:
             params['activation_fn'] = lambda x: (fn or tf.nn.relu)(
@@ -80,18 +84,6 @@ class ParameterTransformer(object):
             params['padding'] = params['padding'].upper()
         except (KeyError, AttributeError):
             pass
-
-    def _add_norm_scope(self, params, scope_list):
-        # we do not have direct access to normalizer instantiation,
-        # so arg_scope must be used
-        norm_params = params.pop('normalizer_fn', None)
-        if not norm_params:
-            return
-        obj, norm_params = object_from_params(norm_params)
-        norm_params['is_training'] = self.is_training
-        params['normalizer_fn'] = obj
-        scope = slim.arg_scope([params['normalizer_fn']], **norm_params)
-        scope_list.append(scope)
 
     def _add_var_scope(self, layer_node, params, scope_list):
         path = '/'.join(layer_node.module)
@@ -146,8 +138,6 @@ class ParameterTransformer(object):
         # pin variables on cpu
         cpu_context = slim.arg_scope([slim.model_variable], device='/cpu:0')
         scope_list.append(cpu_context)
-        # normalization arg_scope
-        self._add_norm_scope(params, scope_list)
         # variable scope with custom getter for overriders
         self._add_var_scope(layer_node, params, scope_list)
         # custom nested scope
