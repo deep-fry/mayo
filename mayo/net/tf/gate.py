@@ -82,7 +82,8 @@ def _subsample(constructor, tensor, granularity, pool, policy, scope):
 
 def _gate_network(
         constructor, tensor, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn, scope):
+        kernel_size, stride, padding, num_outputs,
+        normalizer_fn, normalizer_params, activation_fn, scope):
     subsampled = _subsample(
         constructor, tensor, granularity, pool, policy, scope)
     if granularity == 'channel':
@@ -117,6 +118,11 @@ def _gate_network(
         'activation_fn': activation_fn,
         'scope': scope,
     }
+    if normalizer_fn:
+        params.update({
+            'normalizer_fn': normalizer_fn,
+            'normalizer_params': normalizer_params,
+        })
     padded = constructor.instantiate_numeric_padding(None, subsampled, params)
     return constructor.instantiate_convolution(None, padded, params)
 
@@ -158,8 +164,8 @@ def _descriminate_by_density(tensor, density, granularity):
 
 def _regularized_gate(
         constructor, node, conv_input, conv_output,
-        kernel_size, stride, padding, density, granularity, pool,
-        activation_fn, policy, weight, is_training, scope):
+        kernel_size, stride, padding, density, granularity, pool, policy,
+        weight, normalizer_fn, normalizer_params, activation_fn, scope):
     """
     Regularize gate by making gate output to predict whether subsampled
     conv output is in top-`density` elements as close as possible.
@@ -176,9 +182,12 @@ def _regularized_gate(
     pool (str):
         The preferred feature extraction method, can be `max`, `l1`, `l2`,
         or `avg`.
-    activation_fn: The activation function used.
-    weight (float): The weight of the gate regularizer loss.
     policy (str): The policy used.
+    weight (float): The weight of the gate regularizer loss.
+    normalizer_fn (func): The normalizer function.
+    normalizer_params (dict): The parameters used to call normalizer_fn.
+    activation_fn: The activation function used.
+    scope (str): The scope name.
 
     Returns regularized gate output.
     """
@@ -187,7 +196,8 @@ def _regularized_gate(
     gate_scope = '{}/gate'.format(scope)
     gate_output = _gate_network(
         constructor, conv_input, granularity, pool, policy,
-        kernel_size, stride, padding, num_outputs, activation_fn, gate_scope)
+        kernel_size, stride, padding, num_outputs,
+        normalizer_fn, normalizer_params, activation_fn, gate_scope)
     loss = None
     loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
     if policy == 'naive':
@@ -278,6 +288,7 @@ class GateLayers(object):
         # delay batch_norm for parametric_gamma
         if policy == 'parametric_gamma':
             normalizer_fn = params.pop('normalizer_fn', None)
+            normalizer_params = params.pop('normalizer_params', {})
             # disable bias
             params['biases_initializer'] = None
             if normalizer_fn is not slim.batch_norm:
@@ -291,19 +302,20 @@ class GateLayers(object):
         # predictor gate network
         gate = _regularized_gate(
             self, node, tensor, output, kernel_size, stride, padding,
-            density, granularity, pool, activation_fn, policy, weight,
-            self.is_training, params['scope'])
+            density, granularity, pool, policy, weight,
+            normalizer_fn, normalizer_params, activation_fn, params['scope'])
 
         # create batch_norm for parametric_gamma
         if policy == 'parametric_gamma':
-            params = {
+            normalizer_params.update({
                 'scale': False,
                 'center': False,
                 'activation_fn': None,
                 'scope': '{}/BatchNorm'.format(params['scope']),
                 'is_training': self.is_training,
-            }
-            output = self.instantiate_batch_normalization(None, output, params)
+            })
+            output = self.instantiate_batch_normalization(
+                None, output, normalizer_params)
             beta = tf.get_variable(
                 '{}/gate/scale'.format(params['scope']),
                 shape=output.shape[-1], dtype=tf.float32,
