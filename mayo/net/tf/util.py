@@ -1,3 +1,4 @@
+import copy
 import itertools
 import contextlib
 
@@ -147,7 +148,7 @@ class ParameterTransformer(object):
         return self._scope_functional(scope_list)
 
     def transform(self, layer_node, params):
-        params = dict(params)
+        params = copy.deepcopy(params)
         # weight and bias hyperparams
         self._create_hyperobjects(params)
         # layer configs
