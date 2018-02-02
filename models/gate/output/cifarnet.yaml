@@ -1,8 +1,7 @@
 ---
 _import: ../../cifarnet.yaml
 _gate:
-    # policy: parametric_gamma
-    policy: naive
+    policy: parametric_gamma
     density: 1.0
     trainable: false
     pool: avg
@@ -13,13 +12,13 @@ model:
         _gated_conv: &gated_conv
             type: gated_convolution
             policy: $(_gate.policy)
-            granularity: channel
             density: $(_gate.density)
             trainable: $(_gate.trainable)
             pool: $(_gate.pool)
+            granularity: channel
             should_gate: true
             weight: 0.0
-            squeeze_excitation_factor: 8
+            squeeze_factor: 8
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}

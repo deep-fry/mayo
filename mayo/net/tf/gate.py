@@ -133,41 +133,6 @@ class GatedConvolutionInstantiator(object):
         return subsampled
 
     @memoize_method
-    def subsampled_output(self):
-        return self.subsample(self.output)
-
-    def _regularize(self, gate):
-        """
-        Regularize gate by making gate output to predict whether subsampled
-        conv output is in top-`density` elements as close as possible.
-        """
-        if self.weight <= 0:
-            return
-        loss = None
-        loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
-        if self.policy == 'naive':
-            match = tf.stop_gradient(self.subsampled_output())
-        elif self.policy == 'parametric_gamma':
-            match = None
-        elif self.policy == 'squeeze_excitation':
-            match = tf.stop_gradient(self.squeeze_excitation())
-        else:
-            self._check_policy()
-        if match is not None:
-            # training
-            # policy descriminator: we simply match values in each channel
-            # using a loss regularizer
-            loss = tf.losses.mean_squared_error(
-                match, gate, loss_collection=None)
-        else:
-            # parametric gamma does not match anything
-            loss = tf.nn.l2_loss(gate)
-        loss *= self.weight
-        tf.add_to_collection(loss_name, loss)
-        self.constructor.session.estimator.register(
-            loss, 'gate.loss', self.node)
-
-    @memoize_method
     def gate(self):
         subsampled = self.subsample(self.input)
         if self.granularity == 'channel':
@@ -210,9 +175,7 @@ class GatedConvolutionInstantiator(object):
         }
         padded = self.constructor.instantiate_numeric_padding(
             None, subsampled, params)
-        output = self.constructor.instantiate_convolution(None, padded, params)
-        self._regularize(output)
-        return output
+        return self.constructor.instantiate_convolution(None, padded, params)
 
     @memoize_method
     def actives(self):
@@ -247,28 +210,7 @@ class GatedConvolutionInstantiator(object):
         active = tf.reshape(reshaped > threshold, tensor.shape)
         return tf.stop_gradient(active)
 
-    @memoize_method
-    def squeeze_excitation(self):
-        def params(name, outputs):
-            scope = '{}/SqueezeExcitation/{}'.format(self.scope, name)
-            return {
-                'kernel_size': 1,
-                'stride': 1,
-                'num_outputs': outputs,
-                'scope': scope,
-                'weights_initializer':
-                    tf.truncated_normal_initializer(stddev=0.01),
-                'biases_initializer': tf.constant_initializer(value=1.0),
-            }
-        num_squeezed = math.ceil(self.num_outputs / float(self.squeeze_factor))
-        conv = self.constructor.instantiate_convolution
-        squeeze_params = params('Squeeze', num_squeezed)
-        squeezed = conv(None, self.subsampled_output(), squeeze_params)
-        expand_params = params('Expand', self.num_outputs)
-        return conv(None, squeezed, expand_params)
-
-    def _instantiate_normalizer(self, prenorm):
-        # normalization
+    def _normalization(self, prenorm):
         if not self.normalizer_fn:
             return prenorm
         if self.policy == 'parametric_gamma':
@@ -292,15 +234,71 @@ class GatedConvolutionInstantiator(object):
         normalizer_params = dict(self.normalizer_params, scope=scope)
         return self.normalizer_fn(self.output, **normalizer_params)
 
+    def _squeeze_excitation(self, tensor):
+        def params(name, outputs):
+            scope = '{}/SqueezeExcitation/{}'.format(self.scope, name)
+            return {
+                'kernel_size': 1,
+                'stride': 1,
+                'num_outputs': outputs,
+                'scope': scope,
+                'weights_initializer':
+                    tf.truncated_normal_initializer(stddev=0.01),
+                'biases_initializer': tf.constant_initializer(value=1.0),
+            }
+        num_squeezed = math.ceil(self.num_outputs / float(self.squeeze_factor))
+        conv = self.constructor.instantiate_convolution
+        squeeze_params = params('Squeeze', num_squeezed)
+        squeezed = conv(None, tensor, squeeze_params)
+        expand_params = params('Expand', self.num_outputs)
+        return conv(None, squeezed, expand_params)
+
     def instantiate(self):
-        output = self._instantiate_normalizer(self.output)
+        normalized = self._normalization(self.output)
         if self.activation_fn is not None:
-            output = self.activation_fn(output)
+            activated = self.activation_fn(normalized)
+        if self.policy == 'squeeze_excitation':
+            se = self._squeeze_excitation(activated)
+            activated = se * activated
         # gating
         if self.should_gate:
-            output *= tf.cast(self.actives(), tf.float32)
+            gated = activated * tf.cast(self.actives(), tf.float32)
+        # estimator
         self._register()
-        return output
+        # regularizer
+        if self.policy == 'naive':
+            match = self.subsample(activated)
+        elif self.policy == 'parametric_gamma':
+            match = None
+        elif self.policy == 'squeeze_excitation':
+            match = se
+        else:
+            self._check_policy()
+        self._regularize(self.gate(), match)
+        return gated
+
+    def _regularize(self, gate, match):
+        """
+        Regularize gate by making gate output to predict whether subsampled
+        conv output is in top-`density` elements as close as possible.
+        """
+        if self.weight <= 0:
+            return
+        loss = None
+        loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
+        if match is not None:
+            # training
+            # policy descriminator: we simply match values in each channel
+            # using a loss regularizer
+            loss = tf.losses.mean_squared_error(
+                tf.stop_gradient(match), gate, loss_collection=None)
+        else:
+            # parametric gamma does not match anything
+            loss = tf.nn.l2_loss(gate)
+        loss *= self.weight
+        tf.add_to_collection(loss_name, loss)
+        self.constructor.session.estimator.register(
+            loss, 'gate.loss', self.node)
 
     def _register(self):
         history = None if self.is_training else 'infinite'
@@ -356,7 +354,7 @@ class GateLayers(object):
         gate_params = {
             'density': params.pop('density'),
             'granularity': params.pop('granularity', 'channel'),
-            'pool': params.pop('pool', 'max'),
+            'pool': params.pop('pool', 'avg'),
             'policy': params.pop('policy', 'parametric_gamma'),
             'weight': params.pop('weight', 0.01),
             'squeeze_factor': params.pop('squeeze_factor', None),
