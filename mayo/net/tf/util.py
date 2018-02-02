@@ -102,6 +102,7 @@ class ParameterTransformer(object):
 
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
+            log.debug('Variable {} created.'.format(v))
             name = v.op.name
             overrider = None
             if name.endswith('biases'):

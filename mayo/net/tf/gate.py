@@ -24,7 +24,7 @@ class GatePolicyTypeError(GateError):
 
 
 class GatedConvolutionInstantiator(object):
-    _accepted_policies = ['naive', 'parametric_gamma']
+    _accepted_policies = ['naive', 'parametric_gamma', 'squeeze_excitation']
     _accepted_granularities = ['channel', 'vector']
     _normalizer_names = {
         slim.batch_norm: 'BatchNorm',
@@ -34,6 +34,7 @@ class GatedConvolutionInstantiator(object):
             self, constructor, node, conv_params, gate_params, conv_input):
         super().__init__()
         self.constructor = constructor
+        self.is_training = constructor.is_training
         self.node = node
 
         self.kernel_size = conv_params['kernel_size']
@@ -278,7 +279,7 @@ class GatedConvolutionInstantiator(object):
                 'scope': '{}/BatchNorm'.format(self.scope),
                 'is_training': self.is_training,
             })
-            output = self.instantiate_batch_normalization(
+            output = self.constructor.instantiate_batch_normalization(
                 None, self.output, normalizer_params)
             beta_scope = '{}/gate/shift'.format(self.scope)
             beta = tf.get_variable(
@@ -302,7 +303,7 @@ class GatedConvolutionInstantiator(object):
         return output
 
     def _register(self):
-        history = None if self.constructor.is_training else 'infinite'
+        history = None if self.is_training else 'infinite'
         self.constructor.session.estimator.register(
             self.gate(), 'gate.output', self.node, history=history)
         if self.should_gate:
@@ -358,7 +359,7 @@ class GateLayers(object):
             'pool': params.pop('pool', 'max'),
             'policy': params.pop('policy', 'parametric_gamma'),
             'weight': params.pop('weight', 0.01),
-            'squeeze_factor': params.pop('squeeze_excitation_factor', None),
+            'squeeze_factor': params.pop('squeeze_factor', None),
             'should_gate': params.pop('should_gate', True),
         }
         return GatedConvolutionInstantiator(
