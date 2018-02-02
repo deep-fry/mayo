@@ -96,6 +96,9 @@ class ResourceEstimator(object):
     def get_history(self, name, node=None):
         return self.statistics[node or 'global'][name]
 
+    def flush_history(self, name, node=None):
+        self.statistics[node or 'global'][name] = []
+
     def get_histories(self, name):
         return {
             layer_name: layer_stats[name]
