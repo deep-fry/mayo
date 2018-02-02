@@ -230,19 +230,17 @@ def _regularized_gate(
             'scope': scope,
             'squeeze_excitation_factor': se_factor
         }
-        conv_output, squeeze_excitation = instantiate_squeeze_excitation(
-            constructor, node, conv_output, se_params)
     loss = None
     loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
     if policy == 'naive':
-        if se_factor is None:
-            # output subsample
-            subsample_scope = '{}/subsample'.format(scope)
-            subsampled = _subsample(
-                constructor, conv_output, granularity, pool, policy,
-                subsample_scope)
-        else:
-            subsampled = squeeze_excitation
+        # output subsample
+        subsample_scope = '{}/subsample'.format(scope)
+        subsampled = _subsample(
+            constructor, conv_output, granularity, pool, policy,
+            subsample_scope)
+        if se_factor is not None:
+            conv_output, subsampled = instantiate_squeeze_excitation(
+                constructor, node, subsampled, se_params)
         # training
         # policy descriminator: we simply match max values in each channel
         # using a loss regularizer
