@@ -75,7 +75,7 @@ class GatedConvolutionInstantiator(object):
                 .format(self.policy, ', '.join(self._accepted_policies)))
         if self.policy == 'parametric_gamma':
             if self.normalizer_fn is not slim.batch_norm:
-                raise GatePolicyTypeError(
+                raise GateParameterValueError(
                     'Policy "{}" is used, we expect slim.batch_norm to '
                     'be used but it is absent in {}.'
                     .format(self.policy, self.node))
@@ -279,11 +279,16 @@ class GatedConvolutionInstantiator(object):
 
     def _regularize(self, gate, match):
         """
-        Regularize gate by making gate output to predict whether subsampled
-        conv output is in top-`density` elements as close as possible.
+        Regularize gate by making gate output `gate` to match `match` as close
+        as possible.  If `match` is not supplied, we use a L1 regularizer to
+        drive `gate` to zero.
         """
         if self.weight <= 0:
-            return
+            if match is not None:
+                raise GateParameterValueError(
+                    'We expect weight to be non-zero if `match` is specified, '
+                    'as without `match` to regularize gate, the gate network '
+                    'is not learning anything.')
         loss = None
         loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
         if match is not None:
@@ -294,7 +299,7 @@ class GatedConvolutionInstantiator(object):
                 tf.stop_gradient(match), gate, loss_collection=None)
         else:
             # parametric gamma does not match anything
-            loss = tf.nn.l2_loss(gate)
+            loss = tf.reduce_sum(tf.abs(gate))
         loss *= self.weight
         tf.add_to_collection(loss_name, loss)
         self.constructor.session.estimator.register(
@@ -356,7 +361,7 @@ class GateLayers(object):
             'granularity': params.pop('granularity', 'channel'),
             'pool': params.pop('pool', 'avg'),
             'policy': params.pop('policy', 'parametric_gamma'),
-            'weight': params.pop('weight', 0.01),
+            'weight': params.pop('weight', 0),
             'squeeze_factor': params.pop('squeeze_factor', None),
             'should_gate': params.pop('should_gate', True),
         }
