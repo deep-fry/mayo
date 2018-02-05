@@ -1,21 +1,16 @@
 ---
-_import: ../../resnet18.yaml
-model:
-    name: resnet18
-    layers:
-        _basic_block: &bb
-            layers:
-                conv1: &conv_prune
-                    activation_overrider:
-                        type: mayo.override.ChannelPruner
-                        density: 1.0
-                        should_update: true
-                        weight: 0.00001
-                conv2: {<<: *conv_prune}
-        b11: {<<: *bb}
-        b12: {<<: *bb}
-        b21: {<<: *bb}
-        b31: {<<: *bb}
-        b32: {<<: *bb}
-        b41: {<<: *bb}
-        b42: {<<: *bb}
+model.layers:
+    b11: &bb
+        conv1: &conv_prune
+            activation_overrider:
+                type: mayo.override.ChannelPruner
+                density: 1.0
+                should_update: true
+                weight: 0.00001
+        conv2: {<<: *conv_prune}
+    b12: {<<: *bb}
+    b21: {<<: *bb}
+    b31: {<<: *bb}
+    b32: {<<: *bb}
+    b41: {<<: *bb}
+    b42: {<<: *bb}

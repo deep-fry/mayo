@@ -7,7 +7,6 @@ model.layers:
           threshold: 0.0
           should_update: true
     conv1: &ds_conv
-      layers:
         pointwise: {<<: *overrider}
     conv2: {<<: *ds_conv}
     conv3: {<<: *ds_conv}
