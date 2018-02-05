@@ -18,6 +18,3 @@ model.layers:
     conv5_1: {<<: *overrider}
     conv5_2: {<<: *overrider}
     conv5_3: {<<: *overrider}
-    fc6: {<<: *overrider}
-    fc7: {<<: *overrider}
-    fc8: {<<: *overrider}
