@@ -24,6 +24,7 @@ model:
             type: convolution
             normalizer_fn: tensorflow.contrib.slim.batch_norm
             normalizer_params:
+                scale: true
                 decay: 0.997
                 epsilon: 0.00001
             weights_initializer: &initializer
