@@ -156,7 +156,6 @@ class ChannelPruner(ChannelPrunerBase):
         raise ValueError('Unable to find gamma from BatchNorm')
 
     def _apply(self, value):
-        import pdb; pdb.set_trace()
         masked = super()._apply(value)
         # add reg
         self.scale = self._compute_scale(value)
