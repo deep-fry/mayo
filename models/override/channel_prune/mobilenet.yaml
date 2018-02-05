@@ -2,10 +2,10 @@
 model.layers:
     conv0: &overrider
       activation_overrider:
-          type: mayo.override.ChannelGater
-          policy: avg
-          threshold: 0.0
+          type: mayo.override.ChannelPruner
+          density: 1.0
           should_update: true
+          weight: 0.00001
     conv1: &ds_conv
       layers:
         pointwise: {<<: *overrider}
