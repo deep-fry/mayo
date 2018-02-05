@@ -1,18 +1,21 @@
 ---
-_import: ../../vgg16.yaml
+_import: ../../vgg16_bn.yaml
 _gate:
-  trainable: false
+  trainable: true
+  policy: parametric_gamma
+  density: 0.5
 model:
-    name: vgg16
+    name: vgg16_bn
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            density: 0.5
+            policy: $(_gate.policy)
+            density: $(_gate.density)
             trainable: $(_gate.trainable)
-            policy: 'online'
-            weight: 0.0001
-            pool: 'avg'
-            should_gate: false
+            pool: avg
+            granularity: channel
+            should_gate: true
+            weight: 0.00001
         conv1_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
         conv1_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
         conv2_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
