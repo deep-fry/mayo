@@ -1,20 +1,21 @@
 ---
 model.layers:
-    conv1_1: &overrider
-        activation_overrider:
-            type: mayo.override.ChannelPruner
-            density: 1.0
-            should_update: true
-            weight: 0.00001
-    conv1_2: {<<: *overrider}
-    conv2_1: {<<: *overrider}
-    conv2_2: {<<: *overrider}
-    conv3_1: {<<: *overrider}
-    conv3_2: {<<: *overrider}
-    conv3_3: {<<: *overrider}
-    conv4_1: {<<: *overrider}
-    conv4_2: {<<: *overrider}
-    conv4_3: {<<: *overrider}
-    conv5_1: {<<: *overrider}
-    conv5_2: {<<: *overrider}
-    conv5_3: {<<: *overrider}
+    conv1_1:
+        layers: &overrider
+            activation_overrider:
+                type: mayo.override.ChannelPruner
+                density: 1.0
+                should_update: true
+                weight: 0.00001
+    conv1_2: {layers: {<<: *overrider}}
+    conv2_1: {layers: {<<: *overrider}}
+    conv2_2: {layers: {<<: *overrider}}
+    conv3_1: {layers: {<<: *overrider}}
+    conv3_2: {layers: {<<: *overrider}}
+    conv3_3: {layers: {<<: *overrider}}
+    conv4_1: {layers: {<<: *overrider}}
+    conv4_2: {layers: {<<: *overrider}}
+    conv4_3: {layers: {<<: *overrider}}
+    conv5_1: {layers: {<<: *overrider}}
+    conv5_2: {layers: {<<: *overrider}}
+    conv5_3: {layers: {<<: *overrider}}
