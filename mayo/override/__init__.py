@@ -17,7 +17,7 @@ from mayo.override.quantize import (
 from mayo.override.prune import (
     MeanStdPruner,
     DynamicNetworkSurgeryPruner,
-    ChannelPruner,
+    NetworkSlimmer,
 )
 from mayo.override.gate import (
     ChannelGater,
@@ -42,5 +42,5 @@ __all__ = [
     ChannelGater,
     RandomChannelGater,
     IncrementalQuantizer,
-    ChannelPruner
+    NetworkSlimmer,
 ]

@@ -101,7 +101,7 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
 
 
 class ChannelPrunerBase(OverriderBase):
-    channel_mask = Parameter('channel_mask', None, None, tf.bool)
+    mask = Parameter('mask', None, None, tf.bool)
 
     def __init__(self, should_update=True):
         super().__init__(should_update)
@@ -113,12 +113,12 @@ class ChannelPrunerBase(OverriderBase):
                              .format(value.shape))
         self.channel_shape = value.shape[3]
         self._parameter_config = {
-            'channel_mask': {
+            'mask': {
                 'initial': tf.ones_initializer(dtype=tf.bool),
                 'shape': self.channel_shape,
             }
         }
-        mask = tf.expand_dims(self.channel_mask, 0)
+        mask = tf.expand_dims(self.mask, 0)
         return value * util.cast(mask, float)
 
     def _updated_mask(self, var, mask, session):
@@ -126,18 +126,18 @@ class ChannelPrunerBase(OverriderBase):
             'Method to compute an updated mask is not implemented.')
 
     def _update(self, session):
-        channel_mask = self._updated_mask(
-            self.before, self.channel_mask, session)
-        session.assign(self.channel_mask, channel_mask)
+        mask = self._updated_mask(
+            self.before, self.mask, session)
+        session.assign(self.mask, mask)
 
     def _info(self, session):
-        mask = util.cast(session.run(self.channel_mask), int)
+        mask = util.cast(session.run(self.mask), int)
         density = Percent(util.sum(mask) / util.count(mask))
         return self._info_tuple(
-            mask=self.channel_mask.name, density=density, count_=mask.size)
+            mask=self.mask.name, density=density, count_=mask.size)
 
 
-class ChannelPruner(ChannelPrunerBase):
+class NetworkSlimmer(ChannelPrunerBase):
     # This pruner only works on activations
     def __init__(self, density=None, weight=0.01, should_update=True):
         super().__init__(should_update)
@@ -164,14 +164,14 @@ class ChannelPruner(ChannelPrunerBase):
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         return util.cast(masked, float)
 
-    def _updated_mask(self, var, channel_mask, session):
-        channel_mask, scale = session.run([channel_mask, self.scale])
+    def _updated_mask(self, var, mask, session):
+        mask, scale = session.run([mask, self.scale])
         num_active = math.ceil(len(scale) * self.density)
         threshold = sorted(scale)[-num_active]
         # top_k, where k is the number of active channels
         # disable channels with smaller activation,
-        channel_mask = channel_mask * util.cast((scale > threshold), float)
-        return channel_mask
+        mask = mask * util.cast((scale > threshold), float)
+        return mask
 
 
 class FilterPruner(PrunerBase):
