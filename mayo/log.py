@@ -9,6 +9,9 @@ from contextlib import contextmanager
 
 from termcolor import colored
 
+if os.name == "nt":
+    import colorama
+    colorama.init()
 
 class Logger(object):
     _levels = {
@@ -43,7 +46,10 @@ class Logger(object):
         self.level = 'info'
         self.pause_level = 'error'
         self.frame = False
-        self.color = 'color' in os.environ['TERM']
+        if 'TERM' in os.environ:
+            self.color = 'color' in os.environ['TERM']
+        else:
+            self.color = True
         self._last_is_update = False
         self._last_use_spinner = True
         self._last_level = self.level
