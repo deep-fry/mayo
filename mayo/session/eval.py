@@ -61,7 +61,7 @@ class EvaluateBase(Session):
                 topn += each.tolist()
             topn = topn[:self.num_examples]
             stats[name] = Percent(sum(topn) / len(topn))
-            self.estimator.flush_history(name)
+            self.estimator.flush(name)
         log.info('    top1: {}, top5: {} [{} images]'.format(
             stats['top1'], stats['top5'], self.num_examples))
         return stats
