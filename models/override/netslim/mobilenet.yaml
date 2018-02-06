@@ -1,14 +1,15 @@
 ---
+_import: ../../mobilenet.yaml
 model.layers:
     conv0: &overrider
-      activation_overrider:
-          type: mayo.override.ChannelPruner
-          density: 1.0
-          should_update: true
-          weight: 0.00001
+        activation_overrider:
+            type: mayo.override.NetworkSlimmer
+            density: 1.0
+            should_update: true
+            weight: 0.00001
     conv1: &ds_conv
-      layers:
-        pointwise: {<<: *overrider}
+        layers:
+            pointwise: {<<: *overrider}
     conv2: {<<: *ds_conv}
     conv3: {<<: *ds_conv}
     conv4: {<<: *ds_conv}

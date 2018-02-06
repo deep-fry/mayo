@@ -1,8 +1,9 @@
 ---
+_import: ../../cifarnet.yaml
 model.layers:
     conv0: &overrider
         activation_overrider:
-            type: mayo.override.ChannelPruner
+            type: mayo.override.NetworkSlimmer
             density: 0.75
             should_update: true
     conv1: {<<: *overrider}
