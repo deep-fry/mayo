@@ -23,7 +23,9 @@ class ResourceEstimator(object):
             'properties': self.properties,
         }
 
-    def register(self, tensor, name, node=None, history=None, formatter=None):
+    def register(
+            self, tensor, name, node=None, history=None,
+            transformer=None, formatter=None):
         """
         Register statistic tensors to be run by session.
 
@@ -35,6 +37,7 @@ class ResourceEstimator(object):
         history:
             the number of past values to keep, if history='infinite' we do not
             discard past values; if not specified, we keep 100.
+        transformer: transform value before adding to statistics.
         formatter: calls .register_print with `formatter`.
         """
         history = 100 if history is None else history
@@ -46,7 +49,7 @@ class ResourceEstimator(object):
                 'Tensor named {!r} already registered for layer {!r}.'
                 .format(name, layer))
         layer[name] = tensor
-        prop[name] = {'history': history}
+        prop[name] = {'history': history, 'transformer': transformer}
         if formatter:
             self.register_formatter(formatter)
 
@@ -77,6 +80,9 @@ class ResourceEstimator(object):
                 if history != 'infinite':
                     while len(values) >= history:
                         values.pop(0)
+                transformer = prop[key]['transformer']
+                if transformer:
+                    value = transformer(value)
                 values.append(value)
 
     def format(self, batch_size=None):

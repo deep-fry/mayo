@@ -78,14 +78,16 @@ class Session(object, metaclass=SessionMeta):
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.estimator = ResourceEstimator()
-        self.register_formatters()
+        self._register_progress()
         self.nets = self._instantiate_nets()
+        self._register_estimates()
 
     def __del__(self):
         log.debug('Finishing...')
         self.tf_session.close()
 
-    def register_formatters(self):
+    def _register_progress(self):
+        # progress
         def progress_formatter(estimator):
             progress = estimator.get_value('imgs_seen') / self.num_examples
             if self.is_training:
@@ -96,6 +98,16 @@ class Session(object, metaclass=SessionMeta):
         self.estimator.register(
             self.imgs_seen_op, 'imgs_seen',
             history=1, formatter=progress_formatter)
+
+    def _register_estimates(self):
+        # labels
+        def label_transformer(index):
+            # TODO label transformer
+            return index
+        history = 'infinite' if self.mode == 'validate' else None
+        self.estimator.register(
+            self.nets[0].labels(), 'labels', history=history,
+            transformer=label_transformer)
 
     @property
     def is_training(self):
