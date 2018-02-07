@@ -24,7 +24,8 @@ class GatePolicyTypeError(GateError):
 
 
 class GatedConvolutionInstantiator(object):
-    _accepted_policies = ['naive', 'parametric_gamma', 'squeeze_excitation']
+    _accepted_policies = [
+        'naive', 'parametric_gamma', 'squeeze_excitation']
     _accepted_granularities = ['channel', 'vector']
     _normalizer_names = {
         slim.batch_norm: 'BatchNorm',
@@ -60,6 +61,7 @@ class GatedConvolutionInstantiator(object):
         self.weight = gate_params['weight']
         self.squeeze_factor = gate_params['squeeze_factor']
         self.should_gate = gate_params['should_gate']
+        self.gate_trainable = gate_params['trainable']
         self._check_policy()
         self._check_granularity()
 
@@ -158,7 +160,7 @@ class GatedConvolutionInstantiator(object):
             stride = [stride_height, 1]
         else:
             self._check_granularity()
-        normalizer_fn = None if self.policy == 'naive' else self.normalizer_fn
+        normalizer_fn = None
         params = {
             'kernel_size': kernel,
             'stride': stride,
@@ -172,6 +174,7 @@ class GatedConvolutionInstantiator(object):
             'normalizer_params': self.normalizer_params,
             'activation_fn': self.activation_fn,
             'scope': '{}/gate'.format(self.scope),
+            'trainable': self.gate_trainable
         }
         padded = self.constructor.instantiate_numeric_padding(
             None, subsampled, params)
@@ -364,6 +367,7 @@ class GateLayers(object):
             'weight': params.pop('weight', 0),
             'squeeze_factor': params.pop('squeeze_factor', None),
             'should_gate': params.pop('should_gate', True),
+            'trainable': params.pop('gate_trainable', True)
         }
         return GatedConvolutionInstantiator(
             self, node, params, gate_params, tensor).instantiate()
