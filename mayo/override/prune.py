@@ -2,7 +2,7 @@ import math
 
 import tensorflow as tf
 
-from mayo.util import Percent
+from mayo.util import Percent, memoize_property
 from mayo.override import util
 from mayo.override.base import OverriderBase, Parameter
 
@@ -109,16 +109,19 @@ class ChannelPrunerBase(OverriderBase):
     def _apply(self, value):
         # check shape
         if not len(value.shape) >= 3:
-            raise ValueError('Incorrect dimension {} for channel pruner'
-                             .format(value.shape))
-        self.channel_shape = value.shape[3]
+            raise ValueError(
+                'Incorrect dimension {} for channel pruner'
+                .format(value.shape))
+        self.num_channels = value.shape[-1]
         self._parameter_config = {
             'mask': {
                 'initial': tf.ones_initializer(dtype=tf.bool),
-                'shape': self.channel_shape,
-            }
+                'shape': self.num_channels,
+            },
         }
-        mask = tf.expand_dims(self.mask, 0)
+        mask = self.mask
+        for _ in range(3):
+            mask = tf.expand_dims(mask, 0)
         return value * util.cast(mask, float)
 
     def _updated_mask(self, var, mask, session):
@@ -126,8 +129,7 @@ class ChannelPrunerBase(OverriderBase):
             'Method to compute an updated mask is not implemented.')
 
     def _update(self, session):
-        mask = self._updated_mask(
-            self.before, self.mask, session)
+        mask = self._updated_mask(self.before, self.mask, session)
         session.assign(self.mask, mask)
 
     def _info(self, session):
@@ -144,34 +146,30 @@ class NetworkSlimmer(ChannelPrunerBase):
         self.density = density
         self.weight = weight
 
-    def _has_batch_norm(self, value):
-        # FIXME a hack to determine this layer has batch norm
-        return 'BatchNorm' in value.name
-
-    def _compute_scale(self, value):
-        layer = value.name.split('/')[2]
-        for variable in tf.trainable_variables():
-            if layer in variable.name and 'BatchNorm/gamma' in variable.name:
-                return variable
-        raise ValueError('Unable to find gamma from BatchNorm')
+    @memoize_property
+    def gamma(self):
+        name = '{}/BatchNorm/gamma'.format(self.node.formatted_name())
+        trainables = tf.trainable_variables()
+        for v in trainables:
+            if v.op.name == name:
+                return v
+        raise ValueError(
+            'Unable to find gamma {!r} for layer {!r}.'
+            .format(name, self.node.formatted_name()))
 
     def _apply(self, value):
         masked = super()._apply(value)
         # add reg
-        self.scale = self._compute_scale(value)
         tf.losses.add_loss(
-            self.weight * tf.reduce_sum(tf.abs(self.scale)),
+            self.weight * tf.reduce_sum(tf.abs(self.gamma)),
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         return util.cast(masked, float)
 
     def _updated_mask(self, var, mask, session):
-        mask, scale = session.run([mask, self.scale])
+        mask, scale = session.run([mask, self.gamma])
         num_active = math.ceil(len(scale) * self.density)
         threshold = sorted(scale)[-num_active]
-        # top_k, where k is the number of active channels
-        # disable channels with smaller activation,
-        mask = mask * util.cast((scale > threshold), float)
-        return mask
+        return mask * util.cast(scale > threshold, float)
 
 
 class FilterPruner(PrunerBase):

@@ -153,7 +153,7 @@ class OverriderBase(object):
             return var
         return wrapped
 
-    def apply(self, scope, getter, value):
+    def apply(self, node, scope, getter, value):
         """
         Things to apply to the variable in `value`, returns the
         overridden result.
@@ -164,6 +164,7 @@ class OverriderBase(object):
         #         'Overrider has already been applied to {!r}'
         #         .format(self.before))
         self._applied = True
+        self.node = node
         self.name = value.op.name
         self.before = value
         self._scope = scope
@@ -191,24 +192,19 @@ class OverriderBase(object):
                 'Method "apply" must be invoked before call "update".')
         ops = session.graph.get_operations()
         self._update(session)
-        new_ops = [o for o in session.graph.get_operations() if o not in ops]
-        check_ops = all(
-            self._check_tf_type(
-                a, ('Placeholder', 'Assign', 'NoOp')) for a in new_ops)
-        if check_ops:
-            log.info(
-                '{}.update() adds new operations {} to a graph. Ignored.'
-                .format(self.__class__.__name__, new_ops))
-        if new_ops and (not check_ops):
+        new_ops = []
+        for o in session.graph.get_operations():
+            if o in ops:
+                continue
+            if o.type in ('Placeholder', 'Assign', 'NoOp'):
+                __import__('ipdb').set_trace()
+                continue
+            new_ops.append(o)
+        if new_ops:
             raise ReadOnlyGraphChangedError(
                 '{}.update() adds new operations {} to a read-only graph.'
                 .format(self.__class__.__name__, new_ops))
         log.debug('Updated overrider {!r}'.format(self.info(session)))
-
-    def _check_tf_type(self, op, types):
-        if op.type not in types:
-            return False
-        return True
 
     def assign(self, session):
         """Assign overridden values to parameters before overriding.  """

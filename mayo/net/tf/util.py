@@ -60,7 +60,7 @@ class ParameterTransformer(object):
         with tf.variable_scope(component):
             return overrider
 
-    def _config_layer(self, name, params):
+    def _config_layer(self, node, params):
         # normalizer_fn and activation_fn
         for key in ['activation_fn', 'normalizer_fn']:
             if key not in params:
@@ -80,20 +80,21 @@ class ParameterTransformer(object):
             if activation_fn is None:
                 activation_fn = lambda x: x
             params['activation_fn'] = lambda x: activation_fn(
-                activation_overrider.apply('activations', tf.get_variable, x))
+                activation_overrider.apply(
+                    node, 'activations', tf.get_variable, x))
             self.overriders.append(activation_overrider)
         # num outputs
         if params.get('num_outputs', None) == 'num_classes':
             params['num_outputs'] = self.num_classes
         # set up other parameters
-        params['scope'] = name
+        params['scope'] = node.name
         try:
             params['padding'] = params['padding'].upper()
         except (KeyError, AttributeError):
             pass
 
-    def _add_var_scope(self, layer_node, params, scope_list):
-        path = '/'.join(layer_node.module)
+    def _add_var_scope(self, node, params, scope_list):
+        path = '/'.join(node.module)
         if not path:
             raise ValueError('Module path is empty.')
 
@@ -111,11 +112,11 @@ class ParameterTransformer(object):
                 overrider = weights_overrider
             if overrider:
                 log.debug('Overriding {!r} with {!r}'.format(name, overrider))
-                v = overrider.apply(name, getter, v)
+                v = overrider.apply(node, name, getter, v)
                 self.overriders.append(overrider)
-            node_name = layer_node.formatted_name()
+            node_name = node.formatted_name()
             var_name = name.replace('{}/'.format(node_name), '')
-            self.variables.setdefault(layer_node, {})[var_name] = v
+            self.variables.setdefault(node, {})[var_name] = v
             return v
 
         @contextlib.contextmanager
@@ -156,7 +157,7 @@ class ParameterTransformer(object):
         # weight and bias hyperparams
         self._create_hyperobjects(params)
         # layer configs
-        self._config_layer(layer_node.name, params)
+        self._config_layer(layer_node, params)
         # nested scopes
         scope = self._scope(layer_node, params)
         return params, scope
