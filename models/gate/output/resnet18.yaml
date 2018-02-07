@@ -7,8 +7,18 @@ model:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: 0.5
-            online: true
+            policy: parametric_gamma
             weight: 0.0001
+            gate_trainable: true
+            trainable: true
+            should_gate: true
+            pool: avg
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params:
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
         _basic_block: &bb
             kwargs: {should_gate: false}
             layers:
