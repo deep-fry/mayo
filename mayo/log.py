@@ -13,6 +13,7 @@ if os.name == "nt":
     import colorama
     colorama.init()
 
+
 class Logger(object):
     _levels = {
         'debug': 0,
@@ -46,10 +47,7 @@ class Logger(object):
         self.level = 'info'
         self.pause_level = 'error'
         self.frame = False
-        if 'TERM' in os.environ:
-            self.color = 'color' in os.environ['TERM']
-        else:
-            self.color = True
+        self.color = 'color' in os.environ.get('TERM', '')
         self._last_is_update = False
         self._last_use_spinner = True
         self._last_level = self.level
