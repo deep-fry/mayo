@@ -266,7 +266,11 @@ class GatedConvolutionInstantiator(object):
             activated = se * activated
         # gating
         if self.should_gate:
-            gated = activated * tf.cast(self.actives(), tf.float32)
+            if self.activation_fn is None:
+                gated = normalized * tf.cast(self.actives(), tf.float32)
+            else:
+                gated = activated * tf.cast(self.actives(), tf.float32)
+
         # estimator
         self._register()
         # regularizer
