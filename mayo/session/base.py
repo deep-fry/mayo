@@ -114,7 +114,7 @@ class Session(object, metaclass=SessionMeta):
         return self.config.system.num_gpus
 
     def _auto_select_gpus(self):
-        mem_bound = 500
+        mem_bound = self.config.system.gpu_mem_bound
         try:
             info = subprocess.check_output(
                 'nvidia-smi', shell=True, stderr=subprocess.STDOUT)

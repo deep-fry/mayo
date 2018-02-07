@@ -283,6 +283,7 @@ Arguments:
         anything = args['<anything>']
         commands = self.commands()
         for each in anything:
+            each = each.strip() # some problems with \r when running through Linux subsystem on Windows
             if any(each.endswith(suffix) for suffix in ('.yaml', '.yml')):
                 self.config.yaml_update(each)
                 log.key('Using config yaml {!r}...'.format(each))

@@ -1,0 +1,144 @@
+---
+dataset:
+    background_class: {use: true}
+    preprocess:
+        shape:
+            height: 32
+            width: 32
+            channels: 3
+        validate: {type: central_crop, fraction: 0.875}
+        final_cpu:
+            - {type: resize, fill: false}
+            - {type: linear_map, scale: 2.0, shift: -1.0}
+model:
+    name: se-resnet50-cifar10
+    description:
+        ResNet50 for CIFAR-10 dataset, implementation from:
+            https://github.com/tensorflow/models/blob/master/official/resnet/resnet_model.py
+        with additional squeeze-and-excitation blocks, as described in:
+            https://github.com/hujie-frank/SENet
+    layers:
+        _conv: &conv
+            type: convolution
+            weights_initializer: &initializer
+                type: tensorflow.variance_scaling_initializer
+            weights_regularizer: &regularizer
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0001
+            activation_fn: &activator tensorflow.nn.relu
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params: &normalizer_params
+                scale: true
+                decay: 0.997
+                epsilon: 0.00001
+                center: true
+                fused: true
+                
+        _block: &block
+            type: module
+            kwargs:
+                depth: null
+                stride: null
+                projection: null
+                se_depth: null
+            layers:
+                norm1: &norm
+                    <<: *normalizer_params
+                    type: batch_normalization
+                    activation_fn: *activator
+                conv1:
+                    <<: *conv
+                    kernel_size: 3
+                    stride: ^(stride)
+                    num_outputs: ^(depth)
+                norm2:
+                    <<: *norm
+                conv2:
+                    <<: *conv
+                    kernel_size: 3
+                    stride: 1
+                    num_outputs: ^(depth)
+                add: {type: add}
+
+                # if projection
+                shortcut_preprocess_True:
+                    <<: *norm
+                shortcut_projection_True:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: ^(stride)
+                    num_outputs: ^(depth)
+                # else
+                shortcut_preprocess_False:
+                    type: identity
+                shortcut_projection_False:
+                    type: identity
+                
+                # SE block
+                se_squeeze:
+                    type: average_pool
+                    stride: 1
+                    kernel_size: null
+                se_excite1:
+                    type: fully_connected
+                    num_outputs: ^(se_depth)
+                    weights_initializer: { <<: *initializer }
+                se_excite2:
+                    type: fully_connected
+                    num_outputs: ^(depth)
+                    weights_initializer: { <<: *initializer }
+                    activation_fn: tensorflow.nn.sigmoid
+                se_scale:
+                    type: mul
+                
+            graph:
+                - {from: input, with: [norm1, conv1, norm2, conv2], to: residual}
+                - {from: residual, with: [se_squeeze, se_excite1, se_excite2], to: se_coeff}
+                - {from: [residual, se_coeff], with: [se_scale], to: se_output}
+                - {from: input, with: [shortcut_preprocess_^(projection), shortcut_projection_^(projection)], to: shortcut}
+                - {from: [shortcut, se_output], with: add, to: output }
+                
+        _block_layer: &block_layer
+            type: module
+            kwargs:
+                depth: null
+                stride: null
+                se_depth: null
+            layers:
+                b0: { <<: *block, depth: ^(depth), stride: ^(stride), projection: true, se_depth: ^(se_depth) }
+                b1: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
+                b2: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
+                b3: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
+                b4: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
+                b5: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
+                b6: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
+                b7: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
+            graph:
+                - {from: input, with: [b0, b1, b2, b3, b4, b5, b6, b7], to: output}
+                
+        # root block
+        conv1:
+            <<: *conv
+            kernel_size: 3
+            stride: 1
+            padding: same
+            num_outputs: 16
+            activation_fn: null
+            normalizer_fn: null
+        start: { <<: *block_layer, depth: 16, stride: 1, se_depth: 4 }
+        mid: { <<: *block_layer, depth: 32, stride: 2, se_depth: 8 }
+        end: { <<: *block_layer, depth: 64, stride: 2, se_depth: 16 }
+        postnorm: {<<: *norm}
+        pool: {type: average_pool, kernel_size: 8, stride: 1}
+        flatten: {type: flatten}
+        dense:
+            type: fully_connected
+            num_outputs: num_classes
+            activation_fn: null
+            normalizer_fn: null
+    graph:
+        from: input
+        with: [
+            conv1, start, mid, end,
+            postnorm, pool, flatten, dense]
+        to: output
