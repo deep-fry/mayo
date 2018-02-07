@@ -48,8 +48,7 @@ class Layers(TFNetBase):
             kernel = [kernel, kernel]
         for i in range(2):
             if kernel[i] is None:
-                kernel[i] = shape[i+1]
-        
+                kernel[i] = shape[i + 1]
         params['kernel_size'] = [
             min(shape[1], kernel[0]), min(shape[2], kernel[1])]
 
@@ -100,10 +99,11 @@ class Layers(TFNetBase):
 
     def instantiate_add(self, node, tensors, params):
         return tf.add_n(tensors, name=params['scope'])
-        
+
     def instantiate_mul(self, node, tensors, params):
-        if len(tensors) is not 2:
-            raise ValueError('tf.multiply layer expects exactly two inputs. {} were given.'.format(len(tensors)))
+        if len(tensors) != 2:
+            raise ValueError(
+                'The function `tf.multiply` expects exactly two inputs.')
         return tf.multiply(tensors[0], tensors[1], name=params['scope'])
 
     def instantiate_activation(self, node, tensors, params):
