@@ -1,2 +1,2 @@
 #!/bin/bash
-./my.py "$@"
+/usr/bin/env python3 ./my.py "$@"
