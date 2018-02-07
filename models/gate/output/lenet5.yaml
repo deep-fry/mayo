@@ -7,8 +7,8 @@ model:
             density: 0.5
             weight: 0.0001
             policy: parametric_gamma
-            gate_trainable: false
-            trainable: false
+            gate_trainable: true
+            trainable: true
             should_gate: true
             pool: avg
             normalizer_fn: tensorflow.contrib.slim.batch_norm

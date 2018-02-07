@@ -1,6 +1,6 @@
 ---
 _import: ../../resnet18.yaml
-_trainable: false
+_trainable: true
 model:
     name: resnet18
     layers:
@@ -17,11 +17,12 @@ model:
                     should_gate: ^(should_gate)
                     trainable: $(_trainable)
                 conv2: {<<: *bb_gated_conv}
-        conv1: {<<: *gated_conv, should_gate: false}
-        b11: {<<: *bb, should_gate: false}
-        b12: {<<: *bb, should_gate: false}
-        b21: {<<: *bb, should_gate: false}
-        b31: {<<: *bb, should_gate: false}
-        b32: {<<: *bb, should_gate: false}
-        b41: {<<: *bb, should_gate: false}
-        b42: {<<: *bb, should_gate: false}
+                downsample_shortcut: {<<: *bb_gated_conv}
+        conv1: {<<: *gated_conv, should_gate: true}
+        b11: {<<: *bb, should_gate: true}
+        b12: {<<: *bb, should_gate: true}
+        b21: {<<: *bb, should_gate: true}
+        b31: {<<: *bb, should_gate: true}
+        b32: {<<: *bb, should_gate: true}
+        b41: {<<: *bb, should_gate: true}
+        b42: {<<: *bb, should_gate: true}

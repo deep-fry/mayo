@@ -229,7 +229,8 @@ class GatedConvolutionInstantiator(object):
             beta_scope = '{}/gate/shift'.format(self.scope)
             beta = tf.get_variable(
                 beta_scope, shape=output.shape[-1], dtype=tf.float32,
-                initializer=tf.constant_initializer(0.1), trainable=True)
+                initializer=tf.constant_initializer(0.1),
+                trainable=self.gate_trainable)
             # gate output is the parametric gamma value
             return self.gate() * output + beta
         scope = '{}/{}'.format(
