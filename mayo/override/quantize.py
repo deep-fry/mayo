@@ -30,8 +30,8 @@ class QuantizerBase(OverriderBase):
 
 
 class ThresholdBinarizer(QuantizerBase):
-    def __init__(self, threshold):
-        super().__init__()
+    def __init__(self, session, threshold):
+        super().__init__(session)
         self.threshold = threshold
 
     def _quantize(self, value):
@@ -56,8 +56,8 @@ class FixedPointQuantizer(QuantizerBase):
     width = Parameter('width', 32, [], tf.int32)
     point = Parameter('point', 2, [], tf.int32)
 
-    def __init__(self, point=None, width=None, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, point=None, width=None, should_update=True):
+        super().__init__(session, should_update)
         if point is not None:
             self.point = point
         if width is not None:
@@ -111,8 +111,8 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
             use this information to compute a corresponding binary point using
             an update policy.
     """
-    def __init__(self, width, overflow_rate, should_update=True):
-        super().__init__(None, width, should_update=should_update)
+    def __init__(self, session, width, overflow_rate, should_update=True):
+        super().__init__(session, None, width, should_update=should_update)
         self.overflow_rate = overflow_rate
         # self.sync_point = sync_point
 
@@ -164,8 +164,8 @@ class DGTrainableQuantizer(DGQuantizer):
     """
     width = Parameter('width', 16, [], tf.float32, trainable=True)
 
-    def __init__(self, overflow_rate, should_update=True):
-        super().__init__(None, None, should_update=should_update)
+    def __init__(self, session, overflow_rate, should_update=True):
+        super().__init__(session, None, None, should_update=should_update)
 
     def _apply(self, value):
         return self._quantize(value, self.width, self.point)
@@ -191,9 +191,9 @@ class FloatingPointQuantizer(QuantizerBase):
     mantissa_width = Parameter('mantissa_width', 23, [], tf.float32)
 
     def __init__(
-            self, width, exponent_bias, mantissa_width,
+            self, session, width, exponent_bias, mantissa_width,
             should_update=True):
-        super().__init__(should_update)
+        super().__init__(session, should_update)
         self.width = width
         self.exponent_bias = exponent_bias
         self.mantissa_width = mantissa_width
@@ -308,9 +308,10 @@ class FloatingPointQuantizer(QuantizerBase):
 
 class ShiftQuantizer(FloatingPointQuantizer):
     def __init__(
-            self, overflow_rate, width=None, bias=None, should_update=True):
+            self, session, overflow_rate, width=None, bias=None,
+            should_update=True):
         super().__init__(
-            width=width, exponent_bias=bias,
+            session=session, width=width, exponent_bias=bias,
             mantissa_width=0, should_update=should_update)
         self.overflow_rate = overflow_rate
 
@@ -337,8 +338,8 @@ class ShiftQuantizer(FloatingPointQuantizer):
 
 
 class LogQuantizer(QuantizerBase):
-    def __init__(self, point, width=None, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, point, width=None, should_update=True):
+        super().__init__(session, should_update)
         self.width = width
         self.point = point
         if width is not None and width < 1:
@@ -390,8 +391,9 @@ class Recentralizer(OverriderBase):
     positives_mean = QuantizedParameter('positives_mean', 1, [], tf.float32)
     negatives_mean = QuantizedParameter('negatives_mean', -1, [], tf.float32)
 
-    def __init__(self, quantizer, mean_quantizer=None, should_update=True):
-        super().__init__(should_update)
+    def __init__(
+            self, session, quantizer, mean_quantizer=None, should_update=True):
+        super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(**params)
         self.mean_quantizer = None
@@ -467,8 +469,8 @@ class IncrementalQuantizer(OverriderBase):
     '''
     interval = Parameter('interval', 0.1, [], tf.float32)
 
-    def __init__(self, quantizer, intervals):
-        super().__init__()
+    def __init__(self, session, quantizer, intervals, should_update=True):
+        super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(**params)
         if intervals is not None:

@@ -268,7 +268,7 @@ class Session(object, metaclass=SessionMeta):
                     yield o
         overrider_info = {}
         for o in flatten(self.nets[0].overriders):
-            info = o.info(self)
+            info = o.info()
             table = overrider_info.setdefault(o.__class__, Table(info._fields))
             table.add_row(info)
         for cls, table in overrider_info.items():
@@ -278,7 +278,7 @@ class Session(object, metaclass=SessionMeta):
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
         for o in self.nets[0].overriders:
-            o.assign_parameters(self)
+            o.assign_parameters()
 
     @memoize_property
     def num_examples_per_epoch(self):

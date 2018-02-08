@@ -17,10 +17,11 @@ def use_name_not_scope(params):
 
 
 class ParameterTransformer(object):
-    def __init__(self, num_classes, is_training, reuse):
+    def __init__(self, session, num_classes, reuse):
         super().__init__()
+        self.session = session
         self.num_classes = num_classes
-        self.is_training = is_training
+        self.is_training = session.is_training
         self.reuse = reuse
         self.overriders = []
         self.variables = {}
@@ -32,7 +33,8 @@ class ParameterTransformer(object):
                 return
             if 'overrider' in key:
                 overriders = [
-                    cls(**p) for cls, p in multi_objects_from_params(p)]
+                    cls(self.session, **p)
+                    for cls, p in multi_objects_from_params(p)]
                 if len(overriders) == 1:
                     params[key] = overriders[0]
                 else:

@@ -6,10 +6,10 @@ from mayo.override.base import OverriderBase, Parameter
 
 
 class GaterBase(OverriderBase):
-    def _info(self, session):
+    def _info(self):
         # FIXME it doesn't make sense to run `gate` once as its density
         # varies from run to run.
-        gate = util.cast(session.run(self.gate), int)
+        gate = util.cast(self.session.run(self.gate), int)
         density = Percent(util.sum(gate) / util.count(gate))
         return self._info_tuple(
             gate=self.gate.name, density=density, count_=gate.size)
@@ -23,9 +23,9 @@ class GaterBase(OverriderBase):
         table.set_footer(footer)
 
 
-class RandomChannelGater(OverriderBase):
-    def __init__(self, ratio=None, should_update=True):
-        super().__init__(should_update)
+class RandomChannelGater(GaterBase):
+    def __init__(self, session, ratio=None, should_update=True):
+        super().__init__(session, should_update)
         self.ratio = ratio
 
     def _apply(self, value):
@@ -44,11 +44,12 @@ class RandomChannelGater(OverriderBase):
         return self.gate * value
 
 
-class ChannelGater(OverriderBase):
+class ChannelGater(GaterBase):
     threshold = Parameter('threshold', 1, [], tf.float32)
 
-    def __init__(self, threshold=None, policy=None, should_update=True):
-        super().__init__(should_update)
+    def __init__(
+            self, session, threshold=None, policy=None, should_update=True):
+        super().__init__(session, should_update)
         self.threshold = threshold
         self.policy = policy
 

@@ -143,7 +143,7 @@ class Train(Session):
         # it is sufficient to use the first net, as overriders
         # share internal variables
         for o in self.nets[0].overriders:
-            getattr(o, func_name)(self)
+            getattr(o, func_name)()
 
     def overriders_assign(self):
         log.info('Assigning overridden values of parameters to parameters...')
@@ -172,7 +172,8 @@ class Train(Session):
                 self.save_checkpoint(floor_epoch)
             self._checkpoint_epoch = floor_epoch
         if system.max_epochs and floor_epoch >= system.max_epochs:
-            log.info('Maximum epoch count reached.')
+            log.info(
+                'Maximum epoch count {} reached.'.format(system.max_epochs))
             if self._checkpoint_epoch and floor_epoch > self._checkpoint_epoch:
                 log.info('Saving final checkpoint...')
                 self.save_checkpoint(floor_epoch)

@@ -94,10 +94,11 @@ class OverriderBase(object):
     overridden result; `_update` updates states of tensorflow variables used in
     `_apply`.
     """
-    def __init__(self, should_update=True):
+    def __init__(self, session, should_update=True):
         super().__init__()
         self._applied = False
         self.name = None
+        self.session = session
         self.internals = {}
         self._parameter_config = {}
         self._parameter_variables = {}
@@ -116,7 +117,7 @@ class OverriderBase(object):
                 params[value.name] = value
         return params
 
-    def assign_parameters(self, session):
+    def assign_parameters(self):
         for name, value in self._parameter_variables_assignment.items():
             if value is None:
                 continue
@@ -130,10 +131,10 @@ class OverriderBase(object):
             self.parameters[name].__get__(self, None)
             # assignment
             var = self._parameter_variables[name]
-            session.assign(var, value, raw_run=True)
+            self.session.assign(var, value, raw_run=True)
             # add our variable to the list of initialized_variables
-            if var not in session.initialized_variables:
-                session.initialized_variables.append(var)
+            if var not in self.session.initialized_variables:
+                self.session.initialized_variables.append(var)
         self._parameter_variables_assignment = {}
 
     def _apply(self, value):
@@ -176,24 +177,24 @@ class OverriderBase(object):
             param.__get__(self, None)
         return self.after
 
-    def _update(self, session):
+    def _update(self):
         """
         Override this method called in `.update()` to update internal
         states of the overrider.
         """
         pass
 
-    def update(self, session):
+    def update(self):
         """Update things to apply during training.  """
         if not self.should_update:
             return
         if not self._applied:
             raise OverrideNotAppliedError(
                 'Method "apply" must be invoked before call "update".')
-        ops = session.graph.get_operations()
-        self._update(session)
+        ops = self.session.graph.get_operations()
+        self._update()
         new_ops = []
-        for o in session.graph.get_operations():
+        for o in self.session.graph.get_operations():
             if o in ops:
                 continue
             if o.type in ('Placeholder', 'Assign', 'NoOp'):
@@ -204,11 +205,11 @@ class OverriderBase(object):
             raise ReadOnlyGraphChangedError(
                 '{}.update() adds new operations {} to a read-only graph.'
                 .format(self.__class__.__name__, new_ops))
-        log.debug('Updated overrider {!r}'.format(self.info(session)))
+        log.debug('Updated overrider {!r}'.format(self.info()))
 
-    def assign(self, session):
+    def assign(self):
         """Assign overridden values to parameters before overriding.  """
-        session.assign(self.before, self.after)
+        self.session.assign(self.before, self.after)
 
     def reset(self, session):
         """Reset internal variables to their respective initial values.  """
@@ -223,11 +224,11 @@ class OverriderBase(object):
         kwargs[cls] = self.name
         return Tuple(**kwargs)
 
-    def _info(self, session):
+    def _info(self):
         return self._info_tuple()
 
-    def info(self, session):
-        return self._info(session)
+    def info(self):
+        return self._info()
 
     @classmethod
     def finalize_info(cls, table):
@@ -269,24 +270,24 @@ class ChainOverrider(OverriderBase, Sequence):
     def __len__(self):
         return len(self._overriders)
 
-    def assign_parameters(self, session):
+    def assign_parameters(self):
         for o in self._overriders:
-            o.assign_parameters(session)
+            o.assign_parameters()
 
     def _apply(self, value):
         for o in self._overriders:
             value = o.apply(self._scope, self._original_getter, value)
         return value
 
-    def _update(self, session):
+    def _update(self):
         for o in self._overriders:
-            o.update(session)
+            o.update()
 
-    def reset(self, session):
+    def reset(self):
         for o in self._overriders:
-            o.reset(session)
+            o.reset()
 
-    def _info(self, session):
+    def _info(self):
         return self._info_tuple(overriders=self._overriders)
 
     def __repr__(self):

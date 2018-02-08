@@ -15,8 +15,7 @@ class TFNetBase(NetBase):
     def __init__(self, session, model, images, labels, num_classes, reuse):
         self.session = session
         self.is_training = session.is_training
-        self._transformer = ParameterTransformer(
-            num_classes, session.is_training, reuse)
+        self._transformer = ParameterTransformer(session, num_classes, reuse)
         super().__init__(model, {'input': images})
         self._labels = labels
         self._verify_io()

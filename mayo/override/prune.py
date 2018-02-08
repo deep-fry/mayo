@@ -10,8 +10,8 @@ from mayo.override.base import OverriderBase, Parameter
 class PrunerBase(OverriderBase):
     mask = Parameter('mask', None, None, tf.bool)
 
-    def __init__(self, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, should_update=True):
+        super().__init__(session, should_update)
 
     def _apply(self, value):
         self._parameter_config = {
@@ -49,8 +49,8 @@ class PrunerBase(OverriderBase):
 class MeanStdPruner(PrunerBase):
     alpha = Parameter('alpha', -2, [], tf.float32)
 
-    def __init__(self, alpha=None, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, alpha=None, should_update=True):
+        super().__init__(session, should_update)
         self.alpha = alpha
 
     def _threshold(self, tensor, alpha):
@@ -103,8 +103,8 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
 class ChannelPrunerBase(OverriderBase):
     mask = Parameter('mask', None, None, tf.bool)
 
-    def __init__(self, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, should_update=True):
+        super().__init__(session, should_update)
 
     def _apply(self, value):
         # check shape
@@ -141,8 +141,8 @@ class ChannelPrunerBase(OverriderBase):
 
 class NetworkSlimmer(ChannelPrunerBase):
     # This pruner only works on activations
-    def __init__(self, density=None, weight=0.01, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, density=None, weight=0.01, should_update=True):
+        super().__init__(session, should_update)
         self.density = density
         self.weight = weight
 
@@ -166,6 +166,7 @@ class NetworkSlimmer(ChannelPrunerBase):
         return util.cast(masked, float)
 
     def _updated_mask(self, var, mask, session):
+        # extract all gammas globally
         mask, scale = session.run([mask, self.gamma])
         num_active = math.ceil(len(scale) * self.density)
         threshold = sorted(scale)[-num_active]
@@ -176,8 +177,8 @@ class FilterPruner(PrunerBase):
     # TODO: finish channel pruner
     alpha = Parameter('alpha', -2, [], tf.float32)
 
-    def __init__(self, alpha=None, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, alpha=None, should_update=True):
+        super().__init__(session, should_update)
         self.alpha = alpha
 
     def _threshold(self, tensor):
