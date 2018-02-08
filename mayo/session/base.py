@@ -77,7 +77,7 @@ class Session(object, metaclass=SessionMeta):
             self.tf_session, self.mode, config, self.num_gpus)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
-        self.estimator = ResourceEstimator()
+        self.estimator = ResourceEstimator(config.system.batch_size_per_gpu)
         self._register_progress()
         self.nets = self._instantiate_nets()
         self._register_estimates()
@@ -242,7 +242,8 @@ class Session(object, metaclass=SessionMeta):
         info_dict = net.info()
         # layer info
         layer_info = Table(['layer', 'shape', '#macs'])
-        self.estimator.add_estimate(net.shapes)
+        self.estimator.shapes = net.shapes
+        self.estimator.add_estimate()
         for node, tensors in net.layers().items():
             tensors = ensure_list(tensors)
             try:

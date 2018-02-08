@@ -258,19 +258,16 @@ class GatedConvolutionInstantiator(object):
         return conv(None, squeezed, expand_params)
 
     def instantiate(self):
-        normalized = self._normalization(self.output)
+        output = self._normalization(self.output)
         if self.activation_fn is not None:
-            activated = self.activation_fn(normalized)
+            output = self.activation_fn(output)
         if self.policy == 'squeeze_excitation':
-            se = self._squeeze_excitation(activated)
-            activated = se * activated
+            se = self._squeeze_excitation(output)
+            output *= se
+        activated = output
         # gating
         if self.should_gate:
-            if self.activation_fn is None:
-                gated = normalized * tf.cast(self.actives(), tf.float32)
-            else:
-                gated = activated * tf.cast(self.actives(), tf.float32)
-
+            output = output * tf.cast(self.actives(), tf.float32)
         # estimator
         self._register()
         # regularizer
@@ -283,7 +280,7 @@ class GatedConvolutionInstantiator(object):
         else:
             self._check_policy()
         self._regularize(self.gate(), match)
-        return gated
+        return output
 
     def _regularize(self, gate, match):
         """

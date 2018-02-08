@@ -4,18 +4,20 @@ import collections
 import numpy as np
 
 from mayo.util import object_from_params, Change
-from mayo.net.graph import LayerNode
+from mayo.net.graph import LayerNode, TensorNode, SplitNode
 
 
 class ResourceEstimator(object):
-    def __init__(self, allow_reregister=True):
+    def __init__(self, batch_size, allow_reregister=True):
         super().__init__()
+        self.batch_size = batch_size
         self.allow_reregister = allow_reregister
         self.change = Change()
         self.operations = {}
         self.statistics = {}
         self.properties = {}
         self.formatters = []
+        self.shapes = None
 
     def __getstate__(self):
         return {
@@ -85,6 +87,13 @@ class ResourceEstimator(object):
                     value = transformer(value)
                 values.append(value)
 
+    def max_len(self):
+        l = 0
+        for stats in self.statistics.values():
+            for history in stats.values():
+                l = max(l, len(history))
+        return l
+
     def format(self, batch_size=None):
         text = []
         for func in self.formatters:
@@ -135,8 +144,10 @@ class ResourceEstimator(object):
     def get_tensor(self, name, node=None):
         return self.operations[node or 'global'][name]
 
-    def add_estimate(self, layer_shapes):
-        for node, shape in layer_shapes.items():
+    def add_estimate(self):
+        if not self.shapes:
+            raise ValueError('Shape of nodes is not set.')
+        for node, shape in self.shapes.items():
             if not isinstance(node, LayerNode):
                 continue
             layer = self.statistics.setdefault(node, {})
@@ -146,7 +157,7 @@ class ResourceEstimator(object):
             except NotImplementedError:
                 continue
             # tensors
-            inputs = [layer_shapes[p] for p in node.predecessors]
+            inputs = [self.shapes[p] for p in node.predecessors]
             inputs = inputs[0] if len(inputs) == 1 else inputs
             stats = func(node, inputs, shape, params)
             stats = {name: [value] for name, value in stats.items()}
@@ -188,44 +199,66 @@ class ResourceEstimator(object):
             self, node, input_shape, output_shape, params):
         return {'MACs': int(input_shape[-1] * output_shape[-1])}
 
-    def _gated_density(self, node):
-        if not isinstance(node, LayerNode):
-            return 1
-        if node.params['type'] != 'gated_convolution':
-            return 1
-        try:
-            gates = self.get_history('gate', node)
-        except KeyError:
-            return 1
-        if not gates:
-            return 1
+    def _gate_density(self, gates):
         valids = sum(np.sum(g.astype(np.int32)) for g in gates)
         totals = sum(g.size for g in gates)
         return valids / totals
 
-    def _gated_conv_predecessor(self, node):
-        preds = node.predecessors
-        if not preds:
-            return None
-        if len(preds) > 1:
-            raise ValueError(
-                'Number of predecessors should only be 1 for '
-                'gated_convolution.')
-        pred = preds[0]
-        if not isinstance(pred, LayerNode):
-            return None
-        if pred.params['type'] in ['dropout', 'max_pool', 'average_pool']:
-            return self._gated_conv_predecessor(pred)
-        return pred
+    def _gate_for_node(self, node):
+        """
+        Recursively find the gate sparsity of the predecessor nodes
+        that can propagate sparsity.
+        """
+        def true():
+            return [np.ones(self.shapes[node], dtype=bool)] * self.max_len()
+
+        if isinstance(node, SplitNode):
+            return self._gate_for_node(node.predecessors[0])
+        if isinstance(node, TensorNode):
+            preds = node.predecessors
+            if preds:
+                return self._gate_for_node(preds[0])
+            return true()
+        if not isinstance(node, LayerNode):
+            raise TypeError(
+                'Do not know how to find gate sparsity for node {!r}'
+                .format(node))
+        ntype = node.params['type']
+        if ntype == 'gated_convolution':
+            return self.get_history('gate.active', node)
+        passthrough_types = [
+            'dropout', 'max_pool', 'average_pool', 'activation', 'identity']
+        if ntype in passthrough_types:
+            return self._gate_for_node(node.predecessors[0])
+        if ntype in ['concat', 'add', 'mul']:
+            histories = [
+                self._gate_for_node(p)
+                for p in node.predecessors[0].predecessors]
+            history = []
+            for each in zip(*histories):
+                if ntype == 'concat':
+                    each = np.concatenate(each, axis=-1)
+                else:
+                    func = np.add if ntype == 'add' else np.multiply
+                    result = None
+                    for h in each:
+                        h = h.astype(int)
+                        if result is None:
+                            result = h
+                        else:
+                            result = func(result, h)
+                    each = result.astype(bool)
+                history.append(each)
+            return history
+        return true()
 
     def estimate_gated_convolution(
             self, node, input_shape, output_shape, params):
-        out_density = self._gated_density(node)
-        pred = self._gated_conv_predecessor(node)
-        if not pred:
-            in_density = 1
-        else:
-            in_density = self._gated_density(pred)
+        out_density = self._gate_density(self._gate_for_node(node))
+        # gated convolution expects only one input
+        in_node = node.predecessors[0]
+        print('a', in_node.formatted_name())
+        in_density = self._gate_density(self._gate_for_node(in_node))
         stats = self.estimate_convolution(
             node, input_shape, output_shape, params)
         stats['MACs'] = int(stats['MACs'] * in_density * out_density)
