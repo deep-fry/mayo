@@ -194,13 +194,18 @@ class OverriderBase(object):
         ops = self.session.graph.get_operations()
         self._update()
         new_ops = []
+        new_assignments = False
         for o in self.session.graph.get_operations():
             if o in ops:
                 continue
             if o.type in ('Placeholder', 'Assign', 'NoOp'):
-                __import__('ipdb').set_trace()
+                new_assignments = True
                 continue
             new_ops.append(o)
+        if new_assignments:
+            log.debug(
+                'New assignment operations created during {}.update().'
+                .format(self.__class__.__name__))
         if new_ops:
             raise ReadOnlyGraphChangedError(
                 '{}.update() adds new operations {} to a read-only graph.'
@@ -211,10 +216,10 @@ class OverriderBase(object):
         """Assign overridden values to parameters before overriding.  """
         self.session.assign(self.before, self.after)
 
-    def reset(self, session):
+    def reset(self):
         """Reset internal variables to their respective initial values.  """
         for var in self.internals.values():
-            session.assign(var, var.initial_value)
+            self.session.assign(var, var.initial_value)
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
