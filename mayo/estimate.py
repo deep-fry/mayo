@@ -259,7 +259,6 @@ class ResourceEstimator(object):
         out_density = self._gate_density(self._gate_for_node(node))
         # gated convolution expects only one input
         in_node = node.predecessors[0]
-        print('a', in_node.formatted_name())
         in_density = self._gate_density(self._gate_for_node(in_node))
         stats = self.estimate_convolution(
             node, input_shape, output_shape, params)
@@ -275,5 +274,6 @@ class ResourceEstimator(object):
             # vector-wise gating output shape: height
             # and input kernel height
             overhead *= output_shape[1] * kernel_height
+        # TODO parametric gamma element-wise multiply + add overhead
         stats['MACs'] += overhead
         return stats
