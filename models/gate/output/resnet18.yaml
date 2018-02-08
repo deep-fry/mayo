@@ -1,16 +1,16 @@
 ---
 _import: ../../resnet18.yaml
-_trainable: true
+_gate:
+    trainable: true
 model:
     name: resnet18
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            density: 0.5
             policy: parametric_gamma
+            density: 0.5
             weight: 0.0001
             gate_trainable: true
-            trainable: true
             should_gate: true
             pool: avg
             normalizer_fn: tensorflow.contrib.slim.batch_norm
@@ -19,20 +19,20 @@ model:
                 scale: true
                 decay: 0.9997
                 epsilon: 0.001
+            trainable: $(_gate.trainable)
         _basic_block: &bb
-            kwargs: {should_gate: false}
+            kwargs: {should_gate: true}
             layers:
                 conv1: &bb_gated_conv
                     <<: *gated_conv
                     should_gate: ^(should_gate)
-                    trainable: $(_trainable)
                 conv2: {<<: *bb_gated_conv}
                 downsample_shortcut: {<<: *bb_gated_conv}
-        conv1: {<<: *gated_conv, should_gate: true}
-        b11: {<<: *bb, should_gate: true}
-        b12: {<<: *bb, should_gate: true}
-        b21: {<<: *bb, should_gate: true}
-        b31: {<<: *bb, should_gate: true}
-        b32: {<<: *bb, should_gate: true}
-        b41: {<<: *bb, should_gate: true}
-        b42: {<<: *bb, should_gate: true}
+        conv1: {<<: *gated_conv}
+        b11: {<<: *bb}
+        b12: {<<: *bb}
+        b21: {<<: *bb}
+        b31: {<<: *bb}
+        b32: {<<: *bb}
+        b41: {<<: *bb}
+        b42: {<<: *bb}

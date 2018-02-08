@@ -225,7 +225,9 @@ class ResourceEstimator(object):
                 .format(node))
         ntype = node.params['type']
         if ntype == 'gated_convolution':
-            return self.get_history('gate.active', node)
+            if node.params.get('should_gate', True):
+                return self.get_history('gate.active', node)
+            return true()
         passthrough_types = [
             'dropout', 'max_pool', 'average_pool', 'activation', 'identity']
         if ntype in passthrough_types:
