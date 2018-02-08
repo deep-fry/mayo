@@ -22,16 +22,16 @@ class PrunerBase(OverriderBase):
         }
         return value * util.cast(self.mask, float)
 
-    def _updated_mask(self, var, mask, session):
+    def _updated_mask(self, var, mask):
         raise NotImplementedError(
             'Method to compute an updated mask is not implemented.')
 
-    def _update(self, session):
-        mask = self._updated_mask(self.before, self.mask, session)
-        session.assign(self.mask, mask)
+    def _update(self):
+        mask = self._updated_mask(self.before, self.mask)
+        self.session.assign(self.mask, mask)
 
-    def _info(self, session):
-        mask = util.cast(session.run(self.mask), int)
+    def _info(self):
+        mask = util.cast(self.session.run(self.mask), int)
         density = Percent(util.sum(mask) / util.count(mask))
         return self._info_tuple(
             mask=self.mask.name, density=density, count_=mask.size)
@@ -62,12 +62,12 @@ class MeanStdPruner(PrunerBase):
             return mean + self.alpha * util.sqrt(var)
         return mean + alpha * util.sqrt(var)
 
-    def _updated_mask(self, var, mask, session):
+    def _updated_mask(self, var, mask):
         return util.abs(var) > self._threshold(var)
 
-    def _info(self, session):
-        _, mask, density, count = super()._info(session)
-        alpha = session.run(self.alpha)
+    def _info(self):
+        _, mask, density, count = super()._info()
+        alpha = self.session.run(self.alpha)
         return self._info_tuple(
             mask=mask, alpha=alpha, density=density, count_=count)
 
@@ -90,8 +90,8 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         self.on_factor = on_factor
         self.off_factor = off_factor
 
-    def _updated_mask(self, var, mask, session):
-        var, mask, alpha = session.run([var, mask, self.alpha])
+    def _updated_mask(self, var, mask):
+        var, mask, alpha = self.session.run([var, mask, self.alpha])
         threshold = self._threshold(var, alpha)
         on_mask = util.abs(var) > self.on_factor * threshold
         mask = util.logical_or(mask, on_mask)
@@ -124,16 +124,16 @@ class ChannelPrunerBase(OverriderBase):
             mask = tf.expand_dims(mask, 0)
         return value * util.cast(mask, float)
 
-    def _updated_mask(self, var, mask, session):
+    def _updated_mask(self, var, mask):
         raise NotImplementedError(
             'Method to compute an updated mask is not implemented.')
 
-    def _update(self, session):
-        mask = self._updated_mask(self.before, self.mask, session)
-        session.assign(self.mask, mask)
+    def _update(self):
+        mask = self._updated_mask(self.before, self.mask)
+        self.session.assign(self.mask, mask)
 
-    def _info(self, session):
-        mask = util.cast(session.run(self.mask), int)
+    def _info(self):
+        mask = util.cast(self.session.run(self.mask), int)
         density = Percent(util.sum(mask) / util.count(mask))
         return self._info_tuple(
             mask=self.mask.name, density=density, count_=mask.size)
@@ -165,9 +165,9 @@ class NetworkSlimmer(ChannelPrunerBase):
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         return util.cast(masked, float)
 
-    def _updated_mask(self, var, mask, session):
+    def _updated_mask(self, var, mask):
         # extract all gammas globally
-        mask, scale = session.run([mask, self.gamma])
+        mask, scale = self.session.run([mask, self.gamma])
         num_active = math.ceil(len(scale) * self.density)
         threshold = sorted(scale)[-num_active]
         return mask * util.cast(scale > threshold, float)
@@ -187,12 +187,12 @@ class FilterPruner(PrunerBase):
         mean, var = tf.nn.moments(util.abs(tensor), axes=[1, 2])
         return mean + self.alpha * util.sqrt(var)
 
-    def _updated_mask(self, var, mask, session):
+    def _updated_mask(self, var, mask):
         return util.abs(var) > self._threshold(var)
 
-    def _info(self, session):
-        _, mask, density, count = super()._info(session)
-        alpha = session.run(self.alpha)
+    def _info(self):
+        _, mask, density, count = super()._info()
+        alpha = self.session.run(self.alpha)
         return self._info_tuple(
             mask=mask, alpha=alpha, density=density, count_=count)
 

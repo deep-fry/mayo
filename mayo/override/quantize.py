@@ -23,9 +23,9 @@ class QuantizerBase(OverriderBase):
     def _apply(self, value):
         return self._quantize(value)
 
-    def eval(self, session, attribute):
+    def eval(self, attribute):
         if util.is_tensor(attribute):
-            return session.run(attribute)
+            return self.session.run(attribute)
         return attribute
 
 
@@ -91,9 +91,9 @@ class FixedPointQuantizer(QuantizerBase):
     def _apply(self, value):
         return self._quantize(value)
 
-    def _info(self, session):
-        width = int(self.eval(session, self.width))
-        point = int(self.eval(session, self.point))
+    def _info(self):
+        width = int(self.eval(self.width))
+        point = int(self.eval(self.point))
         return self._info_tuple(width=width, point=point)
 
 
@@ -116,17 +116,17 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
         self.overflow_rate = overflow_rate
         # self.sync_point = sync_point
 
-    def _update_policy(self, tensor, session):
+    def _update_policy(self, tensor):
         raise NotImplementedError
 
-    def _update(self, session):
-        self.point = self._update_policy(session.run(self.before), session)
+    def _update(self):
+        self.point = self._update_policy(self.eval(self.before))
 
 
 class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):
     _initial_point = 1
 
-    def _update_policy(self, tensor, session):
+    def _update_policy(self, tensor):
         """ algorithm described in: https://arxiv.org/pdf/1412.7024  """
         w = self.eval(self.width)
         p = self._initial_point
@@ -140,13 +140,12 @@ class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):
 
 
 class DGQuantizer(DynamicFixedPointQuantizerBase):
-    def _update_policy(self, tensor, session):
+    def _update_policy(self, tensor):
         """ simple brute-force, optimal result.  """
-        w = session.run(self.width)
+        w = self.eval(self.width)
         for p in range(-w, w + 1):
             rate = self._quantize(
                 tensor, point=p, width=w, compute_overflow_rate=True)
-            tmp_width = w
             if rate <= self.overflow_rate:
                 return p
         log.warn(
@@ -287,7 +286,8 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def compute_quantization_loss(
             self, value, exponent_width, mantissa_width, overflow_rate):
-        max_exponent = self.find_float_exp(value, exponent_width, overflow_rate)
+        max_exponent = self.find_float_exp(
+            value, exponent_width, overflow_rate)
         # obtain exponent bias based on the bound
         # max_exponent = exponent - bias, bias >= 0
         exponent_bias = 2 ** exponent_width - 1 - max_exponent
@@ -297,10 +297,10 @@ class FloatingPointQuantizer(QuantizerBase):
         loss = ((value - quantized) ** 2).mean()
         return (loss, exponent_bias)
 
-    def _info(self, session):
-        width = int(self.eval(session, self.width))
-        mantissa_width = int(self.eval(session, self.mantissa_width))
-        exponent_bias = int(self.eval(session, self.exponent_bias))
+    def _info(self):
+        width = int(self.eval(self.width))
+        mantissa_width = int(self.eval(self.mantissa_width))
+        exponent_bias = int(self.eval(self.exponent_bias))
         return self._info_tuple(
             width=width, mantissa_width=mantissa_width,
             exponent_bias=exponent_bias)
@@ -321,8 +321,8 @@ class ShiftQuantizer(FloatingPointQuantizer):
         # mantissa == 1
         return self._represent(sign, exponent, 1)
 
-    def find_shift_exp(self, value, session):
-        width = session.run(self.width)
+    def find_shift_exp(self, value):
+        width = self.eval(self.width)
         max_exponent = int(2 ** width)
         for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
             max_value = 2 ** (exp + 1)
@@ -331,10 +331,10 @@ class ShiftQuantizer(FloatingPointQuantizer):
                 break
         return exp
 
-    def _update(self, session):
+    def _update(self):
         log.info('finding a exp bias for shift quantizer using overflow rate')
-        max_exponent = self.find_shift_exp(session.run(self.before), session)
-        self.exponent_bias = 2 ** session.run(self.width) - 1 - max_exponent
+        max_exponent = self.find_shift_exp(self.eval(self.before))
+        self.exponent_bias = 2 ** self.eval(self.width) - 1 - max_exponent
 
 
 class LogQuantizer(QuantizerBase):
@@ -405,11 +405,11 @@ class Recentralizer(OverriderBase):
     def negatives(self):
         return util.logical_not(self.positives)
 
-    def assign_parameters(self, session):
-        super().assign_parameters(session)
-        self.quantizer.assign_parameters(session)
+    def assign_parameters(self):
+        super().assign_parameters()
+        self.quantizer.assign_parameters()
         if self.mean_quantizer:
-            self.mean_quantizer.assign_parameters(session)
+            self.mean_quantizer.assign_parameters()
 
     def _quantize(self, value, mean_quantizer=False):
         quantizer = self.mean_quantizer if mean_quantizer else self.quantizer
@@ -439,9 +439,9 @@ class Recentralizer(OverriderBase):
         value += non_zeros * negatives * (quantized + self.negatives_mean)
         return value
 
-    def _update(self, session):
+    def _update(self):
         # update positives mask and mean values
-        value = session.run(self.before)
+        value = self.eval(self.before)
         # divide them into two groups
         # mean = util.mean(value)
         mean = 0.0
@@ -452,12 +452,12 @@ class Recentralizer(OverriderBase):
         negatives = util.logical_and(util.logical_not(positives), value != 0)
         self.negatives_mean = util.mean(value[util.where(negatives)])
         # update internal quantizer
-        self.quantizer.update(session)
+        self.quantizer.update()
 
-    def _info(self, session):
-        info = self.quantizer.info(session)._asdict()
+    def _info(self):
+        info = self.quantizer.info()._asdict()
         if self.mean_quantizer:
-            mean_info = self.mean_quantizer.info(session)
+            mean_info = self.mean_quantizer.info()
             for key, value in mean_info._asdict().items():
                 info['mean_' + key] = value
         return self._info_tuple(**info)
@@ -500,18 +500,18 @@ class IncrementalQuantizer(OverriderBase):
         return util.greater_equal(util.abs(value), th)
 
     # override assign_parameters to assign quantizer as well
-    def assign_parameters(self, session):
-        super().assign_parameters(session)
-        self.quantizer.assign_parameters(session)
+    def assign_parameters(self):
+        super().assign_parameters()
+        self.quantizer.assign_parameters()
 
-    def update_interval(self, session):
+    def update_interval(self):
         if self.intervals == []:
             return False
         self.interval = self.intervals[self.interval_index]
         self.interval_index += 1
         return True
 
-    def _update(self, session):
+    def _update(self):
         # reset index
         self.interval_index = 0
-        self.quantizer.update(session)
+        self.quantizer.update()
