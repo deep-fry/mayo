@@ -3,7 +3,6 @@ import math
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
-from tensorflow.python.ops import nn_impl
 
 from mayo.util import Percent, memoize_method
 

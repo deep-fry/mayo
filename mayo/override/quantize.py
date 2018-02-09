@@ -395,7 +395,7 @@ class Recentralizer(OverriderBase):
             self, session, quantizer, mean_quantizer=None, should_update=True):
         super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
-        self.quantizer = cls(**params)
+        self.quantizer = cls(session, **params)
         self.mean_quantizer = None
         if mean_quantizer:
             cls, params = object_from_params(mean_quantizer)
@@ -417,7 +417,7 @@ class Recentralizer(OverriderBase):
         scope = '{}/{}'.format(self._scope, self.__class__.__name__)
         if mean_quantizer and self.mean_quantizer:
             scope = '{}/mean'.format(scope)
-        return quantizer.apply(scope, self._original_getter, value)
+        return quantizer.apply(self.node, scope, self._original_getter, value)
 
     def _apply(self, value):
         # dynamic parameter configuration
@@ -464,17 +464,16 @@ class Recentralizer(OverriderBase):
 
 
 class IncrementalQuantizer(OverriderBase):
-    '''
+    """
     https://arxiv.org/pdf/1702.03044.pdf
-    '''
+    """
     interval = Parameter('interval', 0.1, [], tf.float32)
     mask = Parameter('mask', None, None, tf.bool)
 
     def __init__(self, session, quantizer, intervals, should_update=True):
         super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
-        params = {**params, 'session': session}
-        self.quantizer = cls(**params)
+        self.quantizer = cls(session, **params)
         if intervals is not None:
             self.intervls = intervals
             self.interval = intervals[0]
@@ -483,7 +482,7 @@ class IncrementalQuantizer(OverriderBase):
     def _quantize(self, value, mean_quantizer=False):
         quantizer = self.quantizer
         scope = '{}/{}'.format(self._scope, self.__class__.__name__)
-        return quantizer.apply(self, scope, self._original_getter, value)
+        return quantizer.apply(self.node, scope, self._original_getter, value)
 
     def _apply(self, value):
         self._parameter_config = {
@@ -528,7 +527,7 @@ class IncrementalQuantizer(OverriderBase):
         self.interval_index = 0
         self.quantizer.update()
         # if chosen quantized, change it to zeros
-        value, mask, interval = session.run(
+        value, mask, interval = self.session.run(
             [self.before, self.mask, self.interval])
         new_mask = self._policy(value, mask, interval)
-        session.assign(self.mask, new_mask)
+        self.session.assign(self.mask, new_mask)
