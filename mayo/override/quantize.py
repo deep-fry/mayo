@@ -516,7 +516,8 @@ class IncrementalQuantizer(OverriderBase):
         flat_value = flat_value.flatten()
         th = util.top_k(util.abs(flat_value), th_arg)
         th = util.cast(th, float)
-        return util.logical_not(util.greater_equal(util.abs(metric), th))
+        new_mask = util.logical_not(util.greater_equal(util.abs(metric), th))
+        return util.logical_or(new_mask, previous_mask)
 
     # override assign_parameters to assign quantizer as well
     def assign_parameters(self):
