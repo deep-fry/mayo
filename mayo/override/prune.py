@@ -2,6 +2,7 @@ import math
 
 import tensorflow as tf
 
+from mayo.log import log
 from mayo.util import Percent, memoize_property
 from mayo.override import util
 from mayo.override.base import OverriderBase, Parameter
@@ -165,8 +166,6 @@ class NetworkSlimmer(ChannelPrunerBase):
         # register the latest gamma and mask to be used for later update
         self.session.estimator.register(
             gamma, 'NetworkSlimmer.gamma', node=self, history=1)
-        self.session.estimator.register(
-            self.mask, 'NetworkSlimmer.mask', node=self, history=1)
         # add reg
         tf.losses.add_loss(
             self.weight * tf.reduce_sum(tf.abs(gamma)),
@@ -185,28 +184,35 @@ class NetworkSlimmer(ChannelPrunerBase):
         estimator = self.session.estimator
         gamma_name = 'NetworkSlimmer.gamma'
         threshold_name = 'NetworkSlimmer.threshold'
-        mask_name = 'NetworkSlimmer.mask'
         if estimator.max_len(gamma_name) == 0:
-            return estimator.get_value(threshold_name)
+            try:
+                return estimator.get_value(threshold_name)
+            except KeyError:
+                raise RuntimeError(
+                    'Train for a while before running update to collect '
+                    'gamma values.')
         # extract all gammas globally
         gammas = estimator.get_values(gamma_name)
-        masks = estimator.get_values(mask_name)
         gamma_values = []
         for overrider, gamma in gammas.items():
-            gamma_values += gamma[util.nonzero(masks[overrider])].tolist()
+            mask = self.session.run(overrider.mask)
+            gamma_values += gamma[util.nonzero(mask)].tolist()
         threshold = self._threshold(gamma_values)
-        estimator.flush(gamma_name)
-        estimator.flush(mask_name)
-        estimator.add(threshold, 'NetworkSlimmer.threshold')
+        log.debug(
+            'Extracted a global threshold for all gammas: {}.'
+            .format(threshold))
+        estimator.flush_all(gamma_name)
+        estimator.add(threshold, threshold_name)
         return threshold
 
     def _updated_mask(self, var, mask):
+        mask, gamma = self.session.raw_run([mask, self.gamma])
         if self.global_threshold:
             threshold = self._global_threshold()
         else:
-            gamma_values = self.gamma[util.nonzero(self.mask)]
+            gamma_values = gamma[util.nonzero(self.mask)]
             threshold = self._threshold(gamma_values)
-        return util.logical_and(mask, self.gamma > threshold)
+        return util.logical_and(mask, gamma > threshold)
 
 
 class FilterPruner(PrunerBase):

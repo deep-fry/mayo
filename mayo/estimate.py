@@ -75,7 +75,8 @@ class ResourceEstimator(object):
             history = self.properties[node][name]['history']
         except KeyError:
             history = self.default_history
-        values = self.get_history(name, node)
+        stats = self.statistics.setdefault(node, {})
+        values = stats.setdefault(name, [])
         if history != 'infinite':
             while len(values) >= history:
                 values.pop(0)
@@ -128,7 +129,13 @@ class ResourceEstimator(object):
         return self.statistics[node or 'global'][name]
 
     def flush(self, name, node=None):
-        self.statistics[node or 'global'][name] = []
+        del self.statistics[node or 'global'][name]
+
+    def flush_all(self, name):
+        for node, stats in self.statistics.items():
+            for stat_name in list(stats):
+                if stat_name == name:
+                    del stats[name]
 
     def get_histories(self, name):
         return {
@@ -145,8 +152,8 @@ class ResourceEstimator(object):
 
     def get_values(self, name):
         return {
-            name: values[-1]
-            for name, values in self.get_histories(name).items()
+            layer_name: values[-1] if len(values) else None
+            for layer_name, values in self.get_histories(name).items()
         }
 
     def get_mean(self, name, node=None):
