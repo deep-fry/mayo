@@ -213,10 +213,24 @@ class GatedConvolutionInstantiator(object):
         active = tf.reshape(reshaped > threshold, tensor.shape)
         return tf.stop_gradient(active)
 
-    def _normalization(self, prenorm):
+    def _gated_normalization(self, prenorm):
+        # gating
+        if self.should_gate:
+            actives = tf.cast(self.actives(), tf.float32)
+        else:
+            actives = None
         if not self.normalizer_fn:
+            if self.should_gate:
+                return prenorm * actives
             return prenorm
         if self.policy == 'parametric_gamma':
+            # output =
+            #   actives(gamma(x)) * gamma(x) * norm(conv(x)) +
+            #   actives(gamma(x)) * beta
+            if not self.normalizer_params.get('scale', False):
+                raise GateParameterValueError(
+                    'Policy "parametric_gamma" expects `scale` to be used '
+                    'in slim.batch_norm.')
             normalizer_params = dict(self.normalizer_params, **{
                 'scale': False,
                 'center': False,
@@ -226,17 +240,25 @@ class GatedConvolutionInstantiator(object):
             })
             output = self.constructor.instantiate_batch_normalization(
                 None, prenorm, normalizer_params)
+            gamma = self.gate()
+            output *= actives * gamma if self.should_gate else gamma
+            if not self.normalizer_params.get('center', True):
+                return output
+            # use offset beta
             beta_scope = '{}/gate/shift'.format(self.scope)
             beta = tf.get_variable(
                 beta_scope, shape=output.shape[-1], dtype=tf.float32,
                 initializer=tf.constant_initializer(0.1),
                 trainable=self.gate_trainable)
             # gate output is the parametric gamma value
-            return self.gate() * output + beta
+            output += actives * beta if self.should_gate else beta
+            return output
+        # normal normalization
         scope = '{}/{}'.format(
             self.scope, self._normalizer_names[self.normalizer_fn])
         normalizer_params = dict(self.normalizer_params, scope=scope)
-        return self.normalizer_fn(self.output, **normalizer_params)
+        output = self.normalizer_fn(self.output, **normalizer_params)
+        return actives * output if self.should_gate else output
 
     def _squeeze_excitation(self, tensor):
         def params(name, outputs):
@@ -258,16 +280,13 @@ class GatedConvolutionInstantiator(object):
         return conv(None, squeezed, expand_params)
 
     def instantiate(self):
-        output = self._normalization(self.output)
+        output = self._gated_normalization(self.output)
         if self.activation_fn is not None:
             output = self.activation_fn(output)
         if self.policy == 'squeeze_excitation':
             se = self._squeeze_excitation(output)
             output *= se
         activated = output
-        # gating
-        if self.should_gate:
-            output = output * tf.cast(self.actives(), tf.float32)
         # estimator
         self._register()
         # regularizer
