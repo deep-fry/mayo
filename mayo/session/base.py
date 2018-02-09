@@ -307,7 +307,7 @@ class Session(object, metaclass=SessionMeta):
             results, statistics = self.raw_run(
                 (ops, self.estimator.operations), **kwargs)
             # update statistics
-            self.estimator.add(statistics)
+            self.estimator.append(statistics)
             text = self.estimator.format(batch_size=self.batch_size)
             log.info(text, update=True)
         else:

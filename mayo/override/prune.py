@@ -140,11 +140,13 @@ class ChannelPrunerBase(OverriderBase):
 
 
 class NetworkSlimmer(ChannelPrunerBase):
-    # This pruner only works on activations
-    def __init__(self, session, density=None, weight=0.01, should_update=True):
+    def __init__(
+            self, session, density=None, weight=0.01,
+            global_threshold=True, should_update=True):
         super().__init__(session, should_update)
         self.density = density
         self.weight = weight
+        self.global_threshold = global_threshold
 
     @memoize_property
     def gamma(self):
@@ -159,18 +161,52 @@ class NetworkSlimmer(ChannelPrunerBase):
 
     def _apply(self, value):
         masked = super()._apply(value)
+        gamma = self.gamma
+        # register the latest gamma and mask to be used for later update
+        self.session.estimator.register(
+            gamma, 'NetworkSlimmer.gamma', node=self, history=1)
+        self.session.estimator.register(
+            self.mask, 'NetworkSlimmer.mask', node=self, history=1)
         # add reg
         tf.losses.add_loss(
-            self.weight * tf.reduce_sum(tf.abs(self.gamma)),
+            self.weight * tf.reduce_sum(tf.abs(gamma)),
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         return util.cast(masked, float)
 
-    def _updated_mask(self, var, mask):
+    def _threshold(self, values):
+        if not values:
+            return 0
+        num_active = math.ceil(len(values) * self.density)
+        if num_active == len(values):
+            return 0
+        return sorted(values)[-num_active - 1]
+
+    def _global_threshold(self):
+        estimator = self.session.estimator
+        gamma_name = 'NetworkSlimmer.gamma'
+        threshold_name = 'NetworkSlimmer.threshold'
+        mask_name = 'NetworkSlimmer.mask'
+        if estimator.max_len(gamma_name) == 0:
+            return estimator.get_value(threshold_name)
         # extract all gammas globally
-        mask, scale = self.session.run([mask, self.gamma])
-        num_active = math.ceil(len(scale) * self.density)
-        threshold = sorted(scale)[-num_active]
-        return mask * util.cast(scale > threshold, float)
+        gammas = estimator.get_values(gamma_name)
+        masks = estimator.get_values(mask_name)
+        gamma_values = []
+        for overrider, gamma in gammas.items():
+            gamma_values += gamma[util.nonzero(masks[overrider])].tolist()
+        threshold = self._threshold(gamma_values)
+        estimator.flush(gamma_name)
+        estimator.flush(mask_name)
+        estimator.add(threshold, 'NetworkSlimmer.threshold')
+        return threshold
+
+    def _updated_mask(self, var, mask):
+        if self.global_threshold:
+            threshold = self._global_threshold()
+        else:
+            gamma_values = self.gamma[util.nonzero(self.mask)]
+            threshold = self._threshold(gamma_values)
+        return util.logical_and(mask, self.gamma > threshold)
 
 
 class FilterPruner(PrunerBase):

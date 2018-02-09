@@ -8,6 +8,8 @@ from mayo.net.graph import LayerNode, TensorNode, SplitNode
 
 
 class ResourceEstimator(object):
+    default_history = 100
+
     def __init__(self, batch_size, allow_reregister=True):
         super().__init__()
         self.batch_size = batch_size
@@ -42,7 +44,7 @@ class ResourceEstimator(object):
         transformer: transform value before adding to statistics.
         formatter: calls .register_print with `formatter`.
         """
-        history = 100 if history is None else history
+        history = self.default_history if history is None else history
         node = 'global' if node is None else node
         layer = self.operations.setdefault(node, {})
         prop = self.properties.setdefault(node, {})
@@ -67,7 +69,19 @@ class ResourceEstimator(object):
         if func not in self.formatters:
             self.formatters.append(func)
 
-    def add(self, statistics):
+    def add(self, value, name, node=None):
+        node = node or 'global'
+        try:
+            history = self.properties[node][name]['history']
+        except KeyError:
+            history = self.default_history
+        values = self.get_history(name, node)
+        if history != 'infinite':
+            while len(values) >= history:
+                values.pop(0)
+        values.append(value)
+
+    def append(self, statistics):
         """
         Add new statistics to the estimator instance.
 
@@ -87,10 +101,12 @@ class ResourceEstimator(object):
                     value = transformer(value)
                 values.append(value)
 
-    def max_len(self):
+    def max_len(self, name=None):
         l = 0
         for stats in self.statistics.values():
-            for history in stats.values():
+            for stat_name, history in stats.items():
+                if name is not None and name != stat_name:
+                    continue
                 l = max(l, len(history))
         return l
 

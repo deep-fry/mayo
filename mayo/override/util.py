@@ -53,6 +53,15 @@ def where(bool_expr, true_value=None, false_value=None):
     return tf.where(bool_expr, true_value, false_value)
 
 
+def nonzero(value):
+    if is_constant(value):
+        _constants_not_accepted(nonzero)
+    if is_numpy(value):
+        return np.nonzero(value)
+    raise TypeError(
+        'Tensorflow does not implement a function to compute non-zero values.')
+
+
 def sum(value):
     if is_constant(value):
         _constants_not_accepted(where)
