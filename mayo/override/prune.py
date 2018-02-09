@@ -164,6 +164,9 @@ class NetworkSlimmer(ChannelPrunerBase):
         masked = super()._apply(value)
         gamma = self.gamma
         # register the latest gamma and mask to be used for later update
+        # TODO this works as a way to collect global gammas, but the `gamma`
+        # tensor is evaluated every time we use `session.run(batch=True)`,
+        # will fix later if performance proves to be problematic.
         self.session.estimator.register(
             gamma, 'NetworkSlimmer.gamma', node=self, history=1)
         # add reg
