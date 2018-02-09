@@ -20,34 +20,22 @@ model:
                 epsilon: 0.001
             trainable: $(_gate.trainable)
         _dsconv: &dsconv
-            kwargs: {should_gate: null, trainable: null}
+            kwargs: {should_gate: true, trainable: $(_gate.trainable)}
             layers:
                 depthwise: {trainable: ^(trainable)}
                 pointwise: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
-        conv0: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        conv1: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv2: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv3: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv4: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv5: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv6: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv7: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv8: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv9: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv10: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv11: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv12: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
-        conv13: {<<: *dsconv, should_gate: false, trainable: $(_gate.trainable)}
+        conv0: {<<: *gated_conv}
+        conv1: {<<: *dsconv}
+        conv2: {<<: *dsconv}
+        conv3: {<<: *dsconv}
+        conv4: {<<: *dsconv}
+        conv5: {<<: *dsconv}
+        conv6: {<<: *dsconv}
+        conv7: {<<: *dsconv}
+        conv8: {<<: *dsconv}
+        conv9: {<<: *dsconv}
+        conv10: {<<: *dsconv}
+        conv11: {<<: *dsconv}
+        conv12: {<<: *dsconv}
+        conv13: {<<: *dsconv}
         fc: {trainable: $(_gate.trainable)}
-        # conv2: {<<: *dsconv}
-        # conv3: {<<: *dsconv}
-        # conv4: {<<: *dsconv}
-        # conv5: {<<: *dsconv}
-        # conv6: {<<: *dsconv}
-        # conv7: {<<: *dsconv}
-        # conv8: {<<: *dsconv}
-        # conv9: {<<: *dsconv}
-        # conv10: {<<: *dsconv}
-        # conv11: {<<: *dsconv}
-        # conv12: {<<: *dsconv}
-        # conv13: {<<: *dsconv}
