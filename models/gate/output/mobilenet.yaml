@@ -3,7 +3,6 @@ _import: ../../mobilenet.yaml
 _gate:
   trainable: false
 model:
-    name: mobilenet_v1
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution

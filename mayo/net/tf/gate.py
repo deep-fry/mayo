@@ -3,6 +3,7 @@ import math
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
+from tensorflow.python.ops import nn_impl
 
 from mayo.util import Percent, memoize_method
 
@@ -225,7 +226,7 @@ class GatedConvolutionInstantiator(object):
                 'is_training': self.is_training,
             })
             output = self.constructor.instantiate_batch_normalization(
-                None, self.output, normalizer_params)
+                None, prenorm, normalizer_params)
             beta_scope = '{}/gate/shift'.format(self.scope)
             beta = tf.get_variable(
                 beta_scope, shape=output.shape[-1], dtype=tf.float32,

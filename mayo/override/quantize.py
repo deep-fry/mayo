@@ -468,34 +468,46 @@ class IncrementalQuantizer(OverriderBase):
     https://arxiv.org/pdf/1702.03044.pdf
     '''
     interval = Parameter('interval', 0.1, [], tf.float32)
+    mask = Parameter('mask', None, None, tf.bool)
 
     def __init__(self, session, quantizer, intervals, should_update=True):
         super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
+        params = {**params, 'session': session}
         self.quantizer = cls(**params)
         if intervals is not None:
-            self.interval = intervals[0]
             self.intervls = intervals
+            self.interval = intervals[0]
             self.interval_index = 0
 
     def _quantize(self, value, mean_quantizer=False):
         quantizer = self.quantizer
         scope = '{}/{}'.format(self._scope, self.__class__.__name__)
-        return quantizer.apply(scope, self._original_getter, value)
+        return quantizer.apply(self, scope, self._original_getter, value)
 
     def _apply(self, value):
-        value = self.before
-        mask = self._policy(value)
-        mask = util.cast(mask, float)
-        self.mask = mask
+        self._parameter_config = {
+            'mask': {
+                'initial': tf.zeros_initializer(tf.bool),
+                'shape': value.shape,
+            }
+        }
+
         quantized_value = self._quantize(value)
-        off_mask = util.cast(util.logical_not(util.cast(mask, bool)), float)
-        self.off_mask = off_mask
+        off_mask = util.cast(
+            util.logical_not(util.cast(self.mask, bool)), float)
+        mask = util.cast(self.mask, float)
         return value * off_mask + quantized_value * mask
 
-    def _policy(self, value):
-        th_arg = util.cast(util.count(value) * self.interval, int)
-        th = util.top_k(util.abs(value), th_arg)
+    def _policy(self, value, previous_mask, interval):
+        previous_pruned = util.sum(previous_mask)
+        th_arg = util.cast(util.count(value) * interval, int)
+        th_arg -= previous_pruned
+        if th_arg < 0:
+            raise ValueError(
+                'mask has {} elements, interval is {}'.format(
+                    previous_pruned, interval))
+        th = util.top_k(util.abs(value * previous_mask), th_arg)
         th = util.cast(th, float)
         return util.greater_equal(util.abs(value), th)
 
@@ -515,3 +527,8 @@ class IncrementalQuantizer(OverriderBase):
         # reset index
         self.interval_index = 0
         self.quantizer.update()
+        # if chosen quantized, change it to zeros
+        value, mask, interval = session.run(
+            [self.before, self.mask, self.interval])
+        new_mask = self._policy(value, mask, interval)
+        session.assign(self.mask, new_mask)
