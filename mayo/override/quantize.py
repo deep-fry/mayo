@@ -496,9 +496,12 @@ class IncrementalQuantizer(OverriderBase):
         off_mask = util.cast(
             util.logical_not(util.cast(self.mask, bool)), float)
         mask = util.cast(self.mask, float)
+        # on mask indicates the quantized values
         return value * off_mask + quantized_value * mask
 
-    def _policy(self, value, previous_mask, interval):
+    def _policy(self, value, quantized, previous_mask, interval):
+        if interval >= 1.0:
+            return np.ones(value.shape)
         previous_pruned = util.sum(previous_mask)
         th_arg = util.cast(util.count(value) * interval, int)
         th_arg -= previous_pruned
@@ -506,9 +509,14 @@ class IncrementalQuantizer(OverriderBase):
             raise ValueError(
                 'mask has {} elements, interval is {}'.format(
                     previous_pruned, interval))
-        th = util.top_k(util.abs(value * previous_mask), th_arg)
+        off_mask = util.cast(
+            util.logical_not(util.cast(previous_mask, bool)), float)
+        metric = value - quantized
+        flat_value = metric * off_mask
+        flat_value = flat_value.flatten()
+        th = util.top_k(util.abs(flat_value), th_arg)
         th = util.cast(th, float)
-        return util.greater_equal(util.abs(value), th)
+        return util.logical_not(util.greater_equal(util.abs(metric), th))
 
     # override assign_parameters to assign quantizer as well
     def assign_parameters(self):
@@ -527,7 +535,7 @@ class IncrementalQuantizer(OverriderBase):
         self.interval_index = 0
         self.quantizer.update()
         # if chosen quantized, change it to zeros
-        value, mask, interval = self.session.run(
-            [self.before, self.mask, self.interval])
-        new_mask = self._policy(value, mask, interval)
+        value, quantized, mask, interval = self.session.run(
+            [self.before, self.quantizer.after, self.mask, self.interval])
+        new_mask = self._policy(value, quantized, mask, interval)
         self.session.assign(self.mask, new_mask)
