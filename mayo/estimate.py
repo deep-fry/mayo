@@ -3,6 +3,7 @@ import collections
 
 import numpy as np
 
+from mayo.log import log
 from mayo.util import object_from_params, Change
 from mayo.net.graph import LayerNode, TensorNode, SplitNode
 
@@ -223,6 +224,11 @@ class ResourceEstimator(object):
         return {'MACs': int(input_shape[-1] * output_shape[-1])}
 
     def _gate_density(self, gates):
+        if not gates:
+            log.warn(
+                'Cannot estimate gate density without a history of gates, '
+                'defaulting to zero sparsity.')
+            return 1
         valids = sum(np.sum(g.astype(np.int32)) for g in gates)
         totals = sum(g.size for g in gates)
         return valids / totals
@@ -249,7 +255,12 @@ class ResourceEstimator(object):
         ntype = node.params['type']
         if ntype == 'gated_convolution':
             if node.params.get('should_gate', True):
-                return self.get_history('gate.active', node)
+                try:
+                    return self.get_history('gate.active', node)
+                except KeyError:
+                    log.warn(
+                        'No gate history available, defaulting to '
+                        'zero sparsity.')
             return true()
         passthrough_types = [
             'dropout', 'max_pool', 'average_pool', 'activation', 'identity']
