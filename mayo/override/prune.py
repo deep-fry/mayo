@@ -209,7 +209,7 @@ class NetworkSlimmer(ChannelPrunerBase):
         return threshold
 
     def _updated_mask(self, var, mask):
-        mask, gamma = self.session.raw_run([mask, self.gamma])
+        mask, gamma = self.session.run([mask, self.gamma])
         if self.global_threshold:
             threshold = self._global_threshold()
         else:
