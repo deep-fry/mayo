@@ -66,13 +66,26 @@ class Train(Session):
             average_grads.append(grad_and_var)
         return average_grads
 
+    @staticmethod
+    def _loss_formatter(key, name):
+        def formatter(estimator):
+            loss_mean, loss_std = estimator.get_mean_std(key)
+            loss_std = '±{}'.format(Percent(loss_std / loss_mean))
+            return '{}: {:10f}{:5}'.format(name, loss_mean, loss_std)
+        return formatter
+
     @memoize_property
     def _gradients(self):
+        formatter = self._loss_formatter('regularization', 'regu')
+
         def gradient(net):
             regularization = tf.get_collection(
                 tf.GraphKeys.REGULARIZATION_LOSSES)
+            self.estimator.register(
+                regularization, 'regularization', formatter=formatter)
             loss = tf.add_n([net.loss()] + regularization)
             return self.optimizer.compute_gradients(loss)
+
         tower_grads = self.net_map(gradient)
         return self._average_gradients(tower_grads)
 
@@ -106,15 +119,11 @@ class Train(Session):
         accuracy_formatter = lambda e: \
             'accuracy: {}'.format(Percent(e.get_mean('accuracy')))
 
-        def loss_formatter(estimator):
-            loss_mean, loss_std = estimator.get_mean_std('loss')
-            loss_std = '±{}'.format(Percent(loss_std / loss_mean))
-            return 'loss: {:10f}{:5}'.format(loss_mean, loss_std)
-
         # register progress update statistics
         self.estimator.register(
             self.accuracy, 'accuracy', formatter=accuracy_formatter)
-        self.estimator.register(self.loss, 'loss', formatter=loss_formatter)
+        formatter = self._loss_formatter('loss', 'loss')
+        self.estimator.register(self.loss, 'loss', formatter=formatter)
 
     @memoize_property
     def _summary_writer(self):
