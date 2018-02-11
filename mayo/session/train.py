@@ -77,12 +77,13 @@ class Train(Session):
     @memoize_property
     def _gradients(self):
         formatter = self._loss_formatter('regularization', 'regu')
+        regularization = tf.get_collection(
+            tf.GraphKeys.REGULARIZATION_LOSSES)
+        self.estimator.register(
+            tf.add_n(regularization), 'regularization',
+            formatter=formatter)
 
         def gradient(net):
-            regularization = tf.get_collection(
-                tf.GraphKeys.REGULARIZATION_LOSSES)
-            self.estimator.register(
-                regularization, 'regularization', formatter=formatter)
             loss = tf.add_n([net.loss()] + regularization)
             return self.optimizer.compute_gradients(loss)
 
