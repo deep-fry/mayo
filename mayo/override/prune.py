@@ -170,8 +170,10 @@ class NetworkSlimmer(ChannelPrunerBase):
         self.session.estimator.register(
             gamma, 'NetworkSlimmer.gamma', node=self, history=1)
         # add reg
+        loss = self.weight * tf.nn.l2_loss(gamma)
         tf.losses.add_loss(
-            self.weight * tf.reduce_sum(tf.abs(gamma)),
+            # self.weight * tf.reduce_sum(tf.abs(gamma)),
+            loss,
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         return util.cast(masked, float)
 
