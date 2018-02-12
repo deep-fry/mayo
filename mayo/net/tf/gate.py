@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 
+from mayo.log import log
 from mayo.util import Percent, memoize_method
 
 
@@ -360,6 +361,9 @@ class GateLayers(object):
             loss_std = Percent(np.std(total_losses) / loss_mean)
         else:
             loss_std = '?%'
+        if math.isnan(loss_mean):
+            log.error(
+                'Gating loss is NaN. Please check your regularizer weight.')
         return 'gate.loss: {:.5f}±{}'.format(loss_mean, loss_std)
 
     @staticmethod
