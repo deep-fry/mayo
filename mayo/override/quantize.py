@@ -527,13 +527,13 @@ class IncrementalQuantizer(OverriderBase):
     def update_interval(self):
         if self.intervals == []:
             return False
-        self.interval = self.intervals[self.interval_index]
+        self.session.assign(self.interval, self.intervals[self.interval_index])
         self.interval_index += 1
         return True
 
     def _update(self):
         # reset index
-        self.interval_index = 0
+        self.update_interval()
         self.quantizer.update()
         # if chosen quantized, change it to zeros
         value, quantized, mask, interval = self.session.run(
