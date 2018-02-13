@@ -475,7 +475,7 @@ class IncrementalQuantizer(OverriderBase):
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(session, **params)
         if intervals is not None:
-            self.intervls = intervals
+            self.intervals = intervals
             self.interval = intervals[0]
             self.interval_index = 0
 
