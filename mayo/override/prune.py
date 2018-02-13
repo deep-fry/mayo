@@ -180,11 +180,12 @@ class NetworkSlimmer(ChannelPrunerBase):
             return 0
         # density = (previous_zeros + new_zeros) * total
         density = self.density - non_zeros / float(total)
+        if density <= 0:
+            raise ValueError(
+                'Previous density is smaller than current density')
         num_active = math.ceil(len(values) * density)
         if num_active == len(values):
             return 0
-        if num_active <= 0:
-            raise ValueError('Previous density is smaller than current density')
         return sorted(values)[-num_active - 1]
 
     def _global_threshold(self):
