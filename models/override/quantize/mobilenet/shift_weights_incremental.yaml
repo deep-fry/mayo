@@ -1,42 +1,22 @@
 model:
+    name: mobilenet_v1
     layers:
-        _incremental: &incrementalfp
-            type: mayo.override.IncrementalQuantizer
-            intervals: [0.75, 1]
-            quantizer:
-                type: mayo.override.FixedPointQuantizer
-                width: 2
-                point: 1
-                should_update: true
         _incremental: &incrementalshift
             type: mayo.override.IncrementalQuantizer
             intervals: [0.25, 0.5, 0.75, 1]
             quantizer:
                 type: mayo.override.ShiftQuantizer
-                width: 8
-                bias: 252
+                width: 4
+                bias: 250
                 overflow_rate: 0.0
                 should_update: true
-        _incremental: &incrementalreshift
-            type: mayo.override.IncrementalQuantizer
-            intervals: [0.25, 0.5, 0.75, 1]
-            quantizer: &recentralizer
-                type: mayo.override.Recentralizer
-                quantizer:
-                    type: mayo.override.ShiftQuantizer
-                    width: 16
-                    bias: 16
-                    overflow_rate: 0.01
-                mean_quantizer:
-                    type: mayo.override.ShiftQuantizer
-                    width: 16
-                    bias: 16
-                    overflow_rate: 0.01
         _dsconv: &dsconv
             layers:
                 depthwise: &quantized_conv
-                    weights_overrider: *incrementalshift
-                    biases_overrider: *incrementalshift
+                    weights_overrider:
+                        *incrementalshift
+                    biases_overrider:
+                        *incrementalshift
                     # activation_overrider: &shift
                     #     type: mayo.override.ShiftQuantizer
                     #     width: 3
@@ -61,6 +41,6 @@ model:
         conv13: {<<: *dsconv}
         fc:
             weights_overrider:
-                {<<: *quantized_conv}
+                - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
             biases_overrider:
-                {<<: *quantized_conv}
+                - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
