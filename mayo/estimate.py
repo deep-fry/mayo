@@ -239,7 +239,9 @@ class ResourceEstimator(object):
         that can propagate sparsity.
         """
         def true():
-            return [np.ones(self.shapes[node], dtype=bool)] * self.max_len()
+            num = max(self.max_len('gate.active'), 1)
+            channels = self.shapes[node][-1]
+            return [np.ones([1, 1, 1, channels], dtype=bool)] * num
 
         if isinstance(node, SplitNode):
             return self._gate_for_node(node.predecessors[0])
@@ -247,6 +249,7 @@ class ResourceEstimator(object):
             preds = node.predecessors
             if preds:
                 return self._gate_for_node(preds[0])
+            # input node
             return true()
         if not isinstance(node, LayerNode):
             raise TypeError(

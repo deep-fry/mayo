@@ -184,12 +184,15 @@ class Logger(object):
                 'Debugger [d], Abort [q]: ')
             if not r:
                 break
-            elif r == 'd':
+            import inspect
+            frame = inspect.currentframe().f_back.f_back
+            if r == 'd':
+                # FIXME setting trace to frame does not work
                 import ipdb
                 ipdb.set_trace()
             elif r == 't':
                 import traceback
-                traceback.print_stack()
+                traceback.print_stack(frame)
             elif r == 'q':
                 sys.exit(-1)
 
