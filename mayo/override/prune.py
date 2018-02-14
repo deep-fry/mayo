@@ -186,7 +186,8 @@ class NetworkSlimmer(ChannelPrunerBase):
         num_active = math.ceil(len(values) * density)
         if num_active == len(values):
             return 0
-        return sorted(values)[-num_active - 1]
+        # the first x percent
+        return sorted(values)[num_active]
 
     def _global_threshold(self):
         estimator = self.session.estimator
