@@ -63,6 +63,8 @@ class GatedConvolutionInstantiator(object):
         self.squeeze_factor = gate_params['squeeze_factor']
         self.should_gate = gate_params['should_gate']
         self.gate_trainable = gate_params['trainable']
+        self.threshold = gate_params['threshold']
+        self.ranking_method = gate_params['ranking']
         self._check_policy()
         self._check_granularity()
 
@@ -206,12 +208,17 @@ class GatedConvolutionInstantiator(object):
             # all active, not gating
             return tensor
         # reshape the last dimensions into one
-        reshaped = tf.reshape(tensor, [num, -1])
-        # top_k, where k is the number of active channels
-        top, _ = tf.nn.top_k(reshaped, k=(num_active + 1))
-        # disable channels with smaller activations
-        threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
-        active = tf.reshape(reshaped > threshold, tensor.shape)
+        if self.ranking_method == 'meanstd':
+            reshaped = tf.reshape(tensor, [num, -1])
+            mean, variance = tf.nn.moments(reshaped)
+            active = reshaped > (mean - self.threshold * tf.sqrt(variance))
+        else:
+            # perform top k by default
+            # top_k, where k is the number of active channels
+            top, _ = tf.nn.top_k(reshaped, k=(num_active + 1))
+            # disable channels with smaller activations
+            threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
+            active = tf.reshape(reshaped > threshold, tensor.shape)
         return tf.stop_gradient(active)
 
     def _gated_normalization(self, prenorm):
@@ -392,7 +399,9 @@ class GateLayers(object):
             'weight': params.pop('weight', 0),
             'squeeze_factor': params.pop('squeeze_factor', None),
             'should_gate': params.pop('should_gate', True),
-            'trainable': params.pop('gate_trainable', True)
+            'trainable': params.pop('gate_trainable', True),
+            'ranking_method': params.pop('ranking_method', 'top_k'),
+            'threshold': params.pop('threshold', 0.0)
         }
         return GatedConvolutionInstantiator(
             self, node, params, gate_params, tensor).instantiate()
