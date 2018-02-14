@@ -179,7 +179,7 @@ class NetworkSlimmer(ChannelPrunerBase):
         if not values:
             return 0
         # density = (previous_zeros + new_zeros) * total
-        density = self.density - non_zeros / float(total)
+        density = non_zeros / float(total) - self.density
         if density <= 0:
             raise ValueError(
                 'Previous density is smaller than current density')
