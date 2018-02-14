@@ -504,7 +504,6 @@ class IncrementalQuantizer(OverriderBase):
             return np.ones(value.shape)
         previous_pruned = util.sum(previous_mask)
         th_arg = util.cast(util.count(value) * interval, int)
-        th_arg -= previous_pruned
         if th_arg < 0:
             raise ValueError(
                 'mask has {} elements, interval is {}'.format(
