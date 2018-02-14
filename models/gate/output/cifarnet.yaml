@@ -3,7 +3,7 @@ _import: ../../cifarnet.yaml
 _gate:
     policy: parametric_gamma
     density: 1.0
-    trainable: true 
+    trainable: true
     pool: avg
 model:
     description: |
@@ -18,6 +18,8 @@ model:
             granularity: channel
             should_gate: true
             weight: 0.0000001
+            ranking_method: meanstd
+            threshold: 1.0
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}
