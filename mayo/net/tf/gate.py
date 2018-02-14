@@ -64,7 +64,7 @@ class GatedConvolutionInstantiator(object):
         self.should_gate = gate_params['should_gate']
         self.gate_trainable = gate_params['trainable']
         self.threshold = gate_params['threshold']
-        self.ranking_method = gate_params['ranking']
+        self.ranking_method = gate_params['ranking_method']
         self._check_policy()
         self._check_granularity()
 
@@ -208,17 +208,21 @@ class GatedConvolutionInstantiator(object):
             # all active, not gating
             return tensor
         # reshape the last dimensions into one
+        reshaped = tf.reshape(tensor, [num, -1])
         if self.ranking_method == 'meanstd':
-            reshaped = tf.reshape(tensor, [num, -1])
-            mean, variance = tf.nn.moments(reshaped)
-            active = reshaped > (mean - self.threshold * tf.sqrt(variance))
+            # TODO: should the mean, variance are calcluated across a whole
+            # batch?
+            # potentially, they can be calcculated for each individual batch
+            # mean, variance = tf.nn.moments(reshaped, axes=[1])
+            mean, variance = tf.nn.moments(tf.abs(reshaped), axes=[0, 1])
+            threshold = (mean - self.threshold * tf.sqrt(variance))
         else:
             # perform top k by default
             # top_k, where k is the number of active channels
-            top, _ = tf.nn.top_k(reshaped, k=(num_active + 1))
+            top, _ = tf.nn.top_k(tf.abs(reshaped), k=(num_active + 1))
             # disable channels with smaller activations
             threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
-            active = tf.reshape(reshaped > threshold, tensor.shape)
+        active = tf.reshape(tf.abs(reshaped) > threshold, tensor.shape)
         return tf.stop_gradient(active)
 
     def _gated_normalization(self, prenorm):
