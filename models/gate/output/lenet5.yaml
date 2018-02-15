@@ -1,17 +1,19 @@
 ---
-_import: ../../lenet5.yaml
+_import: ../../lenet5_bn.yaml
 model:
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
             density: 0.5
-            weight: 0.0001
+            weight: 0.0
             policy: parametric_gamma
             gate_trainable: true
             trainable: true
             should_gate: true
             pool: avg
             normalizer_fn: tensorflow.contrib.slim.batch_norm
+            ranking_method: meanstd
+            threshold: 1.0
             normalizer_params:
                 center: true
                 scale: true

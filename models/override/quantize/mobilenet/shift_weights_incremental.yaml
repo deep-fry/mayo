@@ -41,6 +41,6 @@ model:
         conv13: {<<: *dsconv}
         fc:
             weights_overrider:
-                - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
+                - {<<: *incrementalshift}
             biases_overrider:
-                - {type: mayo.override.FixedPointQuantizer, point: 0, width: 8}
+                - {<<: *incrementalshift}
