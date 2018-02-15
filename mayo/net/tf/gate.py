@@ -213,8 +213,8 @@ class GatedConvolutionInstantiator(object):
             # TODO: should the mean, variance are calcluated across a whole
             # batch?
             # potentially, they can be calcculated for each individual batch
-            # mean, variance = tf.nn.moments(reshaped, axes=[1])
-            mean, variance = tf.nn.moments(tf.abs(reshaped), axes=[0, 1])
+            mean, variance = tf.nn.moments(reshaped, axes=[1], keep_dims=True)
+            # mean, variance = tf.nn.moments(tf.abs(reshaped), axes=[0, 1])
             threshold = (mean - self.threshold * tf.sqrt(variance))
         else:
             # perform top k by default
