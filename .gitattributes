@@ -1,2 +1,4 @@
 checkpoints/*/*/pretrained.* filter=lfs diff=lfs merge=lfs -text
 *.tfrecord filter=lfs diff=lfs merge=lfs -text
+./datasets/cifar10/.tfrecord filter=lfs diff=lfs merge=lfs -text
+./datasets/cifar10/*.tfrecord filter=lfs diff=lfs merge=lfs -text
