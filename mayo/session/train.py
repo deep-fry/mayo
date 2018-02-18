@@ -112,15 +112,9 @@ class Train(Session):
 
     def _init(self):
         self.load_checkpoint(self.config.system.checkpoint.load)
-
-        # final debug outputs
-        if log.is_enabled('debug'):
-            lr = self.run(self.learning_rate)
-            log.debug('Current learning rate is {}.'.format(lr))
-
+        # formatters
         accuracy_formatter = lambda e: \
             'accuracy: {}'.format(Percent(e.get_mean('accuracy')))
-
         # register progress update statistics
         self.estimator.register(
             self.accuracy, 'accuracy', formatter=accuracy_formatter)
@@ -192,7 +186,9 @@ class Train(Session):
         return True
 
     def train(self):
-        log.debug('Training start.')
+        # final debug outputs
+        lr = self.run(self.learning_rate)
+        log.info('Training start with a learning rate {}.'.format(lr))
         try:
             # train iterations
             while self._iteration():

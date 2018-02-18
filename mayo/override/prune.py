@@ -85,9 +85,9 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         2. https://arxiv.org/abs/1608.04493
     """
     def __init__(
-            self, alpha=None, on_factor=1.1, off_factor=0.9,
+            self, session, alpha=None, on_factor=1.1, off_factor=0.9,
             should_update=True):
-        super().__init__(alpha, should_update)
+        super().__init__(session, alpha, should_update)
         self.on_factor = on_factor
         self.off_factor = off_factor
 
