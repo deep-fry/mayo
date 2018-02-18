@@ -139,6 +139,15 @@ class ChannelPrunerBase(OverriderBase):
         return self._info_tuple(
             mask=self.mask.name, density=density, count_=mask.size)
 
+    @classmethod
+    def finalize_info(cls, table):
+        densities = table.get_column('density')
+        count = table.get_column('count_')
+        avg_density = sum(d * c for d, c in zip(densities, count)) / sum(count)
+        footer = [None, '    overall: ', Percent(avg_density), None]
+        table.set_footer(footer)
+        return footer
+
 
 class NetworkSlimmer(ChannelPrunerBase):
     def __init__(
