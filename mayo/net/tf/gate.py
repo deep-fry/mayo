@@ -215,7 +215,7 @@ class GatedConvolutionInstantiator(object):
             # potentially, they can be calcculated for each individual batch
             mean, variance = tf.nn.moments(reshaped, axes=[1], keep_dims=True)
             # mean, variance = tf.nn.moments(tf.abs(reshaped), axes=[0, 1])
-            threshold = (mean - self.threshold * tf.sqrt(variance))
+            threshold = (mean - self.threshold)
         else:
             # perform top k by default
             # top_k, where k is the number of active channels

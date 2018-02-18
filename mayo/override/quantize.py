@@ -539,3 +539,66 @@ class IncrementalQuantizer(OverriderBase):
             [self.before, self.quantizer.after, self.mask, self.interval])
         new_mask = self._policy(value, quantized, mask, interval)
         self.session.assign(self.mask, new_mask)
+
+
+class MixedPrecisionQuantizer(IncrementalQuantizer):
+    '''
+        Mixed Precision should be implemnted as the following:
+        mask1 * precision1 + mask2 * precision2 ...
+        The masks are mutually exclusive
+        Currently supporting:
+            making a loss to the reg term
+        TODO:
+        1. Fill up mask_quantizer_maps, and apply a number of overriders.
+        This is different from chain overriders
+        2. Channel-wise granularity, now it's element-wise granularity
+    '''
+    mask_quantizer_maps = {}
+
+    def __init__(self, session, quantizer, interval, should_update=True,
+                 reg_factor=0.0):
+        super().__init__(session, quantizer, interval, should_update)
+        self.reg_factor = reg_factor
+
+    def _apply(self, value):
+        '''
+        making an quantization loss to reg loss
+        '''
+        self._parameter_config = {
+            'mask': {
+                'initial': tf.zeros_initializer(tf.bool),
+                'shape': value.shape,
+            }
+        }
+        quantized_value = self._quantize(value)
+        self._quantization_loss(value, quantized_value)
+        # on mask indicates the quantized values
+        return self._combine_masks(value, quantized_value)
+
+    def _combine_masks(self, value, quantized_value):
+        '''
+        Args:
+            quantized_value: the current mask is working on this current
+                quantized value, this value is not included in
+                mask_quantizer_maps
+        '''
+        quantized_mask = util.cast(self.mask, float)
+        # TODO: cope with multiple overriders inside mask_quantizer_map
+        # should disale this:
+        self.mask_quantizer_maps = {}
+        if self.mask_quantizer_maps:
+            result = quantized_value * mask
+            for quantizer, mask in self.mask_quantizer_maps:
+                result += quantizer * mask
+                quantized_mask = util.cast(
+                    util.logical_or(quantized_mask, mask), float)
+            # now handel off_mask
+        off_mask = util.cast(
+            util.logical_not(util.cast(quantized_mask, bool)), float)
+        return value * off_mask + quantized_value * quantized_mask
+
+    def _quantization_loss(self, value, quantized_value):
+        loss = tf.reduce_sum(tf.abs(value - quantized_value))
+        loss *= self.reg_factor
+        loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
+        tf.add_to_collection(loss_name, loss)
