@@ -33,7 +33,7 @@ class ParameterTransformer(object):
                 return
             if 'overrider' in key:
                 overriders = [
-                    cls(self.session, **p)
+                    cls(session=self.session, **p)
                     for cls, p in multi_objects_from_params(p)]
                 if len(overriders) == 1:
                     params[key] = overriders[0]
