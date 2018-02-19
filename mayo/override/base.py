@@ -281,7 +281,8 @@ class ChainOverrider(OverriderBase, Sequence):
 
     def _apply(self, value):
         for o in self._overriders:
-            value = o.apply(self._scope, self._original_getter, value)
+            value = o.apply(
+                self.node, self._scope, self._original_getter, value)
         return value
 
     def _update(self):
