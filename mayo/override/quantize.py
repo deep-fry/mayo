@@ -399,7 +399,7 @@ class Recentralizer(OverriderBase):
         self.mean_quantizer = None
         if mean_quantizer:
             cls, params = object_from_params(mean_quantizer)
-            self.mean_quantizer = cls(**params)
+            self.mean_quantizer = cls(session, **params)
 
     @memoize_property
     def negatives(self):
