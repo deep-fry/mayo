@@ -7,7 +7,7 @@ model:
             quantizer:
                 type: mayo.override.ShiftQuantizer
                 width: 4
-                bias: 250
+                bias: 10
                 overflow_rate: 0.0
                 should_update: true
         _dsconv: &dsconv
@@ -17,12 +17,11 @@ model:
                         *incrementalshift
                     biases_overrider:
                         *incrementalshift
-                    # activation_overrider: &shift
-                    #     type: mayo.override.ShiftQuantizer
-                    #     width: 3
-                    #     bias: 2
-                    #     overflow_rate: 0.0
-                    #     should_update: true
+                    activation_overrider: &shift
+                        type: mayo.override.FixedPointQuantizer
+                        width: 8
+                        point: 3
+                        should_update: true
                 pointwise:
                     {<<: *quantized_conv}
         conv0: {<<: *quantized_conv}
