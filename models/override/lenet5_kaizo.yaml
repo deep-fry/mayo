@@ -20,15 +20,21 @@ model.layers:
             #     point: 1
     _mixed: &mixed
         type: mayo.override.MixedPrecisionQuantizer
-        interval: [0.25, 0.5, 0.75, 1]
+        intervals: [0.25, 0.5, 0.75, 1]
         reg_factor: 0.001
-        quantizer:
-            type: mayo.override.FixedPointQuantizer
-            width: 2
-            point: 0
+        quantizers:
+            quantizer1:
+              type: mayo.override.FixedPointQuantizer
+              width: 2
+              point: 0
+            quantizer2:
+              type: mayo.override.FixedPointQuantizer
+              width: 8
+              point: 0
+        picked_quantizer: quantizer1
     _overrider: &playground
-        - *incremental
-        # - *mixed
+        # - *incremental
+        - *mixed
         # - {type: mayo.override.EmptyOverrider}
         # - {type: mayo.override.DynamicNetworkSurgeryPruner}
         # - {type: mayo.override.FixedPointQuantizer}

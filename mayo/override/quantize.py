@@ -541,61 +541,80 @@ class IncrementalQuantizer(OverriderBase):
         self.session.assign(self.mask, new_mask)
 
 
-class MixedPrecisionQuantizer(IncrementalQuantizer):
+class MixedPrecisionQuantizer(OverriderBase):
     '''
         Mixed Precision should be implemnted as the following:
         mask1 * precision1 + mask2 * precision2 ...
         The masks are mutually exclusive
         Currently supporting:
-            making a loss to the reg term
+            1. making a loss to the reg term
+            2. quantizer_maps contains parallel quantizers that each can have
+            a different quantizer
+            3. channel wise granuarity based on output channels
         TODO:
-        1. Fill up mask_quantizer_maps, and apply a number of overriders.
-        This is different from chain overriders
-        2. Channel-wise granularity, now it's element-wise granularity
+        provide _update()
     '''
-    mask_quantizer_maps = {}
+    quantizer_maps = {}
+    interval = Parameter('interval', 0.1, [], tf.float32)
+    channel_mask = Parameter('channel_mask', None, None, tf.int32)
 
-    def __init__(self, session, quantizer, interval, should_update=True,
-                 reg_factor=0.0):
-        super().__init__(session, quantizer, interval, should_update)
+    def __init__(self, session, quantizers, intervals, picked_quantizer,
+                 should_update=True, reg_factor=0.0):
+        super().__init__(session, should_update)
+        for key, item in dict(quantizers).items():
+            cls, params = object_from_params(item)
+            quantizer = cls(session, **params)
+            self.quantizer_maps[key] = quantizer
+        if intervals is not None:
+            self.intervals = intervals
+            self.interval = intervals[0]
+            self.interval_index = 0
         self.reg_factor = reg_factor
+        self.picked_quantizer = picked_quantizer
 
     def _apply(self, value):
         '''
         making an quantization loss to reg loss
         '''
         self._parameter_config = {
-            'mask': {
+            'channel_mask': {
                 'initial': tf.zeros_initializer(tf.bool),
                 'shape': value.shape,
             }
         }
-        quantized_value = self._quantize(value)
-        self._quantization_loss(value, quantized_value)
+        quantized_values = self._quantize(value)
+        self._quantization_loss(value, quantized_values[self.picked_quantizer])
         # on mask indicates the quantized values
-        return self._combine_masks(value, quantized_value)
+        return self._combine_masks(value, quantized_values)
 
-    def _combine_masks(self, value, quantized_value):
+    def _quantize(self, value, mean_quantizer=False):
+        quantized_values = {}
+        for key, quantizer in dict(self.quantizer_maps).items():
+            scope = '{}/{}'.format(self._scope, self.__class__.__name__ + key)
+            quantized_values[key] = quantizer.apply(
+                self.node, scope, self._original_getter, value)
+        return quantized_values
+
+    def _combine_masks(self, value, quantized_values):
         '''
         Args:
             quantized_value: the current mask is working on this current
                 quantized value, this value is not included in
-                mask_quantizer_maps
+                quantizer_maps
         '''
-        quantized_mask = util.cast(self.mask, float)
-        # TODO: cope with multiple overriders inside mask_quantizer_map
-        # should disale this:
-        self.mask_quantizer_maps = {}
-        if self.mask_quantizer_maps:
-            result = quantized_value * mask
-            for quantizer, mask in self.mask_quantizer_maps:
-                result += quantizer * mask
-                quantized_mask = util.cast(
-                    util.logical_or(quantized_mask, mask), float)
+        if self.quantizer_maps:
+            index = 0
+            for key, quantizer in self.quantizer_maps.items():
+                mask_label = index + 1
+                channel_mask = util.cast(
+                    util.equal(self.channel_mask, mask_label), float)
+                if index == 0:
+                    result = quantized_values[key] * channel_mask
+                else:
+                    result += quantized_values[key] * channel_mask
             # now handel off_mask
-        off_mask = util.cast(
-            util.logical_not(util.cast(quantized_mask, bool)), float)
-        return value * off_mask + quantized_value * quantized_mask
+        off_mask = util.cast(util.equal(self.channel_mask, 0), float)
+        return value * off_mask + result
 
     def _quantization_loss(self, value, quantized_value):
         loss = tf.reduce_sum(tf.abs(value - quantized_value))
