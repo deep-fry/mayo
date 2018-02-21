@@ -7,6 +7,7 @@ model:
             density: 0.5
             weight: 0.0
             policy: parametric_gamma
+            batching: false
             gate_trainable: true
             trainable: true
             should_gate: true

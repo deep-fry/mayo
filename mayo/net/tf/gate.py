@@ -56,6 +56,7 @@ class GatedConvolutionInstantiator(object):
 
         # gate params
         self.policy = gate_params['policy']
+        self.batching = gate_params['batching']
         self.density = gate_params['density']
         self.granularity = gate_params['granularity']
         self.pool = gate_params['pool']
@@ -214,16 +215,16 @@ class GatedConvolutionInstantiator(object):
             # batch?
             # potentially, they can be calcculated for each individual batch
             mean, variance = tf.nn.moments(
-                tf.abs(reshaped), axes=[1], keep_dims=True)
+                reshaped, axes=[1], keep_dims=True)
             # mean, variance = tf.nn.moments(tf.abs(reshaped), axes=[0, 1])
             threshold = (mean - self.threshold)
         else:
             # perform top k by default
             # top_k, where k is the number of active channels
-            top, _ = tf.nn.top_k(tf.abs(reshaped), k=(num_active + 1))
+            top, _ = tf.nn.top_k(reshaped, k=(num_active + 1))
             # disable channels with smaller activations
             threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
-        active = tf.reshape(tf.abs(reshaped) > threshold, tensor.shape)
+        active = tf.reshape(reshaped > threshold, tensor.shape)
         return tf.stop_gradient(active)
 
     def _gated_normalization(self, prenorm):
@@ -251,8 +252,13 @@ class GatedConvolutionInstantiator(object):
                 'scope': '{}/BatchNorm'.format(self.scope),
                 'is_training': self.is_training,
             })
-            output = self.constructor.instantiate_batch_normalization(
-                None, prenorm, normalizer_params)
+            if self.batching:
+                output = self.constructor.instantiate_batch_normalization(
+                    None, prenorm, normalizer_params)
+            else:
+                norm_mean, norm_var = tf.nn.moments(
+                    prenorm, axes=[1, 2], keep_dims=True)
+                output = (prenorm - norm_mean) / norm_var
             gamma = self.gate()
             output *= actives * gamma if self.should_gate else gamma
             if not self.normalizer_params.get('center', True):
@@ -401,6 +407,7 @@ class GateLayers(object):
             'granularity': params.pop('granularity', 'channel'),
             'pool': params.pop('pool', 'avg'),
             'policy': params.pop('policy', 'parametric_gamma'),
+            'batching': params.pop('batching', True),
             'weight': params.pop('weight', 0),
             'squeeze_factor': params.pop('squeeze_factor', None),
             'should_gate': params.pop('should_gate', True),
