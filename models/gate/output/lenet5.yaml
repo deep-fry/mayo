@@ -4,17 +4,13 @@ model:
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            density: 0.5
-            weight: 0.0
-            policy: parametric_gamma
-            batching: false
-            gate_trainable: true
-            trainable: true
-            should_gate: true
-            pool: avg
+            gate_params:
+                enable: true
+                density: 0.5
+                policy: parametric_gamma
+                weight: 0.0
+                norm: channel
             normalizer_fn: tensorflow.contrib.slim.batch_norm
-            ranking_method: meanstd
-            threshold: 1.0
             normalizer_params:
                 center: true
                 scale: true

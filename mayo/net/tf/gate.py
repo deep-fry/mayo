@@ -55,17 +55,24 @@ class GatedConvolutionInstantiator(object):
         conv_params['activation_fn'] = None
 
         # gate params
-        self.policy = gate_params['policy']
-        self.batching = gate_params['batching']
-        self.density = gate_params['density']
-        self.granularity = gate_params['granularity']
-        self.pool = gate_params['pool']
-        self.weight = gate_params['weight']
-        self.squeeze_factor = gate_params['squeeze_factor']
-        self.should_gate = gate_params['should_gate']
-        self.gate_trainable = gate_params['trainable']
-        self.threshold = gate_params['threshold']
-        self.ranking_method = gate_params['ranking_method']
+        must = object()
+        defaults = {
+            'enable': True,
+            'density': must,
+            'policy': 'parametric_gamma',
+            'pool': 'avg',
+            'granularity': 'channel',
+            'norm': 'batch',
+            'weight': 0,
+            'squeeze_factor': None,
+            'trainable': True,
+        }
+        for key, default in defaults.items():
+            value = gate_params.get(key, default)
+            if value is must:
+                raise KeyError(
+                    'Gate parameter {!r} must be specified.'.format(key))
+            setattr(self, key, value)
         self._check_policy()
         self._check_granularity()
 
@@ -178,7 +185,7 @@ class GatedConvolutionInstantiator(object):
             'normalizer_params': self.normalizer_params,
             'activation_fn': self.activation_fn,
             'scope': '{}/gate'.format(self.scope),
-            'trainable': self.gate_trainable
+            'trainable': self.trainable,
         }
         padded = self.constructor.instantiate_numeric_padding(
             None, subsampled, params)
@@ -210,31 +217,21 @@ class GatedConvolutionInstantiator(object):
             return tensor
         # reshape the last dimensions into one
         reshaped = tf.reshape(tensor, [num, -1])
-        if self.ranking_method == 'meanstd':
-            # TODO: should the mean, variance are calcluated across a whole
-            # batch?
-            # potentially, they can be calcculated for each individual batch
-            mean, variance = tf.nn.moments(
-                reshaped, axes=[1], keep_dims=True)
-            # mean, variance = tf.nn.moments(tf.abs(reshaped), axes=[0, 1])
-            threshold = (mean - self.threshold)
-        else:
-            # perform top k by default
-            # top_k, where k is the number of active channels
-            top, _ = tf.nn.top_k(reshaped, k=(num_active + 1))
-            # disable channels with smaller activations
-            threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
+        # top_k, where k is the number of active channels
+        top, _ = tf.nn.top_k(reshaped, k=(num_active + 1))
+        # disable channels with smaller activations
+        threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
         active = tf.reshape(reshaped > threshold, tensor.shape)
         return tf.stop_gradient(active)
 
     def _gated_normalization(self, prenorm):
         # gating
-        if self.should_gate:
+        if self.enable:
             actives = tf.cast(self.actives(), tf.float32)
         else:
             actives = None
         if not self.normalizer_fn:
-            if self.should_gate:
+            if self.enable:
                 return prenorm * actives
             return prenorm
         if self.policy == 'parametric_gamma':
@@ -252,15 +249,17 @@ class GatedConvolutionInstantiator(object):
                 'scope': '{}/BatchNorm'.format(self.scope),
                 'is_training': self.is_training,
             })
-            if self.batching:
+            if self.norm == 'batch':
                 output = self.constructor.instantiate_batch_normalization(
                     None, prenorm, normalizer_params)
-            else:
+            elif self.norm == 'channel':
                 norm_mean, norm_var = tf.nn.moments(
                     prenorm, axes=[1, 2], keep_dims=True)
                 output = (prenorm - norm_mean) / norm_var
+            else:
+                raise GatePolicyTypeError('Unrecognized normalization policy.')
             gamma = self.gate()
-            output *= actives * gamma if self.should_gate else gamma
+            output *= actives * gamma if self.enable else gamma
             if not self.normalizer_params.get('center', True):
                 return output
             # use offset beta
@@ -268,16 +267,16 @@ class GatedConvolutionInstantiator(object):
             beta = tf.get_variable(
                 beta_scope, shape=output.shape[-1], dtype=tf.float32,
                 initializer=tf.constant_initializer(0.1),
-                trainable=self.gate_trainable)
+                trainable=self.trainable)
             # gate output is the parametric gamma value
-            output += actives * beta if self.should_gate else beta
+            output += actives * beta if self.enable else beta
             return output
         # normal normalization
         scope = '{}/{}'.format(
             self.scope, self._normalizer_names[self.normalizer_fn])
         normalizer_params = dict(self.normalizer_params, scope=scope)
         output = self.normalizer_fn(self.output, **normalizer_params)
-        return actives * output if self.should_gate else output
+        return actives * output if self.enable else output
 
     def _squeeze_excitation(self, tensor):
         def params(name, outputs):
@@ -352,7 +351,7 @@ class GatedConvolutionInstantiator(object):
         history = None if self.is_training else 'infinite'
         self.constructor.session.estimator.register(
             self.gate(), 'gate.output', self.node, history=history)
-        if self.should_gate:
+        if self.enable:
             self.constructor.session.estimator.register(
                 self.actives(), 'gate.active', self.node, history=history)
 
@@ -402,18 +401,6 @@ class GateLayers(object):
         # register gate sparsity for printing
         self._register_gate_formatters()
         # params
-        gate_params = {
-            'density': params.pop('density'),
-            'granularity': params.pop('granularity', 'channel'),
-            'pool': params.pop('pool', 'avg'),
-            'policy': params.pop('policy', 'parametric_gamma'),
-            'batching': params.pop('batching', True),
-            'weight': params.pop('weight', 0),
-            'squeeze_factor': params.pop('squeeze_factor', None),
-            'should_gate': params.pop('should_gate', True),
-            'trainable': params.pop('gate_trainable', True),
-            'ranking_method': params.pop('ranking_method', 'top_k'),
-            'threshold': params.pop('threshold', 0.0)
-        }
+        gate_params = params.pop('gate_params')
         return GatedConvolutionInstantiator(
             self, node, params, gate_params, tensor).instantiate()

@@ -1,31 +1,24 @@
 ---
 _import: ../../resnet18.yaml
+_trainable: true
 _gate:
-    trainable: true
+    enable: true
+    density: 0.5
+    policy: parametric_gamma
+    weight: 0.0001
 model:
     name: resnet18
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            policy: parametric_gamma
-            density: 0.5
-            weight: 0.0001
-            gate_trainable: true
-            should_gate: true
-            pool: avg
-            normalizer_fn: tensorflow.contrib.slim.batch_norm
-            normalizer_params:
-                center: true
-                scale: true
-                decay: 0.9997
-                epsilon: 0.001
+            gate_params: $(_gate)
             trainable: $(_gate.trainable)
         _basic_block: &bb
-            kwargs: {should_gate: true}
+            kwargs: {enable: true}
             layers:
                 conv1: &bb_gated_conv
                     <<: *gated_conv
-                    should_gate: ^(should_gate)
+                    gate_params: {enable: ^(enable)}
                 conv2: {<<: *bb_gated_conv}
                 downsample_shortcut: {<<: *bb_gated_conv}
         conv1: {<<: *gated_conv}
