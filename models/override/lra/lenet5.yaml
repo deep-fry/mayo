@@ -1,0 +1,8 @@
+---
+model.layers:
+    conv0: &overrider
+        weights_overrider: &pruner
+            type: mayo.override.LowRankApproximation
+            should_update: true
+            ranks: 2
+    conv1: {<<: *overrider}

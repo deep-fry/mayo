@@ -24,6 +24,9 @@ from mayo.override.gate import (
     ChannelGater,
     RandomChannelGater,
 )
+from mayo.override.lra import (
+    LowRankApproximation,
+)
 
 
 __all__ = [
@@ -45,4 +48,5 @@ __all__ = [
     IncrementalQuantizer,
     NetworkSlimmer,
     MixedPrecisionQuantizer,
+    LowRankApproximation,
 ]
