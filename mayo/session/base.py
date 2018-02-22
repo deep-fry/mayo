@@ -16,6 +16,10 @@ from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
 
 
+class ReadOnlyGraphChangedError(Exception):
+    """Graph should be read-only, but changes are made to the graph.  """
+
+
 class SessionMeta(type):
     """
     Automatically use the correct tf_session when invoking methods in Session.
@@ -63,6 +67,7 @@ class Session(object, metaclass=SessionMeta):
         # we always write to our graph
         default_graph = tf.get_default_graph()
         default_graph.finalize()
+        self._ops = []
         self.config = config
         self.change = Change()
         self._init_gpus()
@@ -183,6 +188,10 @@ class Session(object, metaclass=SessionMeta):
     def num_epochs(self):
         return self.imgs_seen / self.num_examples
 
+    @memoize_property
+    def num_examples_per_epoch(self):
+        return self.config.dataset.num_examples_per_epoch[self.mode]
+
     def _mean_metric(self, func):
         return tf.reduce_mean(list(self.net_map(func)))
 
@@ -280,9 +289,29 @@ class Session(object, metaclass=SessionMeta):
         for o in self.nets[0].overriders:
             o.assign_parameters()
 
-    @memoize_property
-    def num_examples_per_epoch(self):
-        return self.config.dataset.num_examples_per_epoch[self.mode]
+    @contextmanager
+    def ensure_graph_unchanged(self, func_name):
+        ops = self.graph.get_operations()
+        yield
+        new_ops = self.graph.get_operations()
+        diff_ops = []
+        diff_assignments = []
+        if len(ops) != len(new_ops):
+            for o in new_ops:
+                if o in ops:
+                    continue
+                if o.type in ('Placeholder', 'Assign', 'NoOp'):
+                    diff_assignments.append(o)
+                    continue
+                diff_ops.append(o)
+        if diff_assignments:
+            log.debug(
+                '{} creates new assignment operations {}.'
+                .format(func_name, diff_assignments))
+        if diff_ops:
+            raise ReadOnlyGraphChangedError(
+                '{} adds new operations {} to a read-only graph.'
+                .format(func_name, diff_ops))
 
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)

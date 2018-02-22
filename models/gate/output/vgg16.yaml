@@ -1,34 +1,29 @@
 ---
 _import: ../../vgg16_bn.yaml
 _gate:
-  trainable: true
-  policy: parametric_gamma
-  density: 0.5
+    policy: parametric_gamma
+    density: 0.5
+    weight: 0.00001
+_trainable: true
 model:
     name: vgg16_bn
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            policy: $(_gate.policy)
-            density: $(_gate.density)
-            trainable: $(_gate.trainable)
-            pool: avg
-            granularity: channel
-            should_gate: true
-            weight: 0.00001
-        conv1_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv1_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv2_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv2_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv3_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv3_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv3_3: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv4_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv4_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv4_3: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv5_1: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv5_2: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        conv5_3: {<<: *gated_conv, trainable: $(_gate.trainable)}
-        fc6: {trainable: $(_gate.trainable)}
-        fc7: {trainable: $(_gate.trainable)}
-        fc8: {trainable: $(_gate.trainable)}
+            gate_params: $(_gate)
+        conv1_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv1_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv2_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv2_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv3_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv3_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv3_3: {<<: *gated_conv, trainable: $(_trainable)}
+        conv4_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv4_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv4_3: {<<: *gated_conv, trainable: $(_trainable)}
+        conv5_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv5_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv5_3: {<<: *gated_conv, trainable: $(_trainable)}
+        fc6: {trainable: $(_trainable)}
+        fc7: {trainable: $(_trainable)}
+        fc8: {trainable: $(_trainable)}

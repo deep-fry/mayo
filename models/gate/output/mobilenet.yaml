@@ -1,29 +1,26 @@
 ---
 _import: ../../mobilenet.yaml
+_trainable: false
 _gate:
-  trainable: false
 model:
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            policy: parametric_gamma
-            density: 0.5
-            weight: 0.0001
-            gate_trainable: true
-            should_gate: true
-            pool: avg
-            normalizer_fn: tensorflow.contrib.slim.batch_norm
-            normalizer_params:
-                center: true
-                scale: true
-                decay: 0.9997
-                epsilon: 0.001
-            trainable: $(_gate.trainable)
+            gate_params:
+                policy: parametric_gamma
+                density: 0.5
+                weight: 0.0001
+                trainable: true
+                enable: true
+            trainable: $(_trainable)
         _dsconv: &dsconv
-            kwargs: {should_gate: true, trainable: $(_gate.trainable)}
+            kwargs: {enable: true, trainable: $(_trainable)}
             layers:
                 depthwise: {trainable: ^(trainable)}
-                pointwise: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
+                pointwise:
+                    <<: *gated_conv
+                    gate_params: {enable: ^(enable)}
+                    trainable: ^(trainable)
         conv0: {<<: *gated_conv}
         conv1: {<<: *dsconv}
         conv2: {<<: *dsconv}
@@ -38,4 +35,4 @@ model:
         conv11: {<<: *dsconv}
         conv12: {<<: *dsconv}
         conv13: {<<: *dsconv}
-        fc: {trainable: $(_gate.trainable)}
+        fc: {trainable: $(_trainable)}

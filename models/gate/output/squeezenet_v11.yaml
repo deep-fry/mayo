@@ -1,29 +1,31 @@
 ---
 _import: ../../squeezenet_v11.yaml
-_gate:
-  trainable: false
+_trainable: false
 model:
     name: squeezenet_v11
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            density: 0.5
-            trainable: $(_gate.trainable)
-            online: true
-            weight: 0.0001
+            gate_params:
+                density: 0.5
+                weight: 0.0001
+            trainable: $(_trainable)
         _fire: &fire
-            kwargs: {should_gate: null, trainable: null}
+            kwargs: {enable: null, trainable: null}
             layers:
                 squeeze: {trainable: ^(trainable)}
-                expand1: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
-                expand3: {<<: *gated_conv, should_gate: ^(should_gate), trainable: ^(trainable)}
-        conv1: {<<: *gated_conv, should_gate: false, trainable: $(_gate.trainable)}
-        fire2: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        fire3: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        fire4: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        fire5: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        fire6: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        fire7: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        fire8: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        fire9: {<<: *fire, should_gate: false, trainable: $(_gate.trainable)}
-        conv10: {trainable: $(_gate.trainable)}
+                expand1: &expand
+                    <<: *gated_conv
+                    enable: ^(enable)
+                    trainable: ^(trainable)
+                expand3: {<<: *expand}
+        conv1: {<<: *gated_conv, enable: false, trainable: $(_trainable)}
+        fire2: {<<: *fire, enable: false, trainable: $(_trainable)}
+        fire3: {<<: *fire, enable: false, trainable: $(_trainable)}
+        fire4: {<<: *fire, enable: false, trainable: $(_trainable)}
+        fire5: {<<: *fire, enable: false, trainable: $(_trainable)}
+        fire6: {<<: *fire, enable: false, trainable: $(_trainable)}
+        fire7: {<<: *fire, enable: false, trainable: $(_trainable)}
+        fire8: {<<: *fire, enable: false, trainable: $(_trainable)}
+        fire9: {<<: *fire, enable: false, trainable: $(_trainable)}
+        conv10: {trainable: $(_trainable)}

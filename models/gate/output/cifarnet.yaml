@@ -1,25 +1,20 @@
 ---
 _import: ../../cifarnet.yaml
+_trainable: true
 _gate:
+    enable: true
     policy: parametric_gamma
     density: 1.0
-    trainable: true
     pool: avg
+    weight: 0.0000001
 model:
     description: |
         A variant of cifarnet that performs online gating.
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            policy: $(_gate.policy)
-            density: $(_gate.density)
-            trainable: $(_gate.trainable)
-            pool: $(_gate.pool)
-            granularity: channel
-            should_gate: true
-            weight: 0.0000001
-            ranking_method: meanstd
-            threshold: 1.0
+            gate_params: $(_gate)
+            trainable: $(_trainable)
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
         conv2: {<<: *gated_conv}

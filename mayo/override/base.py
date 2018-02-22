@@ -24,10 +24,6 @@ class GetterInvokedOutsideApplyError(OverriderError):
     """Function getter() is invoked not in apply().  """
 
 
-class ReadOnlyGraphChangedError(OverriderError):
-    """Graph should be read-only, but changes are made to the graph.  """
-
-
 def _getter_not_initialized(*args, **kwargs):
     raise GetterInvokedOutsideApplyError(
         'The function `getter()` should only be invoked in `.apply()`.')
@@ -191,26 +187,10 @@ class OverriderBase(object):
         if not self._applied:
             raise OverrideNotAppliedError(
                 'Method "apply" must be invoked before call "update".')
-        ops = self.session.graph.get_operations()
-        self._update()
-        new_ops = []
-        new_assignments = False
-        for o in self.session.graph.get_operations():
-            if o in ops:
-                continue
-            if o.type in ('Placeholder', 'Assign', 'NoOp'):
-                new_assignments = True
-                continue
-            new_ops.append(o)
-        if new_assignments:
-            log.debug(
-                'New assignment operations created during {}.update().'
-                .format(self.__class__.__name__))
-        if new_ops:
-            raise ReadOnlyGraphChangedError(
-                '{}.update() adds new operations {} to a read-only graph.'
-                .format(self.__class__.__name__, new_ops))
-        log.debug('Updated overrider {!r}'.format(self.info()))
+        name = '{}.update()'.format(self.__class__.__name__)
+        with self.session.ensure_graph_unchanged(name):
+            self._update()
+        log.debug('Updated overrider {!r}.'.format(self.info()))
 
     def assign(self):
         """Assign overridden values to parameters before overriding.  """
