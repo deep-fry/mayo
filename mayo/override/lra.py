@@ -1,9 +1,6 @@
 import tensorflow as tf
 import numpy as np
 
-from mayo.log import log
-from mayo.util import memoize_property, object_from_params
-from mayo.override import util
 from mayo.override.base import OverriderBase, Parameter
 
 

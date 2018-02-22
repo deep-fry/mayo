@@ -9,7 +9,7 @@ model:
                 density: 0.5
                 policy: parametric_gamma
                 weight: 0.0
-                norm: channel
+                # norm: channel
             normalizer_fn: tensorflow.contrib.slim.batch_norm
             normalizer_params:
                 center: true

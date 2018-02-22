@@ -500,8 +500,6 @@ class IncrementalQuantizer(OverriderBase):
         return value * off_mask + quantized_value * mask
 
     def _policy(self, value, quantized, previous_mask, interval):
-        if interval >= 1.0:
-            return np.ones(value.shape)
         previous_pruned = util.sum(previous_mask)
         th_arg = util.cast(util.count(value) * interval, int)
         if th_arg < 0:
@@ -513,7 +511,10 @@ class IncrementalQuantizer(OverriderBase):
         metric = value - quantized
         flat_value = metric * off_mask
         flat_value = flat_value.flatten()
-        th = util.top_k(util.abs(flat_value), th_arg)
+        if interval >= 1.0:
+            th = util.top_k(util.abs(flat_value), th_arg)
+        else:
+            th = flat_value.min()
         th = util.cast(th, float)
         new_mask = util.logical_not(util.greater_equal(util.abs(metric), th))
         return util.logical_or(new_mask, previous_mask)

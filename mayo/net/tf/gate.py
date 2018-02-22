@@ -255,7 +255,7 @@ class GatedConvolutionInstantiator(object):
             elif self.norm == 'channel':
                 norm_mean, norm_var = tf.nn.moments(
                     prenorm, axes=[1, 2], keep_dims=True)
-                output = (prenorm - norm_mean) / norm_var
+                output = (prenorm - norm_mean) / tf.sqrt(norm_var)
             else:
                 raise GatePolicyTypeError('Unrecognized normalization policy.')
             gamma = self.gate()
