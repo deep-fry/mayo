@@ -512,9 +512,9 @@ class IncrementalQuantizer(OverriderBase):
         flat_value = metric * off_mask
         flat_value = flat_value.flatten()
         if interval >= 1.0:
-            th = util.top_k(util.abs(flat_value), th_arg)
+            th = flat_value.max() + 1.0
         else:
-            th = flat_value.min()
+            th = util.top_k(util.abs(flat_value), th_arg)
         th = util.cast(th, float)
         new_mask = util.logical_not(util.greater_equal(util.abs(metric), th))
         return util.logical_or(new_mask, previous_mask)
@@ -559,19 +559,18 @@ class MixedPrecisionQuantizer(OverriderBase):
     interval = Parameter('interval', 0.1, [], tf.float32)
     channel_mask = Parameter('channel_mask', None, None, tf.int32)
 
-    def __init__(self, session, quantizers, intervals, picked_quantizer,
-                 should_update=True, reg_factor=0.0):
+    def __init__(self, session, quantizers, index=0,
+                 should_update=True, reg_factor=0.0, interval=0.1):
         super().__init__(session, should_update)
         for key, item in dict(quantizers).items():
             cls, params = object_from_params(item)
             quantizer = cls(session, **params)
             self.quantizer_maps[key] = quantizer
-        if intervals is not None:
-            self.intervals = intervals
-            self.interval = intervals[0]
-            self.interval_index = 0
         self.reg_factor = reg_factor
-        self.picked_quantizer = picked_quantizer
+        # the quantizer that makes a loss for training
+        self.picked_quantizer = list(quantizers.keys())[index]
+        # keep record of an index for update
+        self.index = index
 
     def _apply(self, value):
         '''
@@ -622,3 +621,29 @@ class MixedPrecisionQuantizer(OverriderBase):
         loss *= self.reg_factor
         loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
         tf.add_to_collection(loss_name, loss)
+
+    def _new_mask(self, mask, value, quantized_value):
+        loss = util.abs(value - quantized_value)
+        # check the ones that are not quantized
+        unquantized_mask = util.logical_not(mask)
+        '''TODO:
+        mask shape is incorrect
+        '''
+        loss_vec = loss[unquantized_mask]
+        # sort
+        num_active = math.ceil(len(loss_vec) * self.interval)
+        threshold = sorted(loss_vec)[num_active]
+        if self.interval >= 1.0:
+            return util.cast(unquantized_mask, float)
+        new_mask = (unquantized_mask * loss) > threshold
+        return util.cast(util.logical_or(new_mask, mask), float)
+
+    def _update(self):
+        # update only the selected index
+        quantizer = self.quantizer_maps[self.picked_quantizer]
+        mask, value, quantized_value = self.session.run(
+            [self.channel_mask, self.before, quantizer.after])
+        mask = mask == (self.index + 1)
+        new_mask = self._new_mask(mask, value, quantized_value)
+        self.index += 1
+        self.picked_quantizer = quantizers.keys()[self.index]

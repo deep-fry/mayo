@@ -2,7 +2,7 @@
 model.layers:
     _incremental: &incremental
         type: mayo.override.IncrementalQuantizer
-        intervals: [0.5, 0.75, 1]
+        intervals: [1.0]
         quantizer:
             type: mayo.override.ShiftQuantizer
             width: 4
@@ -20,21 +20,21 @@ model.layers:
             #     point: 1
     _mixed: &mixed
         type: mayo.override.MixedPrecisionQuantizer
-        intervals: [0.25, 0.5, 0.75, 1]
+        interval: 0.5
         reg_factor: 0.001
+        index: 0
         quantizers:
-            quantizer1:
+            quantizer0:
               type: mayo.override.FixedPointQuantizer
               width: 2
               point: 0
-            quantizer2:
+            quantizer1:
               type: mayo.override.FixedPointQuantizer
               width: 8
               point: 0
-        picked_quantizer: quantizer1
     _overrider: &playground
-        # - *incremental
-        - *mixed
+        - *incremental
+        # - *mixed
         # - {type: mayo.override.EmptyOverrider}
         # - {type: mayo.override.DynamicNetworkSurgeryPruner}
         # - {type: mayo.override.FixedPointQuantizer}
@@ -42,7 +42,7 @@ model.layers:
         # - {type: mayo.override.ChannelGater, alpha: 0.1, threshold: 0.3}
     conv0: &overrider
         weights_overrider: *playground
-        biases_overrider: *playground
+        # biases_overrider: *playground
         # activation_overrider: *quantizer
         # activation_overrider:
         #     type: mayo.override.ChannelPruner
