@@ -99,6 +99,8 @@ class Train(Session):
         ops['update'] = tf.group(*update_ops, name='update')
         log.debug('Using update operations: {}'.format(update_ops))
         log.debug('Using training operations: {}'.format(ops))
+        if self.extra_train_ops:
+            ops['extra'] = self.extra_train_ops
         self._train_op = ops
 
     def _setup_summaries(self):
