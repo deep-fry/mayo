@@ -68,6 +68,8 @@ class Session(object, metaclass=SessionMeta):
         default_graph = tf.get_default_graph()
         default_graph.finalize()
         self._ops = []
+        self.extra_train_ops = {}
+        self.finalizers = {}
         self.config = config
         self.change = Change()
         self._init_gpus()
@@ -86,6 +88,7 @@ class Session(object, metaclass=SessionMeta):
         self._register_progress()
         self.nets = self._instantiate_nets()
         self._register_estimates()
+        self._finalize()
 
     def __del__(self):
         log.debug('Finishing...')
@@ -113,6 +116,13 @@ class Session(object, metaclass=SessionMeta):
         self.estimator.register(
             self.nets[0].labels(), 'labels', history=history,
             transformer=label_transformer)
+
+    def _finalize(self):
+        for name, finalizer in self.finalizers.items():
+            log.debug(
+                'Finalizing session with finalizer {!r}: {!r}'
+                .format(name, finalizer))
+            finalizer()
 
     @property
     def is_training(self):
@@ -167,14 +177,14 @@ class Session(object, metaclass=SessionMeta):
             self.config.system.num_gpus = 1
         os.environ[cuda_key] = gpus
 
-    def _tf_int(self, name, dtype=tf.int64):
+    def _tf_scalar(self, name, dtype=tf.int64):
         return tf.get_variable(
             name, [], initializer=tf.constant_initializer(0),
             trainable=False, dtype=dtype)
 
     @memoize_property
     def imgs_seen(self):
-        return self._tf_int('imgs_seen', tf.int64)
+        return self._tf_scalar('imgs_seen', tf.int64)
 
     @memoize_property
     def imgs_seen_op(self):
