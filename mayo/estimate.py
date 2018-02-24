@@ -168,6 +168,13 @@ class ResourceEstimator(object):
     def get_tensor(self, name, node=None):
         return self.operations[node or 'global'][name]
 
+    def get_tensors(self, name):
+        return {
+            layer_name: stat_tensors[name]
+            for layer_name, stat_tensors in self.operations.items()
+            if name in stat_tensors
+        }
+
     def add_estimate(self):
         if not self.shapes:
             raise ValueError('Shape of nodes is not set.')
