@@ -1,5 +1,6 @@
 import numpy as np
 import tensorflow as tf
+import math
 
 from mayo.log import log
 from mayo.util import memoize_property, object_from_params
@@ -555,19 +556,20 @@ class MixedPrecisionQuantizer(OverriderBase):
         TODO:
         provide _update()
     '''
-    quantizer_maps = {}
     interval = Parameter('interval', 0.1, [], tf.float32)
     channel_mask = Parameter('channel_mask', None, None, tf.int32)
 
     def __init__(self, session, quantizers, index=0,
                  should_update=True, reg_factor=0.0, interval=0.1):
         super().__init__(session, should_update)
+        self.quantizer_maps = {}
         for key, item in dict(quantizers).items():
             cls, params = object_from_params(item)
             quantizer = cls(session, **params)
             self.quantizer_maps[key] = quantizer
         self.reg_factor = reg_factor
         # the quantizer that makes a loss for training
+        self.quantizers = quantizers
         self.picked_quantizer = list(quantizers.keys())[index]
         # keep record of an index for update
         self.index = index
@@ -579,7 +581,7 @@ class MixedPrecisionQuantizer(OverriderBase):
         self._parameter_config = {
             'channel_mask': {
                 'initial': tf.zeros_initializer(tf.bool),
-                'shape': value.shape,
+                'shape': value.shape[-1],
             }
         }
         quantized_values = self._quantize(value)
@@ -613,7 +615,10 @@ class MixedPrecisionQuantizer(OverriderBase):
                 else:
                     result += quantized_values[key] * channel_mask
             # now handel off_mask
-        off_mask = util.cast(util.equal(self.channel_mask, 0), float)
+        channel_mask = tf.reshape(
+            self.channel_mask,
+            [1, 1, 1, self.channel_mask.shape[0]])
+        off_mask = util.cast(util.equal(channel_mask, 0), float)
         return value * off_mask + result
 
     def _quantization_loss(self, value, quantized_value):
@@ -622,18 +627,19 @@ class MixedPrecisionQuantizer(OverriderBase):
         loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
         tf.add_to_collection(loss_name, loss)
 
-    def _new_mask(self, mask, value, quantized_value):
+    def _new_mask(self, mask, value, quantized_value, interval):
         loss = util.abs(value - quantized_value)
         # check the ones that are not quantized
+        mask = mask.reshape((1, 1, 1, mask.shape[0]))
         unquantized_mask = util.logical_not(mask)
         '''TODO:
         mask shape is incorrect
         '''
-        loss_vec = loss[unquantized_mask]
+        loss_vec = np.mean(loss * unquantized_mask, (0, 1, 2))
         # sort
-        num_active = math.ceil(len(loss_vec) * self.interval)
+        num_active = math.ceil(len(loss_vec) * interval)
         threshold = sorted(loss_vec)[num_active]
-        if self.interval >= 1.0:
+        if interval >= 1.0:
             return util.cast(unquantized_mask, float)
         new_mask = (unquantized_mask * loss) > threshold
         return util.cast(util.logical_or(new_mask, mask), float)
@@ -641,9 +647,9 @@ class MixedPrecisionQuantizer(OverriderBase):
     def _update(self):
         # update only the selected index
         quantizer = self.quantizer_maps[self.picked_quantizer]
-        mask, value, quantized_value = self.session.run(
-            [self.channel_mask, self.before, quantizer.after])
+        mask, value, quantized_value, interval = self.session.run(
+            [self.channel_mask, self.before, quantizer.after, self.interval])
         mask = mask == (self.index + 1)
-        new_mask = self._new_mask(mask, value, quantized_value)
+        new_mask = self._new_mask(mask, value, quantized_value, interval)
         self.index += 1
-        self.picked_quantizer = quantizers.keys()[self.index]
+        self.picked_quantizer = list(self.quantizers.keys())[self.index]
