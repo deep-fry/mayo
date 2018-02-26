@@ -1,5 +1,6 @@
+_import: ../../resnet18.yaml
 model:
-    name: mobilenet_v1
+    name: resnet18
     layers:
         _incremental: &incrementalshift
             type: mayo.override.IncrementalQuantizer
@@ -10,9 +11,9 @@ model:
                 bias: 10
                 overflow_rate: 0.0
                 should_update: true
-        _dsconv: &dsconv
+        _basic_block: &bb
             layers:
-                depthwise: &quantized_conv
+                conv1: &overrider
                     weights_overrider:
                         *incrementalshift
                     biases_overrider:
@@ -22,24 +23,12 @@ model:
                         width: 8
                         point: 3
                         should_update: true
-                pointwise:
-                    {<<: *quantized_conv}
-        conv0: {<<: *quantized_conv}
-        conv1: {<<: *dsconv}
-        conv2: {<<: *dsconv}
-        conv3: {<<: *dsconv}
-        conv4: {<<: *dsconv}
-        conv5: {<<: *dsconv}
-        conv6: {<<: *dsconv}
-        conv7: {<<: *dsconv}
-        conv8: {<<: *dsconv}
-        conv9: {<<: *dsconv}
-        conv10: {<<: *dsconv}
-        conv11: {<<: *dsconv}
-        conv12: {<<: *dsconv}
-        conv13: {<<: *dsconv}
-        fc:
-            weights_overrider:
-                - {<<: *incrementalshift}
-            biases_overrider:
-                - {<<: *incrementalshift}
+                conv2: {<<: *overrider}
+        conv1: {<<: *overrider}
+        b11: {<<: *bb}
+        b12: {<<: *bb}
+        b21: {<<: *bb}
+        b31: {<<: *bb}
+        b32: {<<: *bb}
+        b41: {<<: *bb}
+        b42: {<<: *bb}
