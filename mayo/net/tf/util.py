@@ -51,7 +51,7 @@ class ParameterTransformer(object):
             for v, o in itertools.product(var_names, obj_names)]
         param_names += [
             'pointwise_regularizer', 'depthwise_regularizer',
-            'activation_overrider']
+            'activation_overrider', 'gradients_overrider']
         for name in param_names:
             _create_object_for_key(params, name)
 
@@ -103,6 +103,15 @@ class ParameterTransformer(object):
 
         biases_overrider = params.pop('biases_overrider', None)
         weights_overrider = params.pop('weights_overrider', None)
+        gradients_overrider = params.pop('gradients_overrider', None)
+
+        def _gradients_wrapper(x, node, name, getter, overrider):
+            @tf.RegisterGradient(name + "_custom_grad")
+            def _wrapper(op, grad):
+                if not _wrapper.has_run:
+                    _wrapper.has_run = True
+                    return overrider.apply(node, name, getter, x)
+            _wrapper.has_run = False
 
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
@@ -117,6 +126,12 @@ class ParameterTransformer(object):
                 log.debug('Overriding {!r} with {!r}'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
                 self.overriders.append(overrider)
+            if gradients_overrider:
+                _gradients_wrapper(v, node, name, getter, gradients_overrider)
+                G = tf.Graph()
+                with G.gradient_override_map({"Identity": "_custom_grad"}):
+                    v = tf.identity(v)
+                self.overriders.append(gradients_overrider)
             node_name = node.formatted_name()
             var_name = name.replace('{}/'.format(node_name), '')
             self.variables.setdefault(node, {})[var_name] = v
