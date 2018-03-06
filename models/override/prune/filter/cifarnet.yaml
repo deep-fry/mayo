@@ -3,7 +3,7 @@ model.layers:
     conv0: &overrider
         weights_overrider:
             type: mayo.override.FilterPruner
-            alpha: 0.0
+            density: 0.5
     conv1: {<<: *overrider}
     conv2: {<<: *overrider}
     conv3: {<<: *overrider}
