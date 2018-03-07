@@ -35,7 +35,7 @@ model.layers:
                 point: 0
     _fixed: &fixed
         type: mayo.override.FixedPointQuantizer
-        width: 2
+        width: 1
         point: 1
         should_update: true
     _playground: &playground
@@ -58,3 +58,5 @@ model.layers:
             #     density: 0.1
             #     should_update: true
     conv1: {<<: *overrider}
+    fc1: {<<: *overrider}
+    logits: {<<: *overrider}
