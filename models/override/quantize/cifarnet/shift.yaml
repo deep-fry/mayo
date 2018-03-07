@@ -2,11 +2,14 @@
 model.layers:
     conv1: &overrider
         weights_overrider:
-            - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
-            - {type: mayo.override.ShiftQuantizer, width: 16, bias: -16, width: 8, overflow_rate: 0.01}
+            # - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
+            - {type: mayo.override.ShiftQuantizer, width: 4, bias: 2, overflow_rate: 0.0, should_update: true}
         biases_overrider:
-            - {type: mayo.override.ShiftQuantizer, width: 16, bias: -16, width: 8, overflow_rate: 0.01}
+            - {type: mayo.override.ShiftQuantizer, width: 16, bias: -16, width: 8, overflow_rate: 0.0, should_update: true}
     conv2: {<<: *overrider}
-    fc3: {<<: *overrider}
-    fc4: {<<: *overrider}
+    conv3: {<<: *overrider}
+    conv4: {<<: *overrider}
+    conv5: {<<: *overrider}
+    conv6: {<<: *overrider}
+    conv7: {<<: *overrider}
     logits: {<<: *overrider}
