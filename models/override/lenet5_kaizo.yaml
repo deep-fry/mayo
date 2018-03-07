@@ -52,5 +52,9 @@ model.layers:
             weights: *playground
             biases: *playground
             gradient: {weight: *playground}
-            # activation: *quantizer
+            activation: *playground
+            # activation:
+            #     type: mayo.override.ChannelPruner
+            #     density: 0.1
+            #     should_update: true
     conv1: {<<: *overrider}

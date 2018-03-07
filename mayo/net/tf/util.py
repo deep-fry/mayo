@@ -51,7 +51,7 @@ class ParameterTransformer(object):
             for v, o in itertools.product(var_names, obj_names)]
         param_names += [
             'pointwise_regularizer', 'depthwise_regularizer',
-            'activation_overrider', 'gradients_overrider']
+            'activation_overrider', 'gradient_overrider']
         for name in param_names:
             _create_object_for_key(params, name)
 
@@ -103,15 +103,7 @@ class ParameterTransformer(object):
 
         biases_overrider = params.pop('biases_overrider', None)
         weights_overrider = params.pop('weights_overrider', None)
-        gradients_overrider = params.pop('gradients_overrider', None)
-
-        def _gradients_wrapper(x, node, name, getter, overrider):
-            @tf.RegisterGradient(name + "_custom_grad")
-            def _wrapper(op, grad):
-                if not _wrapper.has_run:
-                    _wrapper.has_run = True
-                    return overrider.apply(node, name, getter, x)
-            _wrapper.has_run = False
+        gradient_overrider = params.pop('gradient_overrider', None)
 
         def custom_getter(getter, *args, **kwargs):
             v = getter(*args, **kwargs)
@@ -123,15 +115,35 @@ class ParameterTransformer(object):
             elif name.endswith('weights'):
                 overrider = weights_overrider
             if overrider:
-                log.debug('Overriding {!r} with {!r}'.format(name, overrider))
+                log.debug('Overriding {!r} with {!r}.'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
                 self.overriders.append(overrider)
-            if gradients_overrider:
-                _gradients_wrapper(v, node, name, getter, gradients_overrider)
-                G = tf.Graph()
-                with G.gradient_override_map({"Identity": "_custom_grad"}):
+            if gradient_overrider:
+                # Xitong: @Aaron FIXME it is highly ambiguous to me to where
+                # you'd like to apply this gradient overrider.  It seems
+                # ATM the custom gradient is applied on ALL VARIABLES AFTER
+                # APPLYING THEIR RESPECTIVE OVERRIDERS in a layer.
+                # So which one do you want?
+                # 1. apply custom overriders to variables, then identity
+                #    replaced with custom gradient (now).
+                # 2. apply custom gradient to a variable before overriders.
+                # 3. apply custom overriders, but during backprop ignore
+                #    gradients into custom overriders, use custom gradient
+                #    instead.
+                def custom_gradient(op, grad):
+                    log.debug(
+                        'Overriding the gradient of {!r} from {!r} with {!r}.'
+                        .format(name, grad, gradient_overrider))
+                    return gradient_overrider.apply(node, name, getter, grad)
+                gradient_name = 'mayo/{}'.format(name)
+                try:
+                    tf.RegisterGradient(gradient_name)(custom_gradient)
+                except KeyError:
+                    pass
+                gradient_map = {'Identity': gradient_name}
+                with self.session.tf_graph.gradient_override_map(gradient_map):
                     v = tf.identity(v)
-                self.overriders.append(gradients_overrider)
+                self.overriders.append(gradient_overrider)
             node_name = node.formatted_name()
             var_name = name.replace('{}/'.format(node_name), '')
             self.variables.setdefault(node, {})[var_name] = v
@@ -140,7 +152,7 @@ class ParameterTransformer(object):
         @contextlib.contextmanager
         def custom_scope():
             # we do not have direct access to variable creation,
-            # so scope must be used
+            # so scope must be used.
             # FIXME there is currently no possible workaround for
             # auto-generated `name_scope` from `variable_scope` with names that
             # are being uniquified.  See #39.

@@ -72,11 +72,11 @@ class Session(object, metaclass=SessionMeta):
         self.config = config
         self.change = Change()
         self._init_gpus()
-        self.graph = tf.Graph()
+        self.tf_graph = tf.Graph()
         self.initialized_variables = []
         self._assign_operators = {}
         self.tf_session = tf.Session(
-            graph=self.graph,
+            graph=self.tf_graph,
             config=tf.ConfigProto(allow_soft_placement=True))
         self.tf_session.mayo_session = self
         self.preprocessor = Preprocess(
@@ -309,9 +309,9 @@ class Session(object, metaclass=SessionMeta):
 
     @contextmanager
     def ensure_graph_unchanged(self, func_name):
-        ops = self.graph.get_operations()
+        ops = self.tf_graph.get_operations()
         yield
-        new_ops = self.graph.get_operations()
+        new_ops = self.tf_graph.get_operations()
         diff_ops = []
         diff_assignments = []
         if len(ops) != len(new_ops):
