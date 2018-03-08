@@ -3,9 +3,9 @@ model.layers:
     conv1: &overrider
         weights_overrider:
             # comment this line out if it is an unpruned model
-          - {type: mayo.override.DGQuantizer, width: 16, overflow_rate: 0.001}
+          - {type: mayo.override.DGQuantizer, width: 4, overflow_rate: 0.0}
         biases_overrider:
-          - {type: mayo.override.DGQuantizer, width: 16, overflow_rate: 0.001}
+          - {type: mayo.override.DGQuantizer, width: 4, overflow_rate: 0.0}
     conv2: {<<: *overrider}
     conv3: {<<: *overrider}
     conv4: {<<: *overrider}

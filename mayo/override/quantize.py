@@ -192,11 +192,12 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def __init__(
             self, session, width, exponent_bias, mantissa_width,
-            should_update=True):
+            overflow_rate=0.0, should_update=True):
         super().__init__(session, should_update)
         self.width = width
         self.exponent_bias = exponent_bias
         self.mantissa_width = mantissa_width
+        self.overflow_rate = overflow_rate
         exponent_width = width - mantissa_width
         is_valid = exponent_width >= 0 and mantissa_width >= 0
         is_valid = is_valid and (
@@ -305,6 +306,16 @@ class FloatingPointQuantizer(QuantizerBase):
         return self._info_tuple(
             width=width, mantissa_width=mantissa_width,
             exponent_bias=exponent_bias)
+
+    def _update(self):
+        log.info('finding a exp bias')
+        mantissa_width = self.eval(self.mantissa_width)
+        value = self.eval(self.before)
+        width = self.eval(self.width)
+        exp_width = width - mantissa_width
+        overflow_rate = self.overflow_rate
+        max_exponent = self.find_float_exp(value, width, overflow_rate)
+        self.exponent_bias = 2 ** exp_width - 1 - max_exponent
 
 
 class ShiftQuantizer(FloatingPointQuantizer):
