@@ -23,8 +23,7 @@ model:
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.0001
-            normalizer_fn:
-                type: tensorflow.contrib.slim.batch_norm
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
             normalizer_params:
                 decay: 0.9997
                 epsilon: 0.001
