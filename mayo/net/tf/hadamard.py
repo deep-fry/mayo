@@ -51,15 +51,24 @@ class HadamardLayers(object):
 
         # fast walsh-hadamard transform
         tensor = fwht(tensor)
+        # normalization
+        normalizer_fn = params.get('normalizer_fn', None)
+        normalizer_params = params.get('normalizer_params', None)
+        if normalizer_fn:
+            tensor = normalizer_fn(tensor, **normalizer_params)
         # activation
-        activation_function = params.get('activation_fn', tf.nn.relu)
-        if activation_function is not None:
-            tensor = activation_function(tensor)
+        activation_fn = params.get('activation_fn', tf.nn.relu)
+        if activation_fn is not None:
+            tensor = activation_fn(tensor)
         return tensor
 
     def instantiate_zipf_hadamard_convolution(self, node, tensor, params):
         channels = int(tensor.shape[-1])
         out_channels = params.pop('num_outputs', channels)
+        normalizer_fn = params.pop('normalizer_fn')
+        normalizer_params = params.pop('normalizer_params')
+        if normalizer_fn:
+            params['biases_initializer'] = None
         activation_fn = params.pop('activation_fn', tf.nn.relu)
         block = params.pop('block', False)
         params['activation_fn'] = None
@@ -79,6 +88,8 @@ class HadamardLayers(object):
         zipf = self.instantiate_zipf(node, conv, None)
         hadamard_params = {
             'block': block,
+            'normalizer_fn': normalizer_fn,
+            'normalizer_params': normalizer_params,
             'activation_fn': activation_fn,
         }
         return self.instantiate_hadamard(node, zipf, hadamard_params)
