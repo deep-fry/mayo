@@ -33,15 +33,6 @@ class HadamardLayers(object):
                 name='channel_scale', shape=shape, initializer=init)
             tensor *= channel_scales
 
-        if params.pop('block', False):
-            hadamard = scipy.linalg.hadamard(channels)
-            hadamard = tf.constant(hadamard, dtype=tf.float32)
-            # flatten input tensor
-            flattened = tf.reshape(tensor, [-1, channels])
-            # transform with hadamard
-            transformed = flattened @ hadamard
-            return tf.reshape(transformed, shape=tensor.shape)
-
         def fwht(value):
             if value.shape[-1] == 1:
                 return value
@@ -49,24 +40,36 @@ class HadamardLayers(object):
             lower, upper = lower + upper, lower - upper
             return tf.concat((fwht(lower), fwht(upper)), axis=-1)
 
-        # fast walsh-hadamard transform
-        tensor = fwht(tensor)
-        # normalization
-        normalizer_fn = params.get('normalizer_fn', None)
-        normalizer_params = params.get('normalizer_params', None)
-        if normalizer_fn:
-            tensor = normalizer_fn(tensor, **normalizer_params)
-        # activation
-        activation_fn = params.get('activation_fn', tf.nn.relu)
-        if activation_fn is not None:
-            tensor = activation_fn(tensor)
+        if params.pop('block', False):
+            # hadamard
+            hadamard = scipy.linalg.hadamard(channels)
+            hadamard = tf.constant(hadamard, dtype=tf.float32)
+            # flatten input tensor
+            flattened = tf.reshape(tensor, [-1, channels])
+            # transform with hadamard
+            transformed = flattened @ hadamard
+            tensor = tf.reshape(transformed, shape=tensor.shape)
+        else:
+            # fast walsh-hadamard transform
+            tensor = fwht(tensor)
+
+        # normalization & activation
+        with tf.variable_scope(params.get('scope')):
+            normalizer_fn = params.get('normalizer_fn', None)
+            normalizer_params = params.get('normalizer_params', None)
+            if normalizer_fn:
+                tensor = normalizer_fn(tensor, **normalizer_params)
+            activation_fn = params.get('activation_fn', tf.nn.relu)
+            if activation_fn is not None:
+                tensor = activation_fn(tensor)
         return tensor
 
-    def instantiate_zipf_hadamard_convolution(self, node, tensor, params):
+    def instantiate_hadamard_convolution(self, node, tensor, params):
         channels = int(tensor.shape[-1])
         out_channels = params.pop('num_outputs', channels)
         normalizer_fn = params.pop('normalizer_fn')
         normalizer_params = params.pop('normalizer_params')
+        normalizer_params = dict(normalizer_params)
         if normalizer_fn:
             params['biases_initializer'] = None
         activation_fn = params.pop('activation_fn', tf.nn.relu)
@@ -85,11 +88,11 @@ class HadamardLayers(object):
             }
             params.update(conv_params)
             conv = self.instantiate_convolution(node, tensor, params)
-        zipf = self.instantiate_zipf(node, conv, None)
         hadamard_params = {
             'block': block,
             'normalizer_fn': normalizer_fn,
             'normalizer_params': normalizer_params,
             'activation_fn': activation_fn,
+            'scope': params['scope'],
         }
-        return self.instantiate_hadamard(node, zipf, hadamard_params)
+        return self.instantiate_hadamard(node, conv, hadamard_params)
