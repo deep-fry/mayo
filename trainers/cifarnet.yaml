@@ -2,6 +2,7 @@
 _import: exponential.yaml
 train:
     learning_rate:
+        _initial: 0.01
         decay_steps: 200
     optimizer:
         type: tensorflow.train.RMSPropOptimizer

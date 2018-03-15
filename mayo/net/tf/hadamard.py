@@ -33,25 +33,31 @@ class HadamardLayers(object):
                 name='channel_scale', shape=shape, initializer=init)
             tensor *= channel_scales
 
-        def fwht(value):
-            if value.shape[-1] == 1:
-                return value
-            lower, upper = tf.split(value, 2, axis=-1)
-            lower, upper = lower + upper, lower - upper
-            return tf.concat((fwht(lower), fwht(upper)), axis=-1)
-
-        if params.pop('block', False):
-            # hadamard
+        def slow(value):
+            channels = int(value.shape[-1])
             hadamard = scipy.linalg.hadamard(channels)
             hadamard = tf.constant(hadamard, dtype=tf.float32)
             # flatten input tensor
-            flattened = tf.reshape(tensor, [-1, channels])
+            flattened = tf.reshape(value, [-1, channels])
             # transform with hadamard
             transformed = flattened @ hadamard
-            tensor = tf.reshape(transformed, shape=tensor.shape)
-        else:
+            return tf.reshape(transformed, shape=value.shape)
+
+        def fast(value, granularity):
             # fast walsh-hadamard transform
-            tensor = fwht(tensor)
+            channels = value.shape[-1]
+            if channels == 1:
+                return value
+            if granularity == 0 or channels <= granularity:
+                return slow(value)
+            lower, upper = tf.split(value, 2, axis=-1)
+            lower, upper = lower + upper, lower - upper
+            lower = fast(lower, granularity)
+            upper = fast(upper, granularity)
+            return tf.concat((lower, upper), axis=-1)
+
+        # hadamard
+        tensor = fast(tensor, params.pop('block', 0))
 
         # normalization & activation
         with tf.variable_scope(params.get('scope')):

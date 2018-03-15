@@ -11,8 +11,8 @@ dataset:
         final_cpu:
             - {type: standardize_image}
 model:
-    name: zipf_hadamard
-    description: Zipf-Hadamard CifarNet
+    name: hadamard
+    description: Hadamard CifarNet
     layers:
         _conv: &conv
             type: convolution
@@ -31,12 +31,12 @@ model:
         _zh: &zh
             <<: *conv
             type: hadamard_convolution
-            block: true
-        conv0: {<<: *conv, num_outputs: 1024, padding: valid}
-        conv1: {<<: *zh, num_outputs: 1024}
-        conv2: {<<: *zh, num_outputs: 1024, stride: 2}
-        conv3: {<<: *zh, num_outputs: 1024}
-        conv4: {<<: *zh, num_outputs: 1024}
+            block: 256
+        conv0: {<<: *conv, num_outputs: 512, padding: valid}
+        conv1: {<<: *zh, num_outputs: 512}
+        conv2: {<<: *zh, num_outputs: 512, stride: 2}
+        conv3: {<<: *zh, num_outputs: 512}
+        conv4: {<<: *zh, num_outputs: 512}
         conv5: {<<: *zh, num_outputs: 1024, stride: 2}
         conv6: {<<: *zh, num_outputs: 1024}
         conv7: {<<: *zh, num_outputs: 1024}
