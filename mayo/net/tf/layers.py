@@ -12,21 +12,60 @@ class Layers(TFNetBase):
         groups = params.pop('num_groups', 1)
         if groups == 1:
             return slim.conv2d(tensor, **params)
+
+        # group-wise convolution
         channels = int(tensor.shape[-1])
         if channels % groups:
             raise ValueError(
                 'Number of input channels must be divisible by '
                 'the number of groups.')
-        normalizer_fn = params.pop('normalizer_fn', None)
-        activation_fn = params.pop('activation_fn', tf.nn.relu)
+
+        # parameters
+        scope = params.get('scope')
+        normalizer_fn = params.get('normalizer_fn', None)
+        activation_fn = params.get('activation_fn', tf.nn.relu)
         params['activation_fn'] = None
-        output_slices = []
+        num_outputs = params['num_outputs']
+        kernel = params['kernel_size']
+        if isinstance(kernel, int):
+            kernel = [kernel, kernel]
+        stride = params.get('stride', [1, 1])
+        if isinstance(stride, int):
+            stride = [stride, stride]
+        stride = [1] + list(stride) + [1]
+        padding = params.get('padding', 'SAME')
+        out_channels = groups * num_outputs
+
+        # group weights
+        weights_initializer = params.get(
+            'weights_initializer', tf.contrib.layers.xavier_initializer())
+        weights_regularizer = params.get('weights_regularizer', None)
+        weights_shape = kernel + [channels / groups, out_channels]
+        weights = tf.get_variable(
+            '{}/groupwise_weights'.format(scope), weights_shape,
+            initializer=weights_initializer, regularizer=weights_regularizer)
+        weights_slices = tf.split(weights, groups, axis=-1)
+
+        # convolution
         input_slices = tf.split(tensor, groups, axis=-1)
-        scope = params.pop('scope')
-        for i, each in enumerate(input_slices):
-            each = slim.conv2d(each, **params, scope='{}_{}'.format(scope, i))
+        output_slices = []
+        iterator = enumerate(zip(input_slices, weights_slices))
+        for i, (each, weights) in iterator:
+            with tf.name_scope('{}_{}'.format(scope, i)):
+                each = tf.nn.conv2d(each, weights, stride, padding)
             output_slices.append(each)
         output = tf.concat(output_slices, axis=-1)
+
+        # add bias
+        biases_initializer = params.get(
+            'biases_initializer', tf.zeros_initializer())
+        biases_regularizer = params.get('biases_regularizer', None)
+        biases = tf.get_variable(
+            '{}/biases'.format(scope), out_channels,
+            initializer=biases_initializer, regularizer=biases_regularizer)
+        output = tf.nn.bias_add(output, biases)
+
+        # normalization & activation
         if normalizer_fn:
             output = normalizer_fn(output, scope=scope)
         if activation_fn:

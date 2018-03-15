@@ -1,0 +1,35 @@
+_import: ../../resnet18.yaml
+model:
+    name: resnet18
+    layers:
+        _incremental: &incrementalshift
+            type: mayo.override.IncrementalQuantizer
+            intervals: [0.25, 0.5, 0.75, 1]
+            quantizer:
+                type: mayo.override.ShiftQuantizer
+                width: 4
+                bias: 10
+                overflow_rate: 0.0
+                should_update: true
+        _basic_block: &bb
+            layers:
+                conv1: &overrider
+                    weights_overrider:
+                        - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
+                        - *incrementalshift
+                    biases_overrider:
+                        - *incrementalshift
+                    activation_overrider:
+                        type: mayo.override.FixedPointQuantizer
+                        width: 8
+                        point: 3
+                        should_update: true
+                conv2: {<<: *overrider}
+        conv1: {<<: *overrider}
+        b11: {<<: *bb}
+        b12: {<<: *bb}
+        b21: {<<: *bb}
+        b31: {<<: *bb}
+        b32: {<<: *bb}
+        b41: {<<: *bb}
+        b42: {<<: *bb}

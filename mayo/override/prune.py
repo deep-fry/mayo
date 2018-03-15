@@ -1,6 +1,7 @@
 import math
 
 import tensorflow as tf
+import numpy as np
 
 from mayo.log import log
 from mayo.util import Percent, memoize_property
@@ -237,27 +238,48 @@ class NetworkSlimmer(ChannelPrunerBase):
 
 
 class FilterPruner(PrunerBase):
-    # TODO: finish channel pruner
-    alpha = Parameter('alpha', -2, [], tf.float32)
+    density = Parameter('density', 0.0, [], tf.float32)
+    mask = Parameter('mask', None, None, tf.bool)
 
-    def __init__(self, session, alpha=None, should_update=True):
+    def __init__(self, session, density=None, should_update=True):
         super().__init__(session, should_update)
-        self.alpha = alpha
+        self.density = density
 
-    def _threshold(self, tensor):
-        axes = len(tensor.get_shape())
+    def _apply(self, value):
+        self._parameter_config = {
+            'mask': {
+                'initial': tf.ones_initializer(dtype=tf.bool),
+                'shape': tf.TensorShape([value.shape[-2], value.shape[-1]]),
+            }
+        }
+        return value * util.cast(self.mask, float)
+
+    def _l1_norm(self, value):
+        # compute l1 norm for each filter
+        axes = len(value.shape)
         assert axes == 4
-        mean, var = tf.nn.moments(util.abs(tensor), axes=[1, 2])
-        return mean + self.alpha * util.sqrt(var)
+        # mean, var = tf.nn.moments(util.abs(tensor), axes=[0, 1])
+        # mean = np.mean(value, axis=(0, 1))
+        # var = np.var(value, axis=(0, 1))
+        # return mean + util.sqrt(var)
+        return np.sum(util.abs(value), axis=(0, 1))
 
-    def _updated_mask(self, var, mask):
-        return util.abs(var) > self._threshold(var)
+    def _threshold(self, value, density):
+        value = value.flatten()
+        index = int(value.size * density)
+        return sorted(value)[index]
+
+    def _updated_mask(self, tensor, mask):
+        value, mask, density = self.session.run([tensor, mask, self.density])
+        l1_norm = self._l1_norm(value)
+        # mean, var = tf.nn.moments(util.abs(tensor), axes=[0, 1])
+        return l1_norm > self._threshold(l1_norm, density)
 
     def _info(self):
         _, mask, density, count = super()._info()
-        alpha = self.session.run(self.alpha)
+        density = self.session.run(self.density)
         return self._info_tuple(
-            mask=mask, alpha=alpha, density=density, count_=count)
+            mask=mask, density=density, count_=count)
 
     @classmethod
     def finalize_info(cls, table):
