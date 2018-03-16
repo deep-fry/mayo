@@ -185,19 +185,13 @@ class NetworkSlimmer(ChannelPrunerBase):
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         return util.cast(masked, float)
 
-    def _threshold(self, values, non_zeros, total):
+    def _threshold(self, values, total):
         if not values:
             return 0
-        # density = (previous_zeros + new_zeros) * total
-        density = non_zeros / float(total) - self.density
-        if density <= 0:
-            raise ValueError(
-                'Previous density is smaller than current density')
-        num_active = math.ceil(len(values) * density)
+        num_active = math.ceil(len(values) * self.density)
         if num_active == len(values):
             return 0
-        # the first x percent
-        return sorted(values)[num_active]
+        return sorted(values)[-num_active - 1]
 
     def _global_threshold(self):
         estimator = self.session.estimator
@@ -213,13 +207,12 @@ class NetworkSlimmer(ChannelPrunerBase):
         # extract all gammas globally
         gammas = estimator.get_values(gamma_name)
         gamma_values = []
-        non_zeros = total = 0
+        total = 0
         for overrider, gamma in gammas.items():
             mask = self.session.run(overrider.mask)
             gamma_values += gamma[util.nonzero(mask)].tolist()
-            non_zeros += util.sum(mask)
             total += len(gamma)
-        threshold = self._threshold(gamma_values, non_zeros, total)
+        threshold = self._threshold(gamma_values, total)
         log.debug(
             'Extracted a global threshold for all gammas: {}.'
             .format(threshold))
