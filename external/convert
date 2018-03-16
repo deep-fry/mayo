@@ -4,6 +4,7 @@ import re
 
 import yaml
 import numpy as np
+import pickle
 from docopt import docopt
 
 __version__ = '0.0.1'
@@ -55,6 +56,15 @@ class CheckpointImporter(BaseImporter):
         var_to_tensor = {}
         for v in reader.get_variable_to_shape_map():
             var_to_tensor[v] = reader.get_tensor(v)
+        return var_to_tensor
+
+
+class PickleImporter(BaseImporter):
+    def _import(self, file, rules):
+        file = open(file, 'rb')
+        var_to_tensor = {}
+        for key, item in pickle.load(file).items():
+            var_to_tensor[key] = item.tolist()
         return var_to_tensor
 
 
@@ -171,6 +181,7 @@ _importers = {
     '.ckpt': CheckpointImporter,
     '.npy': NumpyImporter,
     '.pth': PyTorchImporter,
+    '.pkl': PickleImporter,
 }
 _exporters = {
     '': CheckpointExporter,
