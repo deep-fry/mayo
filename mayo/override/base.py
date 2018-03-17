@@ -233,8 +233,8 @@ class EmptyOverrider(OverriderBase):
 
 class ChainOverrider(OverriderBase, Sequence):
     """ Composition of overriders.  """
-    def __init__(self, overriders, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, overriders, should_update=True):
+        super().__init__(session, should_update)
         self._check_repetition(overriders)
         self._overriders = overriders
 
