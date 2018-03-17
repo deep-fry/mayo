@@ -38,7 +38,8 @@ class ParameterTransformer(object):
                 if len(overriders) == 1:
                     params[key] = overriders[0]
                 else:
-                    params[key] = ChainOverrider(overriders)
+                    params[key] = ChainOverrider(
+                        session=self.session, overriders=overriders)
             else:
                 cls, p = object_from_params(p)
                 params[key] = cls(**p)
