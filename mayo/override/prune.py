@@ -151,13 +151,28 @@ class ChannelPrunerBase(OverriderBase):
 
 
 class NetworkSlimmer(ChannelPrunerBase):
+    """
+    Our implementation of network slimming.
+
+    density: the density of the slimmed feature maps.
+    weight: the weight of L1 regularizer applied on BN gamma values.
+    global_threshold:
+        if true, uses all gamma values across layers overridden
+        with NetworkSlimmer with should_update enabled.
+    incremental:
+        if true, perform pruning on active channels, always decreases the
+        overall density by a factor of (1 - density);  otherwise, prune to the
+        set density for all channels with a chance of re-enabling pruned
+        channels.
+    """
     def __init__(
-            self, session, density=None, weight=0.01,
-            global_threshold=True, should_update=True):
+            self, session, density, weight=0.01,
+            global_threshold=True, incremental=False, should_update=True):
         super().__init__(session, should_update)
         self.density = density
         self.weight = weight
         self.global_threshold = global_threshold
+        self.incremental = incremental
 
     @memoize_property
     def gamma(self):
@@ -185,7 +200,7 @@ class NetworkSlimmer(ChannelPrunerBase):
             loss_collection=tf.GraphKeys.REGULARIZATION_LOSSES)
         return util.cast(masked, float)
 
-    def _threshold(self, values, total):
+    def _threshold(self, values):
         if not values:
             return 0
         num_active = math.ceil(len(values) * self.density)
@@ -205,14 +220,15 @@ class NetworkSlimmer(ChannelPrunerBase):
                     'Train for a while before running update to collect '
                     'gamma values.')
         # extract all gammas globally
-        gammas = estimator.get_values(gamma_name)
-        gamma_values = []
-        total = 0
-        for overrider, gamma in gammas.items():
-            mask = self.session.run(overrider.mask)
-            gamma_values += gamma[util.nonzero(mask)].tolist()
-            total += len(gamma)
-        threshold = self._threshold(gamma_values, total)
+        gammas = []
+        for overrider, gamma in estimator.get_values(gamma_name).items():
+            if not overrider.should_update:
+                continue
+            if self.incremental:
+                mask = self.session.run(overrider.mask)
+                gamma = gamma[util.nonzero(mask)]
+            gammas += gamma.tolist()
+        threshold = self._threshold(gammas)
         log.debug(
             'Extracted a global threshold for all gammas: {}.'
             .format(threshold))
@@ -225,9 +241,13 @@ class NetworkSlimmer(ChannelPrunerBase):
         if self.global_threshold:
             threshold = self._global_threshold()
         else:
-            gamma_values = gamma[util.nonzero(self.mask)]
-            threshold = self._threshold(gamma_values)
-        return util.logical_and(mask, gamma > threshold)
+            if self.incremental:
+                gammas = gamma[util.nonzero(self.mask)]
+            threshold = self._threshold(gammas)
+        new_mask = gamma > threshold
+        if self.incremental:
+            return util.logical_and(mask, new_mask)
+        return new_mask
 
 
 class FilterPruner(PrunerBase):
