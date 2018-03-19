@@ -160,10 +160,10 @@ class NetworkSlimmer(ChannelPrunerBase):
         if true, uses all gamma values across layers overridden
         with NetworkSlimmer with should_update enabled.
     incremental:
-        if true, perform pruning on active channels, always decreases the
-        overall density by a factor of (1 - density);  otherwise, prune to the
-        set density for all channels with a chance of re-enabling pruned
-        channels.
+        if true, .update() performs pruning on active channels, always
+        decreases the overall density by a factor of (1 - density); otherwise,
+        prune to the set density for all channels with a chance of re-enabling
+        pruned channels.
     """
     def __init__(
             self, session, density, weight=0.01,
