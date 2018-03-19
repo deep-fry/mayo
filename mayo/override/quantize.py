@@ -232,7 +232,7 @@ class FloatingPointQuantizer(QuantizerBase):
             exponent_width = self.width - self.mantissa_width
         if mantissa_width is None:
             mantissa_width = self.mantissa_width
-        """ Clip exponent and quantize mantissa.  """
+        # clip exponent and quantize mantissa
         exponent_min = -exponent_bias
         exponent_max = 2 ** exponent_width - 1 - exponent_bias
         exponent = util.clip_by_value(exponent, exponent_min, exponent_max)
@@ -308,7 +308,6 @@ class FloatingPointQuantizer(QuantizerBase):
             exponent_bias=exponent_bias)
 
     def _update(self):
-        log.info('finding a exp bias')
         mantissa_width = self.eval(self.mantissa_width)
         value = self.eval(self.before)
         width = self.eval(self.width)
@@ -344,49 +343,43 @@ class ShiftQuantizer(FloatingPointQuantizer):
         return exp
 
     def _update(self):
-        log.info('finding a exp bias for shift quantizer using overflow rate')
         max_exponent = self.find_shift_exp(self.eval(self.before))
         self.exponent_bias = 2 ** self.eval(self.width) - 1 - max_exponent
 
 
 class LogQuantizer(QuantizerBase):
-    def __init__(self, session, point, width=None, should_update=True):
+    def __init__(self, session, width, overflow_rate, should_update=True):
         super().__init__(session, should_update)
         self.width = width
-        self.point = point
         if width is not None and width < 1:
             raise ValueError(
                 'Width of quantized value must be greater than 0.')
-
-    def _decompose(self, value):
-        ...
-
-    def _transform(self):
-        ...
-
-    def _represent(self):
-        ...
+        # internal fixed-point quantizer to quantize value in log-domain
+        self.quantizer = DGQuantizer(
+            session, width, overflow_rate, should_update)
 
     def _quantize(self, value, point, width, compute_overflow_rate=False):
+        # decompose
         sign = util.cast(value > 0, float) - util.cast(value < 0, float)
-        # log only handels positive values
-        max_range = 2**(width - point)
-        value = util.clip_by_value(1e-10, 2**(max_range))
         value = util.log(util.abs(value), 2.0)
-        # quantize to log-domain
-        shift = util.cast(2 ** (width - point), float)
-        value = shift * value
-        value = util.round(value)
-        min_value = - 2 ** width
-        max_value = 2 ** width - 1
-        # ensure number is representable without overflow
+        # quantize
+        value = self.quantizer.apply(
+            value, compute_overflow_rate=compute_overflow_rate)
         if compute_overflow_rate:
-            overflows = util.logical_or(value < min_value, value > max_value)
-            return util.sum(util.cast(overflows, int)) / util.count(overflows)
-        value = util.clip_by_value(value, min_value, max_value)
-        value = value / shift
-        value = 2 ** value * sign
-        return value
+            return value
+        # represent
+        return util.where(util.nonzero(sign), sign * (2 ** value), 0)
+
+    def assign_parameters(self):
+        super().assign_parameters()
+        self.quantizer.assign_parameters()
+
+    def _update(self):
+        self.quantizer.update()
+
+    def _info(self):
+        info = self.quantizer.info()._asdict()
+        return self._info_tuple(**info)
 
 
 class Recentralizer(OverriderBase):
@@ -503,7 +496,6 @@ class IncrementalQuantizer(OverriderBase):
                 'shape': value.shape,
             }
         }
-
         quantized_value = self._quantize(value)
         off_mask = util.cast(
             util.logical_not(util.cast(self.mask, bool)), float)
@@ -555,18 +547,18 @@ class IncrementalQuantizer(OverriderBase):
 
 
 class MixedPrecisionQuantizer(OverriderBase):
-    '''
-        Mixed Precision should be implemnted as the following:
-        mask1 * precision1 + mask2 * precision2 ...
-        The masks are mutually exclusive
-        Currently supporting:
-            1. making a loss to the reg term
-            2. quantizer_maps contains parallel quantizers that each can have
-            a different quantizer
-            3. channel wise granuarity based on output channels
-        TODO:
-        provide _update()
-    '''
+    """
+    Mixed Precision should be implemnted as the following:
+    mask1 * precision1 + mask2 * precision2 ...
+    The masks are mutually exclusive
+    Currently supporting:
+        1. making a loss to the reg term
+        2. quantizer_maps contains parallel quantizers that each can have
+        a different quantizer
+        3. channel wise granuarity based on output channels
+    TODO:
+    provide _update()
+    """
     interval = Parameter('interval', 0.1, [], tf.float32)
     channel_mask = Parameter('channel_mask', None, None, tf.int32)
 
@@ -586,9 +578,7 @@ class MixedPrecisionQuantizer(OverriderBase):
         self.index = index
 
     def _apply(self, value):
-        '''
-        making an quantization loss to reg loss
-        '''
+        # making an quantization loss to reg loss
         self._parameter_config = {
             'channel_mask': {
                 'initial': tf.zeros_initializer(tf.bool),
@@ -609,12 +599,12 @@ class MixedPrecisionQuantizer(OverriderBase):
         return quantized_values
 
     def _combine_masks(self, value, quantized_values):
-        '''
+        """
         Args:
             quantized_value: the current mask is working on this current
                 quantized value, this value is not included in
                 quantizer_maps
-        '''
+        """
         if self.quantizer_maps:
             index = 0
             for key, quantizer in self.quantizer_maps.items():
@@ -643,9 +633,7 @@ class MixedPrecisionQuantizer(OverriderBase):
         # check the ones that are not quantized
         mask = mask.reshape((1, 1, 1, mask.shape[0]))
         unquantized_mask = util.logical_not(mask)
-        '''TODO:
-        mask shape is incorrect
-        '''
+        # TODO: mask shape is incorrect
         loss_vec = np.mean(loss * unquantized_mask, (0, 1, 2))
         # sort
         num_active = math.ceil(len(loss_vec) * interval)
