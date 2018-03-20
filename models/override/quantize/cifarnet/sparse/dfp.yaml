@@ -4,7 +4,7 @@ model.layers:
         weights_overrider:
             # comment this line out if it is an unpruned model
           - {type: mayo.override.DynamicNetworkSurgeryPruner, should_update: False}
-          - {type: mayo.override.DGQuantizer, width: 4, overflow_rate: 0.0}
+          - {type: mayo.override.ShiftQuantizer, width: 4, bias: 2, overflow_rate: 0.0, should_update: true}
         biases_overrider:
           - {type: mayo.override.DGQuantizer, width: 4, overflow_rate: 0.0}
     conv2: {<<: *overrider}

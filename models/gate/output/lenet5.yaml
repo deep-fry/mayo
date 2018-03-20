@@ -1,20 +1,19 @@
 ---
 _import: ../../lenet5_bn.yaml
+_trainable: true
+_gate:
+    enable: true
+    policy: parametric_gamma
+    density: 1.0
+    pool: avg
+    weight: 0.00001
 model:
+    description: |
+        A variant of cifarnet that performs online gating.
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
-            gate_params:
-                enable: true
-                density: 0.5
-                policy: parametric_gamma
-                weight: 0.0
-                # norm: channel
-            normalizer_fn: tensorflow.contrib.slim.batch_norm
-            normalizer_params:
-                center: true
-                scale: true
-                decay: 0.9997
-                epsilon: 0.001
-        conv0: {<<: *gated_conv, trainable: false}
-        conv1: {<<: *gated_conv, trainable: false}
+            gate_params: $(_gate)
+            trainable: $(_trainable)
+        conv0: {<<: *gated_conv}
+        conv1: {<<: *gated_conv}
