@@ -3,10 +3,10 @@ import tensorflow as tf
 
 from mayo.override import util
 from mayo.override.base import Parameter
-from mayo.override.quantize.base import Base
+from mayo.override.quantize.base import QuantizerBase
 
 
-class FloatingPointQuantizer(Base):
+class FloatingPointQuantizer(QuantizerBase):
     """
     Minifloat quantization.
 
@@ -21,9 +21,9 @@ class FloatingPointQuantizer(Base):
     When both exponent_width and mantissa_width are 0, the quantized value can
     only represent $2^{-bias}$ or 0, which is not very useful.
     """
-    width = Parameter('width', 32, [], tf.float32)
-    exponent_bias = Parameter('exponent_bias', -127, [], tf.float32)
-    mantissa_width = Parameter('mantissa_width', 23, [], tf.float32)
+    width = Parameter('width', 32, [], 'float')
+    exponent_bias = Parameter('exponent_bias', -127, [], 'float')
+    mantissa_width = Parameter('mantissa_width', 23, [], 'float')
 
     def __init__(
             self, session, width, exponent_bias, mantissa_width,

@@ -2,7 +2,7 @@ from mayo.override import util
 from mayo.override.base import OverriderBase
 
 
-class Base(OverriderBase):
+class QuantizerBase(OverriderBase):
     def eval(self, attribute):
         if util.is_tensor(attribute):
             return self.session.run(attribute)

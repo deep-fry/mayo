@@ -45,7 +45,7 @@ class RandomChannelGater(GaterBase):
 
 
 class ChannelGater(GaterBase):
-    threshold = Parameter('threshold', 1, [], tf.float32)
+    threshold = Parameter('threshold', 1, [], 'float')
 
     def __init__(
             self, session, threshold=None, policy=None, should_update=True):

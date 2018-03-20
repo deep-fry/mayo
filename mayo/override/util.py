@@ -96,6 +96,16 @@ def floor(value):
         return tf.floor(value)
 
 
+def ceil(value):
+    if is_constant(value):
+        return math.ceil(value)
+    if is_numpy(value):
+        return np.ceil(value)
+    omap = {'Ceil': 'Identity'}
+    with tf.get_default_graph().gradient_override_map(omap):
+        return tf.ceil(value)
+
+
 def round(value):
     if is_constant(value):
         return math.floor(value + 0.5)

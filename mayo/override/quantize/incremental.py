@@ -9,8 +9,8 @@ class IncrementalQuantizer(OverriderBase):
     """
     https://arxiv.org/pdf/1702.03044.pdf
     """
-    interval = Parameter('interval', 0.1, [], tf.float32)
-    mask = Parameter('mask', None, None, tf.bool)
+    interval = Parameter('interval', 0.1, [], 'float')
+    mask = Parameter('mask', None, None, 'bool')
 
     def __init__(self, session, quantizer, intervals, should_update=True):
         super().__init__(session, should_update)

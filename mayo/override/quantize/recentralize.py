@@ -15,9 +15,9 @@ class Recentralizer(OverriderBase):
             var = super().__get__(instance, owner)
             return instance._quantize(var, mean_quantizer=True)
 
-    positives = Parameter('positives', None, None, tf.bool)
-    positives_mean = QuantizedParameter('positives_mean', 1, [], tf.float32)
-    negatives_mean = QuantizedParameter('negatives_mean', -1, [], tf.float32)
+    positives = Parameter('positives', None, None, 'bool')
+    positives_mean = QuantizedParameter('positives_mean', 1, [], 'float')
+    negatives_mean = QuantizedParameter('negatives_mean', -1, [], 'float')
 
     def __init__(
             self, session, quantizer, mean_quantizer=None, should_update=True):

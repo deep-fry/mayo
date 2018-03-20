@@ -25,13 +25,13 @@ model.layers:
         index: 0
         quantizers:
             quantizer0:
-              type: mayo.override.FixedPointQuantizer
-              width: 2
-              point: 0
+                type: mayo.override.FixedPointQuantizer
+                width: 2
+                point: 0
             quantizer1:
-              type: mayo.override.FixedPointQuantizer
-              width: 8
-              point: 0
+                type: mayo.override.FixedPointQuantizer
+                width: 8
+                point: 0
     _overrider: &playground
         # - *incremental
         - *mixed

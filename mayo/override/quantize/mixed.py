@@ -3,10 +3,10 @@ import tensorflow as tf
 from mayo.util import object_from_params
 from mayo.override import util
 from mayo.override.base import Parameter
-from mayo.override.quantize.base import Base
+from mayo.override.quantize.base import QuantizerBase
 
 
-class MixedQuantizer(Base):
+class MixedQuantizer(QuantizerBase):
     """
     Mixed Precision should be implemented as the following:
     mask1 * precision1 + mask2 * precision2 ...
@@ -19,8 +19,8 @@ class MixedQuantizer(Base):
     TODO:
     provide _update()
     """
-    interval = Parameter('interval', 0.1, [], tf.float32)
-    channel_mask = Parameter('channel_mask', None, None, tf.int32)
+    interval = Parameter('interval', 0.1, [], 'float')
+    channel_mask = Parameter('channel_mask', None, None, 'int')
 
     def __init__(self, session, quantizers, index=0,
                  should_update=True, reg_factor=0.0, interval=0.1):

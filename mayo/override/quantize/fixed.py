@@ -1,12 +1,10 @@
-import tensorflow as tf
-
 from mayo.log import log
 from mayo.override import util
 from mayo.override.base import Parameter
-from mayo.override.quantize.base import Base
+from mayo.override.quantize.base import QuantizerBase
 
 
-class FixedPointQuantizer(Base):
+class FixedPointQuantizer(QuantizerBase):
     """
     Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
     dynamic range.
@@ -21,8 +19,8 @@ class FixedPointQuantizer(Base):
     References:
         [1] https://arxiv.org/pdf/1604.03168
     """
-    width = Parameter('width', 32, [], tf.int32)
-    point = Parameter('point', 2, [], tf.int32)
+    width = Parameter('width', 32, [], 'int')
+    point = Parameter('point', 2, [], 'int')
 
     def __init__(self, session, point=None, width=None, should_update=True):
         super().__init__(session, should_update)
@@ -129,7 +127,7 @@ class DGTrainableQuantizer(DGQuantizer):
 
     Trainable width, but no gradients can be felt by it at the moment.
     """
-    width = Parameter('width', 16, [], tf.float32, trainable=True)
+    width = Parameter('width', 16, [], 'float', trainable=True)
 
     def __init__(self, session, overflow_rate, should_update=True):
         super().__init__(session, None, None, should_update=should_update)
@@ -138,7 +136,7 @@ class DGTrainableQuantizer(DGQuantizer):
         return self._quantize(value, self.width, self.point)
 
 
-class LogQuantizer(Base):
+class LogQuantizer(QuantizerBase):
     def __init__(self, session, width, overflow_rate, should_update=True):
         super().__init__(session, should_update)
         self.width = width
