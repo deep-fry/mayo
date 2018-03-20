@@ -260,19 +260,16 @@ class Session(object, metaclass=SessionMeta):
         net = self.nets[0]
         info_dict = net.info()
         # layer info
-        layer_info = Table(['layer', 'shape', '#macs'])
-        self.estimator.shapes = net.shapes
-        self.estimator.add_estimate()
-        for node, tensors in net.layers().items():
-            tensors = ensure_list(tensors)
-            try:
-                macs = self.estimator.get_value('MACs', node)
-            except KeyError:
-                macs = 0
-            for tensor in tensors:
-                layer_info.add_row((node.formatted_name(), tensor.shape, macs))
-        layer_info.set_footer(
-            ['', '    total:', sum(layer_info.get_column('#macs'))])
+        stats = self.estimator.get_estimates(net)
+        keys = list({k for v in stats.values() for k in v})
+        layer_info = Table(['layer', 'shape'] + keys)
+        for node, values in stats.items():
+            values = tuple(values.get(k, 0) for k in keys)
+            layer_info.add_row(
+                (node.formatted_name(), net.shapes[node]) + values)
+        formatted_footers = [
+            sum(layer_info.get_column(k)) for k in keys]
+        layer_info.set_footer(['', '    total:'] + formatted_footers)
         info_dict['layers'] = layer_info
         if self.nets[0].overriders:
             info_dict['overriders'] = self.overrider_info()

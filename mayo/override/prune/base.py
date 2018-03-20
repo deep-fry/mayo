@@ -63,9 +63,7 @@ class ChannelPrunerBase(OverriderBase):
                 'shape': self.num_channels,
             },
         }
-        mask = self.mask
-        for _ in range(3):
-            mask = tf.expand_dims(mask, 0)
+        mask = tf.reshape(self.mask, (1, 1, 1, -1))
         return value * util.cast(mask, float)
 
     def _updated_mask(self, var, mask):
