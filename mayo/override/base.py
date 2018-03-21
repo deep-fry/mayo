@@ -31,14 +31,20 @@ def _getter_not_initialized(*args, **kwargs):
 
 class Parameter(object):
     """ `tf.Variable`-based overrider hyperparameter.  """
+    _dtype_map = {
+        'int': tf.int32,
+        'float': tf.float32,
+        'bool': tf.bool,
+    }
+
     def __init__(
             self, name, initial=None, shape=None,
-            dtype=tf.float32, trainable=False):
+            dtype='float', trainable=False):
         super().__init__()
         self.name = name
         self.initial = initial
         self.shape = shape
-        self.dtype = dtype
+        self.dtype = self._dtype_map[dtype]
         self.trainable = trainable
 
     def _getter_kwargs(self, instance):
@@ -233,8 +239,8 @@ class EmptyOverrider(OverriderBase):
 
 class ChainOverrider(OverriderBase, Sequence):
     """ Composition of overriders.  """
-    def __init__(self, overriders, should_update=True):
-        super().__init__(should_update)
+    def __init__(self, session, overriders, should_update=True):
+        super().__init__(session, should_update)
         self._check_repetition(overriders)
         self._overriders = overriders
 

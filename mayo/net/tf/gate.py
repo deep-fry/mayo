@@ -341,7 +341,9 @@ class GatedConvolutionInstantiator(object):
                 tf.stop_gradient(match), gate, loss_collection=None)
         else:
             # parametric gamma does not match anything
-            loss = tf.reduce_sum(tf.abs(gate))
+            mean, variance = tf.nn.moments(gate, axes=[1, 2, 3])
+            loss = tf.reduce_sum(tf.square(tf.sqrt(variance) / mean))
+            # loss = tf.reduce_sum(tf.abs(gate))
         loss *= self.weight
         tf.add_to_collection(loss_name, loss)
         self.constructor.session.estimator.register(

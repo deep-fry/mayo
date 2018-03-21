@@ -3,7 +3,6 @@ from mayo.override.base import (
     ChainOverrider,
 )
 from mayo.override.quantize import (
-    ThresholdBinarizer,
     FixedPointQuantizer,
     CourbariauxQuantizer,
     DGQuantizer,
@@ -13,7 +12,7 @@ from mayo.override.quantize import (
     LogQuantizer,
     Recentralizer,
     IncrementalQuantizer,
-    MixedPrecisionQuantizer,
+    MixedQuantizer,
 )
 from mayo.override.prune import (
     MeanStdPruner,
@@ -33,7 +32,6 @@ from mayo.override.lra import (
 __all__ = [
     EmptyOverrider,
     ChainOverrider,
-    ThresholdBinarizer,
     FixedPointQuantizer,
     CourbariauxQuantizer,
     DGQuantizer,
@@ -47,8 +45,8 @@ __all__ = [
     ChannelGater,
     RandomChannelGater,
     IncrementalQuantizer,
+    MixedQuantizer,
     NetworkSlimmer,
-    MixedPrecisionQuantizer,
-    LowRankApproximation,
     FilterPruner,
+    LowRankApproximation,
 ]

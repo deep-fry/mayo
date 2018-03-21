@@ -20,7 +20,7 @@ class ResourceEstimator(object):
         self.statistics = {}
         self.properties = {}
         self.formatters = []
-        self.shapes = None
+        self.net = None
 
     def __getstate__(self):
         return {
@@ -175,24 +175,25 @@ class ResourceEstimator(object):
             if name in stat_tensors
         }
 
-    def add_estimate(self):
-        if not self.shapes:
-            raise ValueError('Shape of nodes is not set.')
-        for node, shape in self.shapes.items():
+    def get_estimates(self, net):
+        self.net = net
+        statistics = {}
+        for node, shape in net.shapes.items():
             if not isinstance(node, LayerNode):
                 continue
-            layer = self.statistics.setdefault(node, {})
+            stats = {}
             try:
                 func, params = object_from_params(
                     node.params, self, 'estimate_')
             except NotImplementedError:
                 continue
             # tensors
-            inputs = [self.shapes[p] for p in node.predecessors]
+            inputs = [net.shapes[p] for p in node.predecessors]
             inputs = inputs[0] if len(inputs) == 1 else inputs
             stats = func(node, inputs, shape, params)
-            stats = {name: [value] for name, value in stats.items()}
-            layer.update(stats)
+            stats = {name: value for name, value in stats.items()}
+            statistics[node] = stats
+        return statistics
 
     @staticmethod
     def _multiply(items):
@@ -224,7 +225,19 @@ class ResourceEstimator(object):
             node, input_shape, output_shape, params)
         # input channel size C_in
         macs = depthwise_stats['MACs'] * int(input_shape[-1])
-        return {'MACs': macs}
+        stats = {}
+        # a hacky way to estimate MACs for channel gater overriders
+        try:
+            mask = self.net.variables[node]['activations/NetworkSlimmer.mask']
+        except KeyError:
+            pass
+        else:
+            mask = self.net.session.run(mask)
+            density = self._gate_density([mask])
+            stats['density'] = density
+            macs *= density
+        stats['MACs'] = int(macs)
+        return stats
 
     def estimate_fully_connected(
             self, node, input_shape, output_shape, params):
@@ -247,7 +260,7 @@ class ResourceEstimator(object):
         """
         def true():
             num = max(self.max_len('gate.active'), 1)
-            channels = self.shapes[node][-1]
+            channels = self.net.shapes[node][-1]
             return [np.ones([1, 1, 1, channels], dtype=bool)] * num
 
         if isinstance(node, SplitNode):
@@ -307,6 +320,7 @@ class ResourceEstimator(object):
         stats = self.estimate_convolution(
             node, input_shape, output_shape, params)
         stats['MACs'] = int(stats['MACs'] * in_density * out_density)
+        stats['density'] = out_density
         # gating network overhead
         # io channels
         overhead = int(input_shape[-1] * output_shape[-1])

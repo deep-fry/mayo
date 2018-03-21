@@ -5,9 +5,9 @@ from mayo.override.base import OverriderBase, Parameter
 
 
 class LowRankApproximation(OverriderBase):
-    singular = Parameter('singular', None, None, tf.float32)
-    left = Parameter('left', None, None, tf.float32)
-    right = Parameter('right', None, None, tf.float32)
+    singular = Parameter('singular', None, None, 'float')
+    left = Parameter('left', None, None, 'float')
+    right = Parameter('right', None, None, 'float')
 
     def __init__(self, session, should_update=True, ranks=0):
         super().__init__(session, should_update)
