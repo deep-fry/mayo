@@ -1,9 +1,0 @@
----
-_import: ../../lenet5.yaml
-model.layers:
-    conv0: &overrider
-        activation_overrider:
-            type: mayo.override.NetworkSlimmer
-            density: 0.1
-            should_update: true
-    conv1: {<<: *overrider}
