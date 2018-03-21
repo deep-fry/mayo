@@ -214,7 +214,8 @@ class GatedConvolutionInstantiator(object):
         num_active = math.ceil(int(num_elements) * self.density)
         if num_active == num_elements:
             # all active, not gating
-            return tensor
+            return tf.ones(tensor.shape)
+            # return tensor
         # reshape the last dimensions into one
         reshaped = tf.reshape(tensor, [num, -1])
         # top_k, where k is the number of active channels
@@ -341,8 +342,13 @@ class GatedConvolutionInstantiator(object):
                 tf.stop_gradient(match), gate, loss_collection=None)
         else:
             # parametric gamma does not match anything
-            mean, variance = tf.nn.moments(gate, axes=[0, 1, 2])
+            actives = self.actives()
+            # one loss
+            mean, variance = tf.nn.moments(gate * actives, axes=[0, 1, 2])
             loss = tf.reduce_sum(tf.square(tf.sqrt(variance) / mean))
+            # another loss
+            mean, variance = tf.nn.moments(gate, axes=[1, 2, 3])
+            loss += tf.reduce_sum(tf.square(tf.sqrt(variance) / mean))
             # loss = tf.reduce_sum(tf.abs(gate))
         loss *= self.weight
         tf.add_to_collection(loss_name, loss)
