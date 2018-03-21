@@ -1,0 +1,15 @@
+---
+_import: ../../cifarnet.yaml
+model.layers:
+    conv0: &overrider
+        activation_overrider:
+            type: mayo.override.NetworkSlimmer
+            density: 0.75
+            should_update: true
+    conv1: {<<: *overrider}
+    conv2: {<<: *overrider}
+    conv3: {<<: *overrider}
+    conv4: {<<: *overrider}
+    conv5: {<<: *overrider}
+    conv6: {<<: *overrider}
+    conv7: {<<: *overrider}
