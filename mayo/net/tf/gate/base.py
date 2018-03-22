@@ -270,7 +270,7 @@ class SparseRegularizedGatedConvolutionBase(GatedConvolutionBase):
         regularizer = self.regularizer
         if isinstance(regularizer, str):
             regularizer = [regularizer]
-        sparse = self.gate() * self.actives()
+        sparse = self.gate() * tf.cast(self.actives(), tf.float32)
         loss = []
         if 'l1' in self.regularizer:
             loss.append(tf.abs(sparse))
