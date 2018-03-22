@@ -52,7 +52,7 @@ class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):
         #   actives(gamma(x)) * gamma(x) * norm(conv(x)) +
         #   actives(gamma(x)) * beta
         # )
-        actives = self.actives()
+        actives = tf.cast(self.actives(), tf.float32)
         gamma = self.gate()
         tensor *= actives * gamma if self.enable else gamma
         if self.normalizer_params.get('center', True):
