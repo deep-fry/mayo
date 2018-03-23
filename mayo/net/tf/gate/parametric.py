@@ -2,8 +2,8 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.util import memoize_method
-from mayo.net.tf.gate.base import (
-    SparseRegularizedGatedConvolutionBase, GateParameterValueError)
+from mayo.net.tf.gate.base import GateParameterValueError
+from mayo.net.tf.gate.sparse import SparseRegularizedGatedConvolutionBase
 
 
 class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):

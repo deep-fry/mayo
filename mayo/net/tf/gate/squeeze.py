@@ -1,4 +1,4 @@
-from mayo.net.tf.gate.base import SparseRegularizedGatedConvolutionBase
+from mayo.net.tf.gate.sparse import SparseRegularizedGatedConvolutionBase
 
 
 class SqueezeExciteGatedConvolution(SparseRegularizedGatedConvolutionBase):
