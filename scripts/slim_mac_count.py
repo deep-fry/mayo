@@ -20,7 +20,7 @@ def mac_count(overriders, net):
         for key, item in estimates.items():
             print(key, item)
             if 'MACs' in item.keys():
-                if 'densities' in item.keys():
+                if 'density' in item.keys():
                     new_estimates[key.name] = item['density']
                 else:
                     # indeed 100% if no density, right?
