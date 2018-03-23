@@ -1,12 +1,13 @@
 ---
-_import: ../../lenet5_bn.yaml
+_import: ../lenet5_bn.yaml
 _trainable: true
 _gate:
     enable: true
-    policy: parametric_gamma
-    density: 1.0
+    policy: parametric
+    density: 0.5
     pool: avg
     weight: 0.00001
+    threshold: online
 model:
     description: |
         A variant of cifarnet that performs online gating.

@@ -2,12 +2,12 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 
 from mayo.util import memoize_method
-from mayo.net.tf.gate.base import (
-    SparseRegularizedGatedConvolutionBase, GateParameterValueError)
+from mayo.net.tf.gate.base import GateParameterValueError
+from mayo.net.tf.gate.sparse import SparseRegularizedGatedConvolutionBase
 
 
 class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):
-
+    """ Parametric batch normalization with gating.  """
     def _update_defaults(self, defaults):
         super()._update_defaults(defaults)
         # FIXME hacky normalizer customization
@@ -52,7 +52,7 @@ class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):
         #   actives(gamma(x)) * gamma(x) * norm(conv(x)) +
         #   actives(gamma(x)) * beta
         # )
-        actives = tf.cast(self.actives(), tf.float32)
+        actives = self.actives()
         gamma = self.gate()
         tensor *= actives * gamma if self.enable else gamma
         if self.normalizer_params.get('center', True):

@@ -3,7 +3,7 @@ _import: ../../cifarnet.yaml
 _trainable: true
 _gate:
     enable: true
-    policy: squeeze
+    policy: parametric
     density: 1.0
     pool: avg
     weight: 0.0000001

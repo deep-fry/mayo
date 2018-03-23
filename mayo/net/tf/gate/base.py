@@ -3,7 +3,8 @@ import math
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize_method
+from mayo.util import memoize_method, memoize_property, null_scope
+from mayo.net.graph import LayerNode
 
 
 class GateError(Exception):
@@ -19,10 +20,24 @@ class GateGranularityTypeError(GateError):
 
 
 class GatedConvolutionBase(object):
+    _must = object()
+    _defaults = {
+        'enable': True,
+        'density': _must,
+        'pool': 'avg',
+        'granularity': 'channel',
+        'weight': 0,
+        'factor': 0,
+        'threshold': 'online',
+        'decay': 0.9997,
+        'trainable': True,
+    }
+
     def __init__(
             self, constructor, node, conv_params, gate_params, conv_input):
         super().__init__()
         self.constructor = constructor
+        self.estimator = constructor.session.estimator
         self.is_training = constructor.is_training
         self.node = node
         self._init_convolution(conv_input, conv_params)
@@ -47,17 +62,6 @@ class GatedConvolutionBase(object):
         self.input = tensor
         self.conved = self.constructor.instantiate_convolution(
             self.node, tensor, params)
-
-    _must = object()
-    _defaults = {
-        'enable': True,
-        'density': _must,
-        'pool': 'avg',
-        'granularity': 'channel',
-        'weight': 0,
-        'factor': 0,
-        'trainable': True,
-    }
 
     def _update_defaults(self, defaults):
         pass
@@ -180,7 +184,7 @@ class GatedConvolutionBase(object):
 
     def _register(self, name, tensor):
         history = None if self.is_training else 'infinite'
-        self.constructor.session.estimator.register(
+        self.estimator.register(
             tensor, 'gate.{}'.format(name), self.node, history=history)
         return tensor
 
@@ -189,6 +193,83 @@ class GatedConvolutionBase(object):
         tensor = self._predictor('gate')
         self._register('gamma', tensor)
         return tensor
+
+    @staticmethod
+    def _threshold_debugger(estimator):
+        info = {}
+        for k, v in estimator.get_values('gate.threshold').items():
+            if isinstance(k, LayerNode):
+                k = k.formatted_name()
+            info[k] = v
+        return info
+
+    @memoize_property
+    def _threshold_variable(self):
+        node = self.node if self.threshold == 'local' else None
+        try:
+            return self.estimator.get_tensor('gate.threshold', node)
+        except KeyError:
+            pass
+        if self.threshold == 'local':
+            scope = tf.variable_scope(self.scope)
+        else:
+            scope = null_scope()
+        with scope:
+            var = tf.get_variable(
+                'gate/threshold', [],
+                initializer=tf.constant_initializer(-0.1),
+                trainable=False, dtype=tf.float32)
+        self.estimator.register(
+            var, 'gate.threshold', node=node,
+            debugger=self._threshold_debugger)
+        return var
+
+    def _find_threshold(self, tensor):
+        if tensor.shape.ndims != 2:
+            tensor = tf.reshape(tensor, (tensor.shape[0], -1))
+        num_elements = int(tensor.shape[-1])
+        num_active = math.ceil(num_elements * self.density)
+        if num_active == num_elements:
+            # all active, not gating
+            return None
+        # top_k, where k is the number of active channels
+        top, _ = tf.nn.top_k(tensor, k=(num_active + 1))
+        # disable channels with smaller responses
+        return tf.reduce_min(top, axis=[1], keep_dims=True)
+
+    def _finalizer(self):
+        if self.threshold == 'online':
+            return
+        elif self.threshold == 'global':
+            outputs = []
+            gammas = self.estimator.get_tensors('gate.gamma')
+            for node, tensor in gammas.items():
+                if node.params['gate_params'].get('enable', True):
+                    outputs.append(tensor)
+            if not outputs:
+                raise ValueError(
+                    'Gated convolution did not register any gammas '
+                    'for thresholding.')
+            outputs = tf.concat(outputs, axis=-1)
+        elif self.threshold == 'local':
+            outputs = self.gate()
+        else:
+            raise GateParameterValueError('Unexpected threshold type.')
+        threshold = self._find_threshold(outputs)
+        if threshold is None:
+            return
+        threshold = tf.reduce_mean(threshold)
+        # exponential moving average
+        update_op = tf.assign(
+            self._threshold_variable,
+            self.decay * self._threshold_variable +
+            (1 - self.decay) * threshold)
+        ops = self.constructor.session.extra_train_ops
+        if self.threshold == 'global':
+            ops['gate'] = update_op
+        else:
+            ops = ops.setdefault('gate', {})
+            ops[self.node] = update_op
 
     @memoize_method
     def actives(self):
@@ -205,21 +286,22 @@ class GatedConvolutionBase(object):
         # reshape
         num, height, width, channels = tensor.shape
         flattened = tf.reshape(tensor, [num, -1])
-        # number of active elements
-        num_elements = int(flattened.shape[-1])
-        num_active = math.ceil(num_elements * self.density)
-        if num_active == num_elements:
-            # all active, not gating
-            return tf.ones(tensor.shape)
-        # top_k, where k is the number of active channels
-        top, _ = tf.nn.top_k(flattened, k=(num_active + 1))
-        # disable channels with smaller activations
-        threshold = tf.reduce_min(top, axis=[1], keep_dims=True)
+        # find threshold
+        if self.threshold == 'online':
+            threshold = self._find_threshold(flattened)
+            if threshold is None:
+                return tf.ones(tensor.shape, dtype=tf.float32)
+        elif self.threshold in ['local', 'global']:
+            threshold = self._threshold_variable
+            node = self.node if self.threshold == 'local' else 'gate'
+            self.constructor.session.finalizers[node] = self._finalizer
+        else:
+            raise GateParameterValueError('Unexpected threshold type.')
         active = tf.reshape(flattened > threshold, tensor.shape)
         active = tf.stop_gradient(active)
         # register to estimator
         self._register('active', active)
-        return active
+        return tf.cast(active, dtype=tf.float32)
 
     def normalize(self, tensor):
         if not self.normalizer_fn:
@@ -236,8 +318,7 @@ class GatedConvolutionBase(object):
     def _add_regularization(self, loss):
         loss *= self.weight
         tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, loss)
-        self.constructor.session.estimator.register(
-            loss, 'gate.loss', self.node)
+        self.estimator.register(loss, 'gate.loss', self.node)
 
     def regularize(self):
         raise NotImplementedError
@@ -252,35 +333,3 @@ class GatedConvolutionBase(object):
                 .format(self.__class__, self.node.formatted_name()))
         self.regularize()
         return self.activated
-
-
-class SparseRegularizedGatedConvolutionBase(GatedConvolutionBase):
-    def _update_defaults(self, defaults):
-        defaults['regularizer'] = 'l1'
-        defaults['epsilon'] = 0.001
-
-    def _mixture(self, tensor, axes):
-        mean, variance = tf.nn.moments(tensor, axes=axes)
-        return variance / tf.square((mean + self.epsilon))
-
-    def regularize(self):
-        """
-        We use a L1, L2 or MoE regularizer to encourage sparsity in gate.
-        """
-        regularizer = self.regularizer
-        if isinstance(regularizer, str):
-            regularizer = [regularizer]
-        sparse = self.gate() * tf.cast(self.actives(), tf.float32)
-        loss = []
-        if 'l1' in self.regularizer:
-            loss.append(tf.abs(sparse))
-        if 'l2' in self.regularizer:
-            loss.append(tf.square(sparse))
-        if 'moe' in self.regularizer:
-            # mixture of experts
-            loss.append(self._mixture(sparse, [0, 1, 2]))
-        if 'moi' in self.regularizer:
-            # mixture of idiots
-            loss.append(self._mixture(sparse, [1, 2, 3]))
-        loss = tf.add_n([tf.reduce_sum(l) for l in loss])
-        self._add_regularization(loss)

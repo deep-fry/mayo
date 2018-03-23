@@ -1,10 +1,16 @@
 import os
 import functools
+import contextlib
 import collections
 from importlib.util import spec_from_file_location, module_from_spec
 
 import numpy as np
 import tensorflow as tf
+
+
+@contextlib.contextmanager
+def null_scope():
+    yield
 
 
 def memoize_method(func):

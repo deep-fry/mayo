@@ -7,8 +7,7 @@ from contextlib import contextmanager
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import (
-    ensure_list, memoize_property, flatten, Change, Table, Percent)
+from mayo.util import memoize_property, flatten, Change, Table, Percent
 from mayo.net.tf import TFNet
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
@@ -346,6 +345,8 @@ class Session(object, metaclass=SessionMeta):
             self.estimator.append(statistics)
             text = self.estimator.format(batch_size=self.batch_size)
             log.info(text, update=True)
+            if log.is_enabled('debug'):
+                self.estimator.debug()
         else:
             results = self.raw_run(ops, **kwargs)
         return results
