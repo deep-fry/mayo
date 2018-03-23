@@ -42,5 +42,6 @@ def mac_count(overriders, net):
             prev_name = name
         else:
             macs[name] = slimed_macs[name] * densities[prev_name]
+            prev_name = name
         total_macs += macs[name]
     return (macs, total_macs)
