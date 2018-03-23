@@ -20,6 +20,7 @@ class ResourceEstimator(object):
         self.statistics = {}
         self.properties = {}
         self.formatters = []
+        self.debuggers = []
         self.net = None
 
     def __getstate__(self):
@@ -30,7 +31,7 @@ class ResourceEstimator(object):
 
     def register(
             self, tensor, name, node=None, history=None,
-            transformer=None, formatter=None):
+            transformer=None, formatter=None, debugger=None):
         """
         Register statistic tensors to be run by session.
 
@@ -44,6 +45,7 @@ class ResourceEstimator(object):
             discard past values; if not specified, we keep 100.
         transformer: transform value before adding to statistics.
         formatter: calls .register_print with `formatter`.
+        debugger: function to print extra debug info.
         """
         history = self.default_history if history is None else history
         node = 'global' if node is None else node
@@ -57,6 +59,8 @@ class ResourceEstimator(object):
         prop[name] = {'history': history, 'transformer': transformer}
         if formatter:
             self.register_formatter(formatter)
+        if debugger:
+            self.register_debugger(debugger)
 
     def register_formatter(self, func):
         """
@@ -69,6 +73,10 @@ class ResourceEstimator(object):
         """
         if func not in self.formatters:
             self.formatters.append(func)
+
+    def register_debugger(self, func):
+        if func not in self.debuggers:
+            self.debuggers.append(func)
 
     def add(self, value, name, node=None):
         node = node or 'global'
@@ -125,6 +133,12 @@ class ResourceEstimator(object):
                     'step.imgs_per_sec', imgs_per_sec, std=False)
                 text.append('tp: {:4.0f}/s'.format(imgs_per_sec))
         return ' | '.join(text)
+
+    def debug(self):
+        for func in self.debuggers:
+            log.debug(
+                'Estimator debug info for {!r}: {}'
+                .format(func.__qualname__, func(self)))
 
     def get_history(self, name, node=None):
         return self.statistics[node or 'global'][name]
