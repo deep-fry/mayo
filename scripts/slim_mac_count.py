@@ -34,6 +34,7 @@ def mac_count(overriders, net):
     slimed_macs = extract_macs(estimates)
     # lets assume things are ordered
     macs = {}
+    total_macs = 0
     prev_name = None
     for index, name in enumerate(layer_names):
         if index == 0:
@@ -41,4 +42,5 @@ def mac_count(overriders, net):
             prev_name = name
         else:
             macs[name] = slimed_macs[name] * densities[prev_name]
-    return macs
+        total_macs += macs[name]
+    return (macs, total_macs)
