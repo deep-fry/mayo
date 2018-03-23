@@ -1,5 +1,5 @@
 ---
-_import: ../../vgg16_bn.yaml
+_import: ../../../vgg16_bn.yaml
 model.layers:
     conv1_1: &overrider
         activation_overrider:

@@ -1,5 +1,5 @@
 ---
-_import: ../../lenet5.yaml
+_import: ../../../lenet5_bn.yaml
 model.layers:
     conv0: &overrider
         activation_overrider:
