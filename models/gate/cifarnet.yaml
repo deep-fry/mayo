@@ -1,12 +1,12 @@
 ---
-_import: ../../lenet5_bn.yaml
+_import: ../../cifarnet.yaml
 _trainable: true
 _gate:
     enable: true
-    policy: parametric_gamma
+    policy: parametric
     density: 1.0
     pool: avg
-    weight: 0.00001
+    weight: 0.0000001
 model:
     description: |
         A variant of cifarnet that performs online gating.
@@ -17,3 +17,9 @@ model:
             trainable: $(_trainable)
         conv0: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
+        conv2: {<<: *gated_conv}
+        conv3: {<<: *gated_conv}
+        conv4: {<<: *gated_conv}
+        conv5: {<<: *gated_conv}
+        conv6: {<<: *gated_conv}
+        conv7: {<<: *gated_conv}

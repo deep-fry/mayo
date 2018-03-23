@@ -210,7 +210,7 @@ class GatedConvolutionBase(object):
         num_active = math.ceil(num_elements * self.density)
         if num_active == num_elements:
             # all active, not gating
-            return tf.ones(tensor.shape)
+            return tf.ones(tensor.shape, dtype=tf.float32)
         # top_k, where k is the number of active channels
         top, _ = tf.nn.top_k(flattened, k=(num_active + 1))
         # disable channels with smaller activations
@@ -219,7 +219,7 @@ class GatedConvolutionBase(object):
         active = tf.stop_gradient(active)
         # register to estimator
         self._register('active', active)
-        return active
+        return tf.cast(active, dtype=tf.float32)
 
     def normalize(self, tensor):
         if not self.normalizer_fn:
@@ -270,7 +270,7 @@ class SparseRegularizedGatedConvolutionBase(GatedConvolutionBase):
         regularizer = self.regularizer
         if isinstance(regularizer, str):
             regularizer = [regularizer]
-        sparse = self.gate() * tf.cast(self.actives(), tf.float32)
+        sparse = self.gate() * self.actives()
         loss = []
         if 'l1' in self.regularizer:
             loss.append(tf.abs(sparse))
