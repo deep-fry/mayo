@@ -4,11 +4,13 @@ _trainable: true
 _gate:
     enable: true
     policy: parametric
-    density: 0.5
+    density: 1.0
     pool: avg
-    weight: 0.00001
-    threshold: online
+    weight: 0.000001
+    regularizer: [moe, moi]
+    threshold: global
 model:
+    name: lenet5
     description: |
         A variant of cifarnet that performs online gating.
     layers:

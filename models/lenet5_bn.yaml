@@ -15,7 +15,6 @@ model:
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
-
         conv0: &conv
             <<: *init
             type: convolution

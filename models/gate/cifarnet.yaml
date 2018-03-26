@@ -1,12 +1,14 @@
 ---
-_import: ../../cifarnet.yaml
+_import: ../cifarnet.yaml
 _trainable: true
 _gate:
     enable: true
     policy: parametric
     density: 1.0
     pool: avg
-    weight: 0.0000001
+    weight: 1.0
+    regularizer: [moe]
+    threshold: global
 model:
     description: |
         A variant of cifarnet that performs online gating.
