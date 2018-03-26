@@ -4,10 +4,11 @@ _trainable: true
 _gate:
     enable: true
     policy: parametric
-    density: 1.0
+    density: 0.5
     pool: avg
-    weight: 1.0
-    regularizer: [moe]
+    regularizer:
+        l1: 0.000001
+        moe: 1.0
     threshold: global
 model:
     description: |

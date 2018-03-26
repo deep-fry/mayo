@@ -40,6 +40,7 @@ class GatedConvolutionBase(object):
         self.estimator = constructor.session.estimator
         self.is_training = constructor.is_training
         self.node = node
+        self._regularization_losses = []
         self._init_convolution(conv_input, conv_params)
         self._init_gate_params(gate_params)
 
@@ -315,10 +316,11 @@ class GatedConvolutionBase(object):
             return tensor
         return self.activation_fn(tensor)
 
-    def _add_regularization(self, loss):
-        loss *= self.weight
-        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, loss)
-        self.estimator.register(loss, 'gate.loss', self.node)
+    def _add_regularization(self, loss, weight):
+        if weight <= 0:
+            return
+        loss *= weight
+        self._regularization_losses.append(loss)
 
     def regularize(self):
         raise NotImplementedError
@@ -327,9 +329,13 @@ class GatedConvolutionBase(object):
         self.normalized = self.normalize(self.conved)
         self.activated = self.activate(self.normalized)
         # regularize
-        if self.weight <= 0:
-            log.debug(
-                'No regularizer used for {!r} in {!r}.'
-                .format(self.__class__, self.node.formatted_name()))
         self.regularize()
+        losses = []
+        for loss in self._regularization_losses:
+            if loss.shape.num_elements() > 1:
+                loss = tf.reduce_sum(loss)
+            losses.append(loss)
+        loss = tf.add_n(losses)
+        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, loss)
+        self.estimator.register(loss, 'gate.loss', self.node)
         return self.activated
