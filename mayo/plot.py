@@ -123,16 +123,25 @@ class Plot(object):
         self.pyplot.close(fig)
 
     def plot_gate_heatmaps(self):
+        def path(node, key):
+            # {root}/gate/gamma-{node}.{ext}
+            node_name = node.formatted_name()
+            path = 'gate/{}-{}'.format(key, node_name).replace('/', '-')
+            return os.path.join(self._path, path)
+
         try:
-            histories = self.session.estimator.get_histories('gate.gamma')
+            gammas = self.session.estimator.get_histories('gate.gamma')
+            actives = self.session.estimator.get_histories('gate.active')
         except KeyError:
             return
-        heatmaps = self._heatmaps(histories)
-        for node, hmap in heatmaps.items():
-            # {root}/gate-{node}.{ext}
-            name = 'gate-{}'.format(node.formatted_name()).replace('/', '-')
-            gate_path = os.path.join(self._path, name)
-            self._plot_heatmap(hmap, gate_path)
+        gamma_heatmaps = self._heatmaps(gammas)
+        active_heatmaps = self._heatmaps(actives)
+
+        for node in gamma_heatmaps:
+            gamma_path = path(node, 'gamma')
+            self._plot_heatmap(gamma_heatmaps[node], gamma_path)
+            active_path = path(node, 'active')
+            self._plot_heatmap(active_heatmaps[node], active_path)
 
     def _heatmaps(self, histories):
         labels_history = self.session.estimator.get_history('labels')
@@ -155,8 +164,12 @@ class Plot(object):
             hmap[node] = np.stack(values, axis=0)
         return hmap
 
-    def _plot_heatmap(self, heatmap, path):
-        heatmap = np.uint8(heatmap / np.max(heatmap) * 255.0)
+    def _plot_heatmap(self, heatmap, path, vmin=None, vmax=None):
+        if vmin is None:
+            vmin = np.min(heatmap)
+        if vmax is None:
+            vmax = np.max(heatmap)
+        heatmap = np.uint8((heatmap - vmin) / (vmax - vmin) * 255.0)
         image = Image.fromarray(heatmap)
         path = '{}.{}'.format(path, 'png')
         log.debug('Saving gates heatmap at {}...'.format(path))
