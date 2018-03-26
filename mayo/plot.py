@@ -124,8 +124,8 @@ class Plot(object):
     def plot_gate_heatmaps(self):
         def path(node, key):
             # {root}/gate/gamma-{node}.{ext}
-            node_name = node.formatted_name()
-            path = 'gate/{}-{}'.format(key, node_name).replace('/', '-')
+            node_name = node.formatted_name().replace('/', '-')
+            path = 'gate/{}-{}'.format(key, node_name)
             return os.path.join(self._path, path)
 
         try:
