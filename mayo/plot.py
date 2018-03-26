@@ -140,7 +140,8 @@ class Plot(object):
             gamma_path = path(node, 'gamma')
             self._plot_heatmap(gamma_heatmaps[node], gamma_path)
             active_path = path(node, 'active')
-            self._plot_heatmap(active_heatmaps[node], active_path)
+            self._plot_heatmap(
+                active_heatmaps[node], active_path, vmin=0, vmax=1)
 
     def _heatmaps(self, histories):
         labels_history = self.session.estimator.get_history('labels')
@@ -168,6 +169,9 @@ class Plot(object):
             vmin = np.min(heatmap)
         if vmax is None:
             vmax = np.max(heatmap)
+        if vmin >= vmax:
+            raise ValueError(
+                'The minimum value is not less than the maximum value.')
         heatmap = np.uint8((heatmap - vmin) / (vmax - vmin) * 255.0)
         image = Image.fromarray(heatmap)
         path = '{}.{}'.format(path, 'png')
