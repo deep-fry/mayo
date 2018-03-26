@@ -1,6 +1,5 @@
 import os
 import math
-
 import numpy as np
 from PIL import Image
 
@@ -159,5 +158,6 @@ class Plot(object):
         heatmap = np.uint8(heatmap / np.max(heatmap) * 255.0)
         image = Image.fromarray(heatmap)
         path = '{}.{}'.format(path, 'png')
+        os.makedirs(os.path.split(path)[0], exist_ok=True)
         log.debug('Saving gates heatmap at {}...'.format(path))
         image.save(path)
