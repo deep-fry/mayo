@@ -2,6 +2,7 @@ import os
 import math
 
 import numpy as np
+from PIL import Image
 
 from mayo.log import log
 
@@ -10,7 +11,7 @@ class Plot(object):
     def __init__(self, session, config):
         super().__init__()
         import matplotlib
-        matplotlib.use("Agg")
+        matplotlib.use('Agg')
         from matplotlib import pyplot
         pyplot.style.use('ggplot')
         self.pyplot = pyplot
@@ -30,43 +31,38 @@ class Plot(object):
         input_image, label, layers, variables = self.session.run(
             [input_tensor, label_tensor, layer_tensors, variable_tensors])
         try:
-            if self.config.system.plot.features:
-                num = self.config.system.batch_size_per_gpu
-                for i in range(num):
-                    log.info(
-                        '{}% Plotting image #{}...'
-                        .format(int(i / num * 100.0), i), update=True)
-                    path = os.path.join(self._path, str(i))
-                    os.makedirs(path, exist_ok=True)
-                    # input image
-                    # {root}/{index}/input.{ext}
-                    input_path = os.path.join(
-                        path, 'input-{}'.format(label[i]))
-                    self._plot_rgb_image(input_image[i], input_path)
-                    # layer activations
-                    for node, value in layers.items():
-                        if value.ndim != 4:
-                            # value is not a (N x H x W x C) layout
-                            continue
-                        name = node.formatted_name().replace('/', '-')
-                        # root/{index}/{layer_name}.{ext}
-                        layer_path = os.path.join(path, name)
-                        self._plot_images(value[i], layer_path)
-            # overridden variable histogram
-            if self.config.system.plot.parameters:
-                for node, name_value_map in variables.items():
-                    for name, value in name_value_map.items():
-                        layer_name = node.formatted_name()
-                        log.info(
-                            'Plotting parameter {} in layer {}'
-                            .format(name, layer_name))
-                        name = '{}-{}'.format(layer_name, name)
-                        name = name.replace('/', '-')
-                        # {root}/{layer_name}-{variable_name}.{ext}
-                        var_path = os.path.join(self._path, name)
-                        self._plot_histogram(value, var_path)
+            if self.config.system.plot.get('features'):
+                self.plot_features(input_image, label, layers)
+            if self.config.system.plot.get('parameters'):
+                # overridden variable histogram
+                self.plot_parameters(variables)
+            if self.config.system.plot.get('gates'):
+                self.plot_gate_heatmaps()
         except KeyboardInterrupt:
             log.info('Abort.')
+
+    def plot_features(self, input_image, label, layers):
+        num = self.config.system.batch_size_per_gpu
+        for i in range(num):
+            log.info(
+                '{}% Plotting image #{}...'
+                .format(int(i / num * 100.0), i), update=True)
+            path = os.path.join(self._path, str(i))
+            os.makedirs(path, exist_ok=True)
+            # input image
+            # {root}/{index}/input.{ext}
+            input_path = os.path.join(
+                path, 'input-{}'.format(label[i]))
+            self._plot_rgb_image(input_image[i], input_path)
+            # layer activations
+            for node, value in layers.items():
+                if value.ndim != 4:
+                    # value is not a (N x H x W x C) layout
+                    continue
+                name = node.formatted_name().replace('/', '-')
+                # root/{index}/{layer_name}.{ext}
+                layer_path = os.path.join(path, name)
+                self._plot_images(value[i], layer_path)
 
     def _plot_rgb_image(self, value, path):
         cmap = 'gray'
@@ -104,6 +100,19 @@ class Plot(object):
         fig.savefig(path)
         self.pyplot.close(fig)
 
+    def plot_parameters(self, variables):
+        for node, name_value_map in variables.items():
+            for name, value in name_value_map.items():
+                layer_name = node.formatted_name()
+                log.info(
+                    'Plotting parameter {} in layer {}'
+                    .format(name, layer_name))
+                name = '{}-{}'.format(layer_name, name)
+                name = name.replace('/', '-')
+                # {root}/{layer_name}-{variable_name}.{ext}
+                var_path = os.path.join(self._path, name)
+                self._plot_histogram(value, var_path)
+
     def _plot_histogram(self, value, path):
         fig = self.pyplot.figure()
         # histogram
@@ -112,3 +121,43 @@ class Plot(object):
         log.debug('Saving histogram at {}...'.format(path))
         fig.savefig(path)
         self.pyplot.close(fig)
+
+    def plot_gate_heatmaps(self):
+        try:
+            histories = self.session.estimator.get_histories('gate.gamma')
+        except KeyError:
+            return
+        heatmaps = self._heatmaps(histories)
+        for node, hmap in heatmaps.items():
+            # {root}/gate-{node}.{ext}
+            name = 'gate-{}'.format(node.formatted_name()).replace('/', '-')
+            gate_path = os.path.join(self._path, name)
+            self._plot_heatmap(hmap, gate_path)
+
+    def _heatmaps(self, histories):
+        labels_history = self.session.estimator.get_history('labels')
+        label_keys = set()
+        # collect by node->label->history
+        hmap = {}
+        for node, history in histories.items():
+            lmap = hmap.setdefault(node, {})
+            for labels, values in zip(labels_history, history):
+                values = np.squeeze(values, [1, 2])
+                for label, value in zip(labels, values):
+                    label_keys.add(label)
+                    lmap.setdefault(label, []).append(value)
+        # average history
+        for node, lmap in hmap.items():
+            values = []
+            for label in range(len(label_keys)):
+                # labels will be continuous
+                values.append(np.mean(lmap[label], axis=0))
+            hmap[node] = np.stack(values, axis=0)
+        return hmap
+
+    def _plot_heatmap(self, heatmap, path):
+        heatmap = np.uint8(heatmap / np.max(heatmap) * 255.0)
+        image = Image.fromarray(heatmap)
+        path = '{}.{}'.format(path, 'png')
+        log.debug('Saving gates heatmap at {}...'.format(path))
+        image.save(path)

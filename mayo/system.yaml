@@ -22,8 +22,9 @@ system:
     summary:
         save: {interval: 0.1}
     plot:
-        features: true
-        parameters: true
+        features: false
+        parameters: false
+        gates: true
     profile:
         activations: true
         weights: true

@@ -1,5 +1,5 @@
 ---
-_import: ../../mobilenet.yaml
+_import: ../../../mobilenet.yaml
 model.layers:
     conv0: &overrider
         activation_overrider:

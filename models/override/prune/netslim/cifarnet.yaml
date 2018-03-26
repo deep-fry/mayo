@@ -1,5 +1,5 @@
 ---
-_import: ../../cifarnet.yaml
+_import: ../../../cifarnet.yaml
 model.layers:
     conv0: &overrider
         activation_overrider:
