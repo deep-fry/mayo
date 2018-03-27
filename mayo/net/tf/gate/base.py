@@ -26,7 +26,7 @@ class GatedConvolutionBase(object):
         'density': _must,
         'pool': 'avg',
         'granularity': 'channel',
-        'weight': 0,
+        'regularizer': {},
         'factor': 0,
         'threshold': 'online',
         'decay': 0.9997,
@@ -272,12 +272,7 @@ class GatedConvolutionBase(object):
             ops = ops.setdefault('gate', {})
             ops[self.node] = update_op
 
-    @memoize_method
-    def actives(self):
-        """
-        Mark a portion of top elements in gate output to true,
-        where the portion is approximately the specified density.
-        """
+    def bool_actives(self):
         if not (0 < self.density <= 1):
             raise GateParameterValueError(
                 'Gate density value {} is out of range (0, 1].'
@@ -302,7 +297,15 @@ class GatedConvolutionBase(object):
         active = tf.stop_gradient(active)
         # register to estimator
         self._register('active', active)
-        return tf.cast(active, dtype=tf.float32)
+        return active
+
+    @memoize_method
+    def actives(self):
+        """
+        Mark a portion of top elements in gate output to true,
+        where the portion is approximately the specified density.
+        """
+        return tf.cast(self.bool_actives(), dtype=tf.float32)
 
     def normalize(self, tensor):
         if not self.normalizer_fn:
