@@ -220,9 +220,17 @@ class GatedConvolutionBase(object):
                 'gate/threshold', [],
                 initializer=tf.constant_initializer(-0.1),
                 trainable=False, dtype=tf.float32)
-        self.estimator.register(
-            var, 'gate.threshold', node=node,
-            debugger=self._threshold_debugger)
+        try:
+            self.estimator.get_tensor('gate.threshold')
+        except KeyError:
+            debug = {
+                'formatter':
+                    lambda e: 'gate.threshold: {:.4f}'.format(
+                        e.get_value('gate.threshold')),
+            }
+        else:
+            debug = {'debugger': self._threshold_debugger}
+        self.estimator.register(var, 'gate.threshold', node=node, **debug)
         return var
 
     def _find_threshold(self, tensor):
