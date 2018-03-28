@@ -4,12 +4,13 @@ _trainable: true
 _gate:
     enable: true
     policy: parametric
-    density: 0.5
+    density: 1.0
     pool: avg
     regularizer:
-        l1: 0.000001
-        moe: 1.0
-    threshold: global
+        l1: 0.0000001
+        moe: 0.01
+    factor: 2
+    threshold: online
 model:
     description: |
         A variant of cifarnet that performs online gating.
