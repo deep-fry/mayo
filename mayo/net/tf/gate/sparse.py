@@ -13,12 +13,18 @@ class SparseRegularizedGatedConvolutionBase(GatedConvolutionBase):
         if tensor.shape.ndims != 1:
             raise ValueError('Tensor should reduce to a vector.')
         mean, variance = tf.nn.moments(tensor, axes=0)
-        return variance / tf.square((mean + self.epsilon))
+        return variance / tf.square(mean + self.epsilon)
 
     def regularize(self):
         """
         We use a L1, L2 or MoE regularizer to encourage sparsity in gate.
+
+        Xitong: it would be possible to use self.actives() to mask out
+        elements to regularize, but writing this in tensorflow has
+        proven to be quite tricky.
         """
+        if not self.regularizer:
+            return
         func_map = {
             'l1': lambda v: tf.abs(v),
             'l2': lambda v: tf.square(v),
@@ -26,10 +32,9 @@ class SparseRegularizedGatedConvolutionBase(GatedConvolutionBase):
             'moi': lambda v: self._mixture(v, [1, 2, 3]),
         }
         # set inactive elements to zeros
-        # Xitong: it would be possible to use self.actives() to mask out
-        # elements to regularize, but writing this in tensorflow has
-        # proven to be tricky.
         sparse = self.gate() * self.actives()
         # add regularization for each specified keys
         for key, weight in self.regularizer.items():
+            if weight <= 0:
+                continue
             self._add_regularization(func_map[key](sparse), weight)

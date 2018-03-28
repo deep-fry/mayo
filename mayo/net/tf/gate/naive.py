@@ -17,6 +17,8 @@ class NaiveGatedConvolution(GatedConvolutionBase):
         Regularize gate by making gate output `gate` to match `match` as close
         as possible.
         """
+        if not self.regularizer:
+            return
         gate = self.gate()
         match = tf.stop_gradient(self.subsample(self.activated))
         # policy descriminator: we simply match values in each channel
