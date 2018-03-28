@@ -138,10 +138,11 @@ class Plot(object):
 
         for node in gamma_heatmaps:
             gamma_path = path(node, 'gamma')
-            self._plot_heatmap(gamma_heatmaps[node], gamma_path)
+            self._plot_heatmap(gamma_heatmaps[node], gamma_path, vmin=0)
             active_path = path(node, 'active')
-            self._plot_heatmap(
-                active_heatmaps[node], active_path, vmin=0, vmax=1)
+            actives = active_heatmaps.get(node)
+            if actives is not None:
+                self._plot_heatmap(actives, active_path, vmin=0, vmax=1)
 
     def _heatmaps(self, histories):
         labels_history = self.session.estimator.get_history('labels')
