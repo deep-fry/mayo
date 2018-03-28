@@ -163,7 +163,8 @@ class GatedConvolutionBase(object):
             'biases_initializer':
                 tf.constant_initializer(0.0 if name == 'gate/beta' else 1.0),
             'weights_initializer':
-                tf.truncated_normal_initializer(stddev=0.01),
+                tf.truncated_normal_initializer(stddev=0.1),
+                #  tf.contrib.layers.xavier_initializer(),
             'normalizer_fn': None,  # potential FIXME no normalization
             'activation_fn': self.activation_fn,
             'scope': scope,
