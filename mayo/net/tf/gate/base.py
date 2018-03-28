@@ -2,7 +2,6 @@ import math
 
 import tensorflow as tf
 
-from mayo.log import log
 from mayo.util import memoize_method, memoize_property, null_scope
 from mayo.net.graph import LayerNode
 
@@ -346,7 +345,8 @@ class GatedConvolutionBase(object):
             if loss.shape.num_elements() > 1:
                 loss = tf.reduce_sum(loss)
             losses.append(loss)
-        loss = tf.add_n(losses)
-        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, loss)
-        self.estimator.register(loss, 'gate.loss', self.node)
+        if losses:
+            loss = tf.add_n(losses)
+            tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, loss)
+            self.estimator.register(loss, 'gate.loss', self.node)
         return self.activated
