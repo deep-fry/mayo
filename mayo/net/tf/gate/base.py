@@ -335,18 +335,22 @@ class GatedConvolutionBase(object):
     def regularize(self):
         raise NotImplementedError
 
-    def instantiate(self):
-        self.normalized = self.normalize(self.conved)
-        self.activated = self.activate(self.normalized)
-        # regularize
-        self.regularize()
+    def _instantiate_regularization(self):
         losses = []
         for loss in self._regularization_losses:
             if loss.shape.num_elements() > 1:
                 loss = tf.reduce_sum(loss)
             losses.append(loss)
-        if losses:
-            loss = tf.add_n(losses)
-            tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, loss)
-            self.estimator.register(loss, 'gate.loss', self.node)
+        if not losses:
+            return
+        loss = tf.add_n(losses)
+        tf.add_to_collection(tf.GraphKeys.REGULARIZATION_LOSSES, loss)
+        self.estimator.register(loss, 'gate.loss', self.node)
+
+    def instantiate(self):
+        self.normalized = self.normalize(self.conved)
+        self.activated = self.activate(self.normalized)
+        # regularize
+        self.regularize()
+        self._instantiate_regularization()
         return self.activated
