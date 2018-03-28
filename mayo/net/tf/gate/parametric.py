@@ -54,7 +54,6 @@ class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):
         # )
         actives = self.actives()
         gamma = self.gate()
-        tensor *= actives * gamma if self.enable else gamma
         if self.normalizer_params.get('center', True):
             if self.parametric_beta:
                 beta = self.beta()
@@ -66,4 +65,5 @@ class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):
                     initializer=tf.constant_initializer(0.1),
                     trainable=self.trainable)
             tensor += actives * beta if self.enable else beta
+        tensor *= actives * gamma if self.enable else gamma
         return super().activate(tensor)
