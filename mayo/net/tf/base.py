@@ -77,22 +77,30 @@ class TFNetBase(NetBase):
         self._tensors[name] = acc
         return acc
 
-    def info(self):
+    def info(self, plumbing):
+        def shape(v):
+            return [int(s) for s in v.shape]
         info_dict = super().info()
-        # trainable table
         trainable_vars = tf.trainable_variables()
-        trainable = Table(['trainable', 'shape'])
-        trainable.add_rows((v, v.shape) for v in trainable_vars)
-        trainable.add_column(
-            'count', lambda row: trainable[row, 'shape'].num_elements())
-        trainable.set_footer(
-            ['', '    total:', sum(trainable.get_column('count'))])
+        if not plumbing:
+            # trainable table
+            trainable = Table(['trainable', 'shape'])
+            trainable.add_rows((v, v.shape) for v in trainable_vars)
+            trainable.add_column(
+                'count', lambda row: trainable[row, 'shape'].num_elements())
+            trainable.set_footer(
+                ['', '    total:', sum(trainable.get_column('count'))])
+            # nontrainable table
+            nontrainable = Table(['nontrainable', 'shape'])
+            for var in tf.global_variables():
+                if var not in trainable_vars:
+                    nontrainable.add_row((var, var.shape))
+        else:
+            trainable = {v.op.name: shape(v) for v in trainable_vars}
+            nontrainable = {
+                v.op.name: shape(v) for v in tf.global_variables()
+                if v not in trainable_vars}
         info_dict['trainables'] = trainable
-        # nontrainable table
-        nontrainable = Table(['nontrainable', 'shape'])
-        for var in tf.global_variables():
-            if var not in trainable_vars:
-                nontrainable.add_row((var, var.shape))
         info_dict['nontrainables'] = nontrainable
         return info_dict
 

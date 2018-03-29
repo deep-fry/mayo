@@ -257,11 +257,16 @@ Arguments:
 
     def cli_info(self):
         """Prints parameter and layer info of the model.  """
-        info = self._get_session().info()
-        for key in ('trainables', 'nontrainables', 'layers'):
-            print(info[key].format())
-        for table in info.get('overriders', {}).values():
-            print(table.format())
+        plumbing = self.config.system.info.get('plumbing')
+        info = self._get_session().info(plumbing)
+        if plumbing:
+            with open('info.yaml', 'w') as f:
+                yaml.dump(info, f)
+        else:
+            for key in ('trainables', 'nontrainables', 'layers'):
+                print(info[key].format())
+            for table in info.get('overriders', {}).values():
+                print(table.format())
 
     def cli_interact(self):
         """Interacts with the train/eval session using iPython.  """
