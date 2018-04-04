@@ -255,40 +255,52 @@ class Session(object, metaclass=SessionMeta):
     def save_checkpoint(self, name):
         self.checkpoint.save(name)
 
-    def info(self):
+    def info(self, plumbing=False):
         net = self.nets[0]
-        info_dict = net.info()
+        info_dict = net.info(plumbing)
         # layer info
         stats = self.estimator.get_estimates(net)
-        keys = list({k for v in stats.values() for k in v})
-        layer_info = Table(['layer', 'shape'] + keys)
-        for node, values in stats.items():
-            values = tuple(values.get(k, 0) for k in keys)
-            layer_info.add_row(
-                (node.formatted_name(), net.shapes[node]) + values)
-        formatted_footers = [
-            sum(layer_info.get_column(k)) for k in keys]
-        layer_info.set_footer(['', '    total:'] + formatted_footers)
-        info_dict['layers'] = layer_info
+        if plumbing:
+            layer_info = {}
+            for node, stat in stats.items():
+                stat['shape'] = list(net.shapes[node])
+                layer_info[node.formatted_name()] = stat
+            info_dict['layers'] = layer_info
+        else:
+            keys = list({k for v in stats.values() for k in v})
+            layer_info = Table(['layer', 'shape'] + keys)
+            for node, values in stats.items():
+                values = tuple(values.get(k, 0) for k in keys)
+                layer_info.add_row(
+                    (node.formatted_name(), net.shapes[node]) + values)
+            formatted_footers = [
+                sum(layer_info.get_column(k)) for k in keys]
+            layer_info.set_footer(['', '    total:'] + formatted_footers)
+            info_dict['layers'] = layer_info
         if self.nets[0].overriders:
-            info_dict['overriders'] = self.overrider_info()
+            info_dict['overriders'] = self._overrider_info(plumbing)
         return info_dict
 
-    def overrider_info(self):
+    def _overrider_info(self, plumbing=False):
         def flatten(overriders):
             for o in overriders:
                 if isinstance(o, ChainOverrider):
                     yield from flatten(o)
                 else:
                     yield o
-        overrider_info = {}
-        for o in flatten(self.nets[0].overriders):
-            info = o.info()
-            table = overrider_info.setdefault(o.__class__, Table(info._fields))
-            table.add_row(info)
-        for cls, table in overrider_info.items():
-            cls.finalize_info(table)
-        return overrider_info
+        info_dict = {}
+        if plumbing:
+            for o in flatten(self.nets[0].overriders):
+                info = tuple(o.info())
+                info_dict.setdefault(o.__class__, []).append(info)
+        else:
+            for o in flatten(self.nets[0].overriders):
+                info = o.info()
+                table = info_dict.setdefault(o.__class__, Table(info._fields))
+                table.add_row(info)
+            for cls, table in info_dict.items():
+                cls.finalize_info(table)
+        return info_dict
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders

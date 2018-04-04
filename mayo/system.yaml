@@ -21,6 +21,8 @@ system:
         save: {interval: 1, countdown: 3}
     summary:
         save: {interval: 0.1}
+    info:
+        plumbing: true
     plot:
         features: false
         parameters: false
