@@ -13,6 +13,7 @@ class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):
         # FIXME hacky normalizer customization
         defaults['norm'] = 'batch'
         defaults['parametric_beta'] = False
+        defaults['add_beta_first'] = False
 
     def normalize(self, tensor):
         if self.normalizer_fn is not slim.batch_norm:
@@ -46,24 +47,31 @@ class ParametricGatedConvolution(SparseRegularizedGatedConvolutionBase):
         self._register('beta', tensor)
         return tensor
 
+    def _add_beta(self, tensor):
+        if not self.normalizer_params.get('center', True):
+            return
+        if self.parametric_beta:
+            beta = self.beta()
+        else:
+            # constant beta
+            beta_scope = '{}/gate/shift'.format(self.scope)
+            beta = tf.get_variable(
+                beta_scope, shape=tensor.shape[-1], dtype=tf.float32,
+                initializer=tf.constant_initializer(0.1),
+                trainable=self.trainable)
+        beta = self.actives() * beta if self.enable else beta
+        return tensor + beta
+
     def activate(self, tensor):
         # gating happens before activation
         # output = relu(
         #   actives(gamma(x)) * gamma(x) * norm(conv(x)) +
         #   actives(gamma(x)) * beta
         # )
-        actives = self.actives()
         gamma = self.gate()
-        if self.normalizer_params.get('center', True):
-            if self.parametric_beta:
-                beta = self.beta()
-            else:
-                # constant beta
-                beta_scope = '{}/gate/shift'.format(self.scope)
-                beta = tf.get_variable(
-                    beta_scope, shape=tensor.shape[-1], dtype=tf.float32,
-                    initializer=tf.constant_initializer(0.1),
-                    trainable=self.trainable)
-            tensor += actives * beta if self.enable else beta
-        tensor *= actives * gamma if self.enable else gamma
+        if self.add_beta_first:
+            tensor = self._add_beta(tensor)
+        tensor *= self.actives() * gamma if self.enable else gamma
+        if not self.add_beta_first:
+            tensor = self._add_beta(tensor)
         return super().activate(tensor)
