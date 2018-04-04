@@ -66,21 +66,30 @@ class EvaluateBase(Session):
             stats['top1'], stats['top5'], self.num_examples))
         return stats
 
+    def _range(self, epochs):
+        eval_range = self.config.get('eval.range', {})
+        from_epoch = eval_range.get('from', 0)
+        to_epoch = eval_range.get('to', -1)
+        step = eval_range.get('step', 1)
+        for e in epochs[::step]:
+            if e < from_epoch:
+                continue
+            if to_epoch > 0 and e > to_epoch:
+                continue
+            yield e
+
     def eval_all(self):
         log.info('Evaluating all checkpoints...')
-        epochs = self.checkpoint.list_epochs()
+        epochs = list(self._range(self.checkpoint.list_epochs()))
         epochs_to_eval = ', '.join(str(e) for e in epochs)
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
         results = Table(('Epoch', 'Top 1', 'Top 5'))
-        interval = self.config.get('eval.interval', 1)
         # ensures imgs_seen initialized and loaded
-        epochs_op = self.num_epochs
         try:
-            for e in epochs[::interval]:
+            for e in epochs:
                 with log.demote():
                     stats = self.eval(e, keyboard_interrupt=False)
-                row = ['{:.3f}'.format(self.run(epochs_op))]
-                row += [stats['top1'], stats['top5']]
+                row = [e, stats['top1'], stats['top5']]
                 results.add_row(row)
                 log.info('epoch: {}, top1: {}, top5: {}'.format(*row))
         except KeyboardInterrupt:
