@@ -5,11 +5,12 @@ from mayo.util import multi_objects_from_params
 
 
 class Augment(object):
-    def __init__(self, shape, moment, bbox):
+    def __init__(self, image, bbox, shape, moment):
         super().__init__()
+        self.image = image
+        self.bbox = bbox
         self.shape = shape
         self.moment = moment or {}
-        self.bbox = bbox
 
     def distort_bbox(self, i, area=(0.05, 1.0), aspect_ratio=(0.75, 1.33)):
         # distort bbox
@@ -165,7 +166,8 @@ class Augment(object):
         # rescale image
         return self.resize(i, h, w, fill=True)
 
-    def augment(self, image, actions, ensure_shape=True):
+    def augment(self, actions, ensure_shape=True):
+        image = self.image
         with tf.name_scope(values=[image], name='augment'):
             for func, params in multi_objects_from_params(actions, self):
                 log.debug(

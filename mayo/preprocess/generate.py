@@ -71,10 +71,10 @@ class Preprocess(object):
         # decode jpeg image
         channels = self.image_shape[-1]
         image = self._decode_jpeg(buffer, channels)
-        # preprocess image using ImagePreprocess
-        augment = Augment(self.image_shape, self.moment, bbox)
-        image = augment.augment(
-            image, self._actions(self.mode) + self._actions('final_cpu'))
+        # augment image
+        augment = Augment(image, bbox, self.image_shape, self.moment)
+        actions = self._actions(self.mode) + self._actions('final_cpu')
+        image = augment.augment(actions)
         # add label offset
         offset = self.config.label_offset()
         log.debug('Incrementing label by offset {}...'.format(offset))
@@ -111,11 +111,10 @@ class Preprocess(object):
         # final preprocessing on gpu
         gpu_actions = self._actions('final_gpu')
         if gpu_actions:
-            augment = Augment(
-                self.image_shape, self.moment, None)
             for gid, (images, labels) in enumerate(batch_images_labels):
                 with tf.device('/gpu:{}'.format(gid)):
-                    images = augment.augment(
-                        images, gpu_actions, ensure_shape=False)
+                    augment = Augment(
+                        images, None, self.image_shape, self.moment, None)
+                    images = augment.augment(gpu_actions, ensure_shape=False)
                     batch_images_labels[gid] = (images, labels)
         return batch_images_labels
