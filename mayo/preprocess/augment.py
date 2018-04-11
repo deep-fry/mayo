@@ -1,10 +1,10 @@
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import multi_objects_from_params, ensure_list
+from mayo.util import multi_objects_from_params
 
 
-class _ImagePreprocess(object):
+class Augment(object):
     def __init__(self, shape, moment, bbox):
         super().__init__()
         self.shape = shape
@@ -20,7 +20,7 @@ class _ImagePreprocess(object):
         # distorted image
         i = tf.slice(i, bbox_begin, bbox_size)
         height, width, _ = self.shape
-        # we resize to the final preprocessed shape in distort bbox
+        # we resize to the final augmented shape in distort bbox
         # because we can use different methods randomly, which _ensure_shape()
         # cannot do
         i = tf.expand_dims(i, 0)
@@ -113,7 +113,7 @@ class _ImagePreprocess(object):
         return i - means
 
     def normalize_channels(self, i):
-        # FIXME we pin this preprocessing action to GPU because of
+        # FIXME we pin this augmentation action to GPU because of
         # poor performance on CPU caused by this.
         with tf.device('/gpu:0'):
             i = self.subtract_channel_means(i)
@@ -156,7 +156,7 @@ class _ImagePreprocess(object):
                     'into one with {} channels.'.format(pc, c))
         if ph == h or pw == w:
             log.debug(
-                'Size of image {} x {} is equal to the expected preprocessed '
+                'Size of image {} x {} is equal to the expected augmented '
                 'shape.'.format(h, w))
             return i
         log.debug(
@@ -165,133 +165,14 @@ class _ImagePreprocess(object):
         # rescale image
         return self.resize(i, h, w, fill=True)
 
-    def preprocess(self, image, actions, ensure_shape=True):
-        with tf.name_scope(values=[image], name='preprocess_image'):
+    def augment(self, image, actions, ensure_shape=True):
+        with tf.name_scope(values=[image], name='augment'):
             for func, params in multi_objects_from_params(actions, self):
                 log.debug(
-                    'Preprocessing using {!r} with params {}'
+                    'Performing augmentation using {!r} with params {}.'
                     .format(func.__name__, params))
                 with tf.name_scope(values=[image], name=func.__name__):
                     image = func(image, **params)
         if not ensure_shape:
             return image
         return self._ensure_shape(image)
-
-
-class Preprocess(object):
-    def __init__(self, session, mode, config, num_gpus):
-        super().__init__()
-        self.session = session
-        if mode not in ['train', 'validate']:
-            raise ValueError(
-                'Unrecognized preprocessing mode {!r}'.format(mode))
-        self.mode = mode
-        self.config = config
-        self.num_gpus = num_gpus
-        self.batch_size_per_gpu = self.config.system.batch_size_per_gpu
-        self.num_threads = self.config.system.preprocess.num_threads
-        self.moment = self.config.dataset.get('moment')
-        self.image_shape = self.config.image_shape()
-
-    @staticmethod
-    def _decode_jpeg(buffer, channels):
-        with tf.name_scope(values=[buffer], name='decode_jpeg'):
-            i = tf.image.decode_jpeg(buffer, channels=channels)
-            return tf.image.convert_image_dtype(i, dtype=tf.float32)
-
-    @staticmethod
-    def _parse_proto(proto):
-        string = tf.FixedLenFeature([], dtype=tf.string, default_value='')
-        integer = tf.FixedLenFeature([1], dtype=tf.int64, default_value=-1)
-        float32 = tf.VarLenFeature(dtype=tf.float32)
-        # dense features
-        feature_map = {
-            'image/encoded': string,
-            'image/class/label': integer,
-            'image/class/text': string,
-        }
-        # bounding boxes
-        bbox_keys = [
-            'image/object/bbox/xmin', 'image/object/bbox/ymin',
-            'image/object/bbox/xmax', 'image/object/bbox/ymax']
-        for k in bbox_keys:
-            feature_map[k] = float32
-
-        # parsing
-        features = tf.parse_single_example(proto, feature_map)
-        label = tf.cast(features['image/class/label'], dtype=tf.int32)
-
-        # bbox handling
-        xmin, ymin, xmax, ymax = (
-            tf.expand_dims(features[k].values, 0) for k in bbox_keys)
-        # tensorflow imposes an ordering of (y, x) just to make life difficult
-        bbox = tf.concat(axis=0, values=[ymin, xmin, ymax, xmax])
-        # force the variable number of bounding boxes into the shape
-        # [1, num_boxes, coords]
-        bbox = tf.expand_dims(bbox, 0)
-        bbox = tf.transpose(bbox, [0, 2, 1])
-
-        encoded = features['image/encoded']
-        text = features['image/class/text']
-        return encoded, label, bbox, text
-
-    def _actions(self, key):
-        actions_map = self.config.dataset.preprocess
-        return ensure_list(actions_map.get(key) or [])
-
-    def _preprocess(self, serialized):
-        #  return tf.ones((224, 224, 3), tf.float32), tf.ones(1, tf.int32)
-        # unserialize and prepocess image
-        buffer, label, bbox, _ = self._parse_proto(serialized)
-        # decode jpeg image
-        channels = self.image_shape[-1]
-        image = self._decode_jpeg(buffer, channels)
-        # preprocess image using ImagePreprocess
-        image_preprocess = _ImagePreprocess(
-            self.image_shape, self.moment, bbox)
-        image = image_preprocess.preprocess(
-            image, self._actions(self.mode) + self._actions('final_cpu'))
-        # add label offset
-        offset = self.config.label_offset()
-        log.debug('Incrementing label by offset {}...'.format(offset))
-        return image, label + offset
-
-    def preprocess(self):
-        # file names
-        files = self.config.data_files(self.mode)
-        num_gpus = self.num_gpus
-        batch_size = self.batch_size_per_gpu * num_gpus
-        dataset = tf.data.Dataset.from_tensor_slices(files)
-        if self.mode == 'train':
-            # shuffle .tfrecord files
-            dataset = dataset.shuffle(buffer_size=len(files))
-        # tfrecord files to images
-        dataset = dataset.flat_map(tf.data.TFRecordDataset)
-        dataset = dataset.repeat()
-        dataset = dataset.map(
-            self._preprocess, num_parallel_calls=self.num_threads)
-        dataset = dataset.prefetch(self.num_threads * batch_size)
-        if self.mode == 'train':
-            buffer_size = min(1024, 10 * batch_size)
-            dataset = dataset.shuffle(buffer_size=buffer_size)
-        dataset = dataset.batch(batch_size)
-        # iterator
-        iterator = dataset.make_one_shot_iterator()
-        images, labels = iterator.get_next()
-        # ensuring the shape of images and labels to be constants
-        batch_shape = (batch_size, )
-        images = tf.reshape(images, batch_shape + self.image_shape)
-        labels = tf.reshape(labels, batch_shape)
-        batch_images_labels = list(zip(
-            tf.split(images, num_gpus), tf.split(labels, num_gpus)))
-        # final preprocessing on gpu
-        gpu_actions = self._actions('final_gpu')
-        if gpu_actions:
-            image_preprocess = _ImagePreprocess(
-                self.image_shape, self.moment, None)
-            for gid, (images, labels) in enumerate(batch_images_labels):
-                with tf.device('/gpu:{}'.format(gid)):
-                    images = image_preprocess.preprocess(
-                        images, gpu_actions, ensure_shape=False)
-                    batch_images_labels[gid] = (images, labels)
-        return batch_images_labels
