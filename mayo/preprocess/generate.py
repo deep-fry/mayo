@@ -49,13 +49,12 @@ class Preprocess(object):
         label = tf.cast(features['image/class/label'], dtype=tf.int32)
 
         # bbox handling
-        bboxes = [features[k].values for k in bbox_keys]
-        bboxes = tf.stack(axis=0, values=bboxes)
         # force the variable number of bounding boxes into the shape
         # [1, num_boxes, coords]
-        bboxes = tf.expand_dims(bboxes, 0)
-        bboxes = tf.transpose(bboxes, [0, 2, 1])
+        bboxes = [features[k].values for k in bbox_keys]
+        bboxes = tf.expand_dims(tf.stack(axis=-1, values=bboxes), 0)
 
+        # other
         encoded = features['image/encoded']
         text = features['image/class/text']
         return encoded, label, bboxes, text
