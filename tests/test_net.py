@@ -11,7 +11,7 @@ from mayo.config import Config
 from mayo.net.graph import Graph, TensorNode, LayerNode, JoinNode
 from mayo.net.base import NetBase
 from mayo.net.tf import TFNet
-from mayo.net.tf.util import ParameterTransformer
+from mayo.net.tf.transform import ParameterTransformer
 from mayo.override import FixedPointQuantizer
 
 

@@ -6,7 +6,7 @@ from tensorflow.contrib import slim
 from mayo.log import log
 from mayo.util import memoize_method, Table, object_from_params
 from mayo.net.base import NetBase
-from mayo.net.tf.util import ParameterTransformer
+from mayo.net.tf.transform import ParameterTransformer
 
 
 class TFNetBase(NetBase):

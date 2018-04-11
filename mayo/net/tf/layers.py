@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.net.tf.util import use_name_not_scope
 from mayo.net.tf.base import TFNetBase
+from mayo.net.tf.transform import use_name_not_scope
 
 
 class Layers(TFNetBase):
