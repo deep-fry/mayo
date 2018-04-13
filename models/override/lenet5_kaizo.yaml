@@ -20,7 +20,7 @@ model.layers:
             #     width: 2
             #     point: 1
     _mixed: &mixed
-        type: mayo.override.MixedPrecisionQuantizer
+        type: mayo.override.MixedQuantizer
         interval: 0.5
         reg_factor: 0.001
         index: 0
