@@ -32,6 +32,24 @@ def area(y_max, x_max, y_min, x_min):
     return (y_max - y_min) * (x_max - x_min)
 
 
+def cartesian(tensor1, tensor2):
+    """
+    Computes the pair-wise combinations of first dimensions of
+    tensor1 and tensor2, leaving the last dimension.
+    """
+    shape1 = tensor1.get_shape()
+    shape2 = tensor1.get_shape()
+    ndims1 = shape1.ndims
+    ndims2 = shape2.ndims
+    # num_rows1 x num_row2 x expected_size tensors to form
+    # all possible bbox pairs
+    reshaped1 = tf.reshape(tensor1, shape1 + [1] * ndims2 + [-1])
+    reshaped2 = tf.reshape(tensor2, [1] * ndims1 + shape2 + [-1])
+    tensor1 = tf.tile(reshaped1, tf.concat([[1] * ndims1, shape2, [1]]))
+    tensor2 = tf.tile(reshaped2, tf.concat([shape1, [1] * ndims2, [1]]))
+    return tensor1, tensor2
+
+
 def iou(boxes1, boxes2, anchors=False):
     """
     Compute IOU values from two tensors of bounding boxes.
@@ -44,7 +62,7 @@ def iou(boxes1, boxes2, anchors=False):
         boxes1 and 2 to be (... x 2) tensors containing only
         widths and heights, treating the origin as the centers.
 
-    returns: a (boxes1.shape + boxes2.shape) tensor of IOU values.
+    returns: a (...) tensor of IOU values.
     """
     expected_size = 2 if anchors else 4
     if boxes1.shape[1] != expected_size or boxes2.shape[1] != expected_size:
@@ -53,23 +71,20 @@ def iou(boxes1, boxes2, anchors=False):
             .format(expected_size))
     shape1 = boxes1.get_shape()[:-1]
     shape2 = boxes2.get_shape()[:-1]
-    ndims1 = shape1.ndims
-    ndims2 = shape2.ndims
-    # num_rows1 x num_row2 x expected_size tensors to form
-    # all possible bbox pairs
-    reshaped1 = tf.reshape(boxes1, shape1 + [1] * ndims2 + [expected_size])
-    tiled1 = tf.tile(reshaped1, tf.concat([[1] * ndims1, shape2, [1]]))
-    reshaped2 = tf.reshape(boxes2, [1] * ndims1 + shape2 + [expected_size])
-    tiled2 = tf.tile(reshaped2, tf.concat([shape1, [1] * ndims2, [1]]))
+    cond = tf.Assert(
+        tf.equal(shape1, shape2), [shape1, shape2],
+        'Bounding boxes shape mismatch.')
+    with tf.control_dependencies(cond):
+        boxes1 = tf.identity(boxes1)
     if anchors:
-        h1, w1 = tf.unstack(tiled1, axis=-1)
-        h2, w2 = tf.unstack(tiled2, axis=-1)
+        h1, w1 = tf.unstack(boxes1, axis=-1)
+        h2, w2 = tf.unstack(boxes2, axis=-1)
         y1_max, x1_max = h1 / 2, w1 / 2
         y2_max, x2_max = h2 / 2, w2 / 2
         y1_min, x1_min, y2_min, y2_min = -y1_max, -x1_max, -y2_max, -x2_max
     else:
-        y1_max, x1_max, y1_min, x1_min = box_to_corners(tiled1, stack=False)
-        y2_max, x2_max, y2_min, x2_min = box_to_corners(tiled2, stack=False)
+        y1_max, x1_max, y1_min, x1_min = box_to_corners(boxes1, stack=False)
+        y2_max, x2_max, y2_min, x2_min = box_to_corners(boxes2, stack=False)
     # intersect corners
     yi_max = tf.minimum(y1_max, y2_max)
     xi_max = tf.minimum(x1_max, x2_max)
