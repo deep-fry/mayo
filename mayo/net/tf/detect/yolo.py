@@ -5,35 +5,29 @@ from mayo.net.tf.detect.util import cartesian, iou
 
 
 class YOLOv2(object):
-    _default_scales = {
-        'object': 1,
-        'noobject': 0.5,
-        'coordinate': 5,
-        'class': 1,
-    }
-
     def __init__(
-            self, scales, anchors, image_size,
+            self, config, anchors,
+            object_scale=1, noobject_scale=0.5,
+            coordinate_scale=5, class_scale=1,
             num_cells=13, iou_threshold=0.6):
         """
         anchors: a (num_anchors x 2) tensor of anchor boxes [h, w].
-        image_size: the height and width of the image.
         num_cells: the number of cells to divide the image into a grid.
+        iou_threshold:
+            the threshold of IOU upper-bound to suppress the absense
+            of object in loss.
         """
-        if not image_size % num_cells:
-            raise ValueError(
-                'The size of image must be divisible by the number of cells.')
-        for k, v in self._default_scales:
-            try:
-                v = scales[k]
-            except KeyError:
-                pass
-            scales[k] = v
         self.anchors = anchors
         self.num_anchors = anchors.shape[0]
-        self.image_size = image_size
+        height, width = config.image_shape()
+        if height != width:
+            raise ValueError('We expect the image to be square for YOLOv2.')
+        self.image_size = height
+        if not self.image_size % num_cells:
+            raise ValueError(
+                'The size of image must be divisible by the number of cells.')
         self.num_cells = num_cells
-        self.cell_size = image_size / num_cells
+        self.cell_size = self.image_size / num_cells
         self.iou_threshold = iou_threshold
         self._base_shape = [num_cells, num_cells, self.num_anchors]
 
@@ -109,15 +103,15 @@ class YOLOv2(object):
         xy_p, wh_p = tf.split(box_p, [2, 2], axis=-1)
         xy, wh = tf.split(box, [2, 2], axis=-1)
         coord_loss = (xy - xy_p) ** 2 + (tf.sqrt(wh) - tf.sqrt(wh_p)) ** 2
-        coord_loss = self.scale['coordinate'] * tf.reduce_sum(obj * coord_loss)
+        coord_loss = self.coordinate_scale * tf.reduce_sum(obj * coord_loss)
         # objectness loss
-        obj_loss = self.scale['object'] * tf.reduce_sum(obj * (1 - obj_p) ** 2)
+        obj_loss = self.object_scale * tf.reduce_sum(obj * (1 - obj_p) ** 2)
         # class loss
         class_loss = tf.reduce_sum(obj * (onehot - class_p) ** 2)
-        class_loss *= self.scale['class']
+        class_loss *= self.class_scale
         # no-object loss
         iou_score = iou(box_p, box)
         is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.int32)
         noobj_loss = tf.reduce_sum((1 - obj) * is_obj_absent * obj_p ** 2)
-        noobj_loss *= self.scale['noobject']
+        noobj_loss *= self.noobject_scale
         return obj_loss + coord_loss + class_loss + noobj_loss
