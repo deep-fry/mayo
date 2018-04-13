@@ -35,8 +35,8 @@ model.layers:
                 point: 0
     _fixed: &fixed
         type: mayo.override.FixedPointQuantizer
-        width: 1
-        point: 1
+        width: 8
+        point: 2
         should_update: true
     _playground: &playground
         # - *incremental
