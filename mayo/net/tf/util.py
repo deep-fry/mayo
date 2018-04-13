@@ -109,16 +109,18 @@ class ParameterTransformer(object):
             v = getter(*args, **kwargs)
             log.debug('Variable {} created.'.format(v))
             name = v.op.name
+            is_biases = name.endswith('/biases')
+            is_weights = name.endswith('/weights')
             overrider = None
-            if name.endswith('biases'):
+            if is_biases:
                 overrider = biases_overrider
-            elif name.endswith('weights'):
+            elif is_weights:
                 overrider = weights_overrider
             if overrider:
                 log.debug('Overriding {!r} with {!r}.'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
                 self.overriders.append(overrider)
-            if gradient_overrider:
+            if gradient_overrider and (is_biases or is_weights):
                 # Xitong: @Aaron FIXME it is highly ambiguous to me to where
                 # you'd like to apply this gradient overrider.  It seems
                 # ATM the custom gradient is applied on ALL VARIABLES AFTER
@@ -130,11 +132,15 @@ class ParameterTransformer(object):
                 # 3. apply custom overriders, but during backprop ignore
                 #    gradients into custom overriders, use custom gradient
                 #    instead.
+                # Xitong: For now, we only override biases and weights of
+                # the given layer.
                 def custom_gradient(op, grad):
+                    # FIXME repeated application of overrider
                     log.debug(
                         'Overriding the gradient of {!r} from {!r} with {!r}.'
                         .format(name, grad, gradient_overrider))
-                    return gradient_overrider.apply(node, name, getter, grad)
+                    return gradient_overrider.apply(
+                        node, 'gradients', getter, grad)
                 gradient_name = 'mayo/{}'.format(name)
                 try:
                     tf.RegisterGradient(gradient_name)(custom_gradient)

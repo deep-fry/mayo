@@ -22,7 +22,7 @@ system:
     summary:
         save: {interval: 0.1}
     info:
-        plumbing: true
+        plumbing: false
     plot:
         features: false
         parameters: false
