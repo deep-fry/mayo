@@ -27,41 +27,24 @@ class ParameterTransformer(object):
         self.variables = {}
 
     def _create_hyperobjects(self, params):
-        def _create_object_for_key(params, key):
-            p = params.get(key, None)
-            if p is None:
-                return
-            if 'overrider' in key:
-                overriders = [
-                    cls(session=self.session, **p)
-                    for cls, p in multi_objects_from_params(p)]
-                if len(overriders) == 1:
-                    params[key] = overriders[0]
-                else:
-                    params[key] = ChainOverrider(
-                        session=self.session, overriders=overriders)
-            else:
+        suffixes = ['regularizer', 'initializer', 'overrider']
+        for key, p in params.items():
+            if not any(key.endswith(s) for s in suffixes):
+                continue
+            if not key.endswith('overrider'):
+                # regularizer and initializer
                 cls, p = object_from_params(p)
                 params[key] = cls(**p)
-
-        var_names = ['weights', 'biases']
-        obj_names = ['regularizer', 'initializer', 'overrider']
-        param_names = [
-            '{}_{}'.format(v, o)
-            for v, o in itertools.product(var_names, obj_names)]
-        param_names += [
-            'pointwise_regularizer', 'depthwise_regularizer',
-            'activation_overrider', 'gradient_overrider']
-        for name in param_names:
-            _create_object_for_key(params, name)
-
-    @staticmethod
-    def _apply_overrider(component, overrider, tensor):
-        # apply overrider within the given scope named by component, so as
-        # to create variables that are specific to that overrider to avoid
-        # collision within the same layer.
-        with tf.variable_scope(component):
-            return overrider
+                continue
+            # overrider
+            overriders = [
+                cls(session=self.session, **p)
+                for cls, p in multi_objects_from_params(p)]
+            if len(overriders) == 1:
+                params[key] = overriders[0]
+            else:
+                params[key] = ChainOverrider(
+                    session=self.session, overriders=overriders)
 
     def _config_layer(self, node, params):
         # normalizer_fn and activation_fn
@@ -101,58 +84,49 @@ class ParameterTransformer(object):
         if not path:
             raise ValueError('Module path is empty.')
 
-        biases_overrider = params.pop('biases_overrider', None)
-        weights_overrider = params.pop('weights_overrider', None)
-        gradient_overrider = params.pop('gradient_overrider', None)
+        forward_overriders = {}
+        gradient_overriders = {}
+        for k, v in list(params.items()):
+            if k.endswith('_gradient_overrider'):
+                ko = k.replace('_gradient_overrider', '')
+                gradient_overriders[ko] = v
+            elif k.endswith('_overrider'):
+                ko = k.replace('_overrider', '')
+                forward_overriders[ko] = v
+            else:
+                continue
+            del params[k]
+        print('F', forward_overriders)
+        print('G', gradient_overriders)
 
-        def custom_getter(getter, *args, **kwargs):
-            v = getter(*args, **kwargs)
+        def custom_getter(getter, name, *args, **kwargs):
+            __import__('ipdb').set_trace()
+            v = getter(name, *args, **kwargs)
+            qualname = v.op.name
             log.debug('Variable {} created.'.format(v))
-            name = v.op.name
-            is_biases = name.endswith('/biases')
-            is_weights = name.endswith('/weights')
-            overrider = None
-            if is_biases:
-                overrider = biases_overrider
-            elif is_weights:
-                overrider = weights_overrider
+            overrider = forward_overriders.get(name)
             if overrider:
-                log.debug('Overriding {!r} with {!r}.'.format(name, overrider))
+                log.debug(
+                    'Overriding {!r} with {!r}.'.format(qualname, overrider))
                 v = overrider.apply(node, name, getter, v)
                 self.overriders.append(overrider)
-            if gradient_overrider and (is_biases or is_weights):
-                # Xitong: @Aaron FIXME it is highly ambiguous to me to where
-                # you'd like to apply this gradient overrider.  It seems
-                # ATM the custom gradient is applied on ALL VARIABLES AFTER
-                # APPLYING THEIR RESPECTIVE OVERRIDERS in a layer.
-                # So which one do you want?
-                # 1. apply custom overriders to variables, then identity
-                #    replaced with custom gradient (now).
-                # 2. apply custom gradient to a variable before overriders.
-                # 3. apply custom overriders, but during backprop ignore
-                #    gradients into custom overriders, use custom gradient
-                #    instead.
-                # Xitong: For now, we only override biases and weights of
-                # the given layer.
+            # gradient overrider
+            overrider = gradient_overriders.get(name)
+            if overrider and self.is_training:
                 def custom_gradient(op, grad):
-                    # FIXME repeated application of overrider
                     log.debug(
                         'Overriding the gradient of {!r} from {!r} with {!r}.'
-                        .format(name, grad, gradient_overrider))
-                    return gradient_overrider.apply(
-                        node, 'gradients', getter, grad)
-                gradient_name = 'mayo/{}'.format(name)
-                try:
-                    tf.RegisterGradient(gradient_name)(custom_gradient)
-                except KeyError:
-                    pass
+                        .format(qualname, grad, overrider))
+                    grad_name = '{}/gradient'.format(name)
+                    return overrider.apply(node, grad_name, getter, grad)
+                gradient_name = '{}/gradient'.format(qualname)
+                tf.RegisterGradient(gradient_name)(custom_gradient)
                 gradient_map = {'Identity': gradient_name}
                 with self.session.tf_graph.gradient_override_map(gradient_map):
                     v = tf.identity(v)
-                self.overriders.append(gradient_overrider)
-            node_name = node.formatted_name()
-            var_name = name.replace('{}/'.format(node_name), '')
-            self.variables.setdefault(node, {})[var_name] = v
+                self.overriders.append(overrider)
+                return v
+            self.variables.setdefault(node, {})[name] = v
             return v
 
         @contextlib.contextmanager

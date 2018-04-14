@@ -166,11 +166,10 @@ class OverriderBase(object):
         Things to apply to the variable in `value`, returns the
         overridden result.
         """
-        # TODO is multiple application allowed?
-        # if self._applied:
-        #     raise OverrideAlreadyAppliedError(
-        #         'Overrider has already been applied to {!r}'
-        #         .format(self.before))
+        if self._applied:
+            raise OverrideAlreadyAppliedError(
+                'Overrider has already been applied to {!r}'
+                .format(self.before))
         self._applied = True
         self.node = node
         self.name = value.op.name
