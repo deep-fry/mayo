@@ -3,21 +3,30 @@ import subprocess
 
 
 def main():
-    filename = 'configs'
+    configdir = 'configs'
     storedir = 'checkpoints/fixedpoint'
     max_epochs = 1
-    bitwidths = [4, 8, 16, 32]
+    bitwidths = reversed([4, 8, 16, 32])
     points = [2, 2, 2, 2]
-    if not os.path.exists(filename):
-        os.mkdir(filename)
+    if not os.path.exists(configdir):
+        os.mkdir(configdir)
     if not os.path.exists(storedir):
         os.mkdir(storedir)
     for p, b in zip(points, bitwidths):
-        name = generate_yaml(b, p, filename)
-        my_command = './my datasets/mnist.yaml {} models/lenet5.yaml trainers/lenet5.yaml system.checkpoint.load=null system.max_epochs={} reset-num-epochs train'.format(name, max_epochs)
-        subprocess.run(my_command, shell=True)
-        print('training done')
-        subprocess.run('mv checkpoints/lenet5/mnist/checkpoint-{}.* {}'.format(max_epochs, storedir), shell=True)
+        print('Generate a custom yaml at {}'.format(configdir))
+        name = generate_yaml(b, p, configdir)
+        print('Training starts for {} bits'.format(b))
+        lenet_command = './my datasets/mnist.yaml {} models/lenet5.yaml trainers/lenet5.yaml system.checkpoint.load=null system.max_epochs={} reset-num-epochs train'.format(
+            name, max_epochs)
+        cifar_command = ('./my datasets/cifar10.yaml {} models/cifarnet.yaml trainers/cifarnet.yaml system.checkpoint.load=null system.num_gpus=4, system.batch_size_per_gpu=1024 system.max_epochs={} reset-num-epochs train'.format(
+            name, max_epochs))
+        subprocess.run(cifar_command, shell=True)
+        print('Training done')
+        storebit_dir = '{}/{}bit'.format(storedir, str(b))
+        if not os.path.exists(storebit_dir):
+            os.mkdir(storebit_dir)
+        subprocess.run('mv checkpoints/lenet5/mnist/checkpoint-{}.* {}'.format(
+            max_epochs, storebit_dir), shell=True)
 
 
 def generate_yaml(bitwidth=8, point=2, filename='configs'):
