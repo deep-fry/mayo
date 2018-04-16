@@ -1,5 +1,5 @@
 ---
-# apply overrider hyperparamters across all layers
+# apply overrider hyperparameters across all layers
 _overrider:
     weights: {}
     biases: {}
