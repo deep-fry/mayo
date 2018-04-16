@@ -84,18 +84,8 @@ class ParameterTransformer(object):
         if not path:
             raise ValueError('Module path is empty.')
 
-        forward_overriders = {}
-        gradient_overriders = {}
-        for k, v in list(params.items()):
-            if k.endswith('_gradient_overrider'):
-                ko = k.replace('_gradient_overrider', '')
-                gradient_overriders[ko] = v
-            elif k.endswith('_overrider'):
-                ko = k.replace('_overrider', '')
-                forward_overriders[ko] = v
-            else:
-                continue
-            del params[k]
+        forward_overriders = params.pop('overrider', {})
+        gradient_overriders = params.pop('gradient_overrider', {})
 
         def custom_gradient(name, overrider):
             def wrapped(op, grad):
