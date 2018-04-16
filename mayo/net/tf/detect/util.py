@@ -45,8 +45,8 @@ def cartesian(tensor1, tensor2):
     # all possible bbox pairs
     reshaped1 = tf.reshape(tensor1, shape1 + [1] * ndims2 + [-1])
     reshaped2 = tf.reshape(tensor2, [1] * ndims1 + shape2 + [-1])
-    tensor1 = tf.tile(reshaped1, tf.concat([[1] * ndims1, shape2, [1]]))
-    tensor2 = tf.tile(reshaped2, tf.concat([shape1, [1] * ndims2, [1]]))
+    tensor1 = tf.tile(reshaped1, [1] * ndims1 + [shape2] + [1])
+    tensor2 = tf.tile(reshaped2, [shape1] + [1] * ndims2 + [1])
     return tensor1, tensor2
 
 
@@ -71,10 +71,9 @@ def iou(boxes1, boxes2, anchors=False):
             .format(expected_size))
     shape1 = boxes1.get_shape()[:-1]
     shape2 = boxes2.get_shape()[:-1]
-    cond = tf.Assert(
-        tf.equal(shape1, shape2), [shape1, shape2],
-        'Bounding boxes shape mismatch.')
-    with tf.control_dependencies(cond):
+    # ensure shape can broadcast
+    shape = tf.broadcast_dynamic_shape(shape1, shape2)
+    with tf.control_dependencies(shape):
         boxes1 = tf.identity(boxes1)
     if anchors:
         h1, w1 = tf.unstack(boxes1, axis=-1)

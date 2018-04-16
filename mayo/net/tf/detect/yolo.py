@@ -23,6 +23,7 @@ class YOLOv2(object):
         if height != width:
             raise ValueError('We expect the image to be square for YOLOv2.')
         self.image_size = height
+        self.batch_size = config.dataset.batch_size
         if not self.image_size % num_cells:
             raise ValueError(
                 'The size of image must be divisible by the number of cells.')
@@ -94,24 +95,66 @@ class YOLOv2(object):
         label = tf.scatter_nd(index, label, self._base_shape)
         return objectness, box, label
 
-    def loss(self, prediction, truth):
-        obj_p, box_p, class_p = prediction
-        obj, box, label = self.transform_truth(truth)
-        # one-hot encoding for labels
-        onehot = slim.one_hot_encoding(label, self.num_classes)
+    def _cell_to_global(self, box):
+        # grid setup
+        line = tf.range(0, self.num_cells)
+        rows = tf.reshape(line, [self.num_cells, 1])
+        rows = tf.tile(rows, [1, self.num_cells])
+        cols = tf.reshape(line, [1, self.num_cells])
+        cols = tf.tile(cols, [self.num_cells, 1])
+        grid = tf.stack([rows, cols], axis=-1)
+        grid = tf.reshape(grid, [1, self.num_cells, self.num_cells, 1, 2])
+        grid *= self.cell_size
+        # box transformation
+        yx, hw = tf.split(box, [2, 2], axis=-1)
+        yx = grid + tf.sigmoid(yx)
+        hw = tf.exp(hw)
+        hw *= tf.reshape(self.anchors, [1, 1, 1, self.num_anchors, 2])
+        box = tf.concat([yx, hw], axis=-1)
+        # normalize box position to 0-1
+        return box / self.image_size
+
+    def loss(self, tensor, truth):
+        """
+        truth: (batch_size x num_objects x 5)
+        """
+        cell_obj_p, cell_box_p, cell_onehot_p = tensor
+        # the original box and label values from the dataset
+        global_box, raw_label = truth
+        cell_obj, cell_box, cell_label = self.transform_truth(
+            global_box, raw_label)
+        num_objects = global_box.shape[1]
+
         # coordinate loss
-        xy_p, wh_p = tf.split(box_p, [2, 2], axis=-1)
-        xy, wh = tf.split(box, [2, 2], axis=-1)
+        xy_p, wh_p = tf.split(cell_box_p, [2, 2], axis=-1)
+        xy, wh = tf.split(cell_box, [2, 2], axis=-1)
         coord_loss = (xy - xy_p) ** 2 + (tf.sqrt(wh) - tf.sqrt(wh_p)) ** 2
-        coord_loss = self.coordinate_scale * tf.reduce_sum(obj * coord_loss)
+        coord_loss = tf.reduce_sum(cell_obj * coord_loss)
+        coord_loss *= self.coordinate_scale
+
         # objectness loss
-        obj_loss = self.object_scale * tf.reduce_sum(obj * (1 - obj_p) ** 2)
+        obj_loss = tf.reduce_sum(cell_obj * (1 - cell_obj_p) ** 2)
+        obj_loss *= self.object_scale
+
         # class loss
-        class_loss = tf.reduce_sum(obj * (onehot - class_p) ** 2)
-        class_loss *= self.class_scale
+        cell_onehot = slim.one_hot_encoding(cell_label, self.num_classes)
+        class_loss = cell_obj * (cell_onehot - cell_onehot_p) ** 2
+        class_loss = self.class_scale * tf.reduce_sum(class_loss)
+
         # no-object loss
-        iou_score = iou(box_p, box)
+        # match shape
+        # (batch x num_cells x num_cells x num_anchors x num_objects x 4)
+        global_box_p = self._cell_to_global(cell_box_p)
+        global_box_p = tf.reshape(
+            global_box_p,
+            [self.batch_size, self.num_cells, self.num_cells,
+             self.num_anchors, 1, 4])
+        global_box = tf.reshape(
+            global_box, [self.batch_size, 1, 1, 1, num_objects, 4])
+        iou_score = iou(global_box_p, global_box)
+        iou_score = tf.reduce_max(iou_score, axis=4, keepdims=True)
         is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.int32)
-        noobj_loss = tf.reduce_sum((1 - obj) * is_obj_absent * obj_p ** 2)
-        noobj_loss *= self.noobject_scale
+        noobj_loss = (1 - cell_obj) * is_obj_absent * cell_obj_p ** 2
+        noobj_loss = self.noobject_scale * tf.reduce_sum(noobj_loss)
+
         return obj_loss + coord_loss + class_loss + noobj_loss
