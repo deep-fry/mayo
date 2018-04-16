@@ -1,0 +1,16 @@
+---
+_overrider:
+    conv: &dns
+        weights:
+            type: mayo.override.DynamicNetworkSurgeryPruner
+            alpha: 0
+            should_update: true
+    fc: {<<: *dns}
+    logits: {<<: *dns}
+    # squeezenet
+    squeeze: {<<: *dns}
+    expand1: {<<: *dns}
+    expand3: {<<: *dns}
+    # mobilenet
+    # depthwise: {<<: *dns}
+    pointwise: {<<: *dns}

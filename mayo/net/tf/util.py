@@ -27,24 +27,29 @@ class ParameterTransformer(object):
         self.variables = {}
 
     def _create_hyperobjects(self, params):
-        suffixes = ['regularizer', 'initializer', 'overrider']
+        suffixes = ['regularizer', 'initializer']
         for key, p in params.items():
             if not any(key.endswith(s) for s in suffixes):
                 continue
-            if not key.endswith('overrider'):
-                # regularizer and initializer
-                cls, p = object_from_params(p)
-                params[key] = cls(**p)
-                continue
-            # overrider
+            # regularizer and initializer
+            cls, p = object_from_params(p)
+            params[key] = cls(**p)
+
+        def create_overrider(p):
             overriders = [
                 cls(session=self.session, **p)
                 for cls, p in multi_objects_from_params(p)]
             if len(overriders) == 1:
-                params[key] = overriders[0]
-            else:
-                params[key] = ChainOverrider(
-                    session=self.session, overriders=overriders)
+                return overriders[0]
+            return ChainOverrider(session=self.session, overriders=overriders)
+
+        overrider_params = params.get('overrider', {})
+        for key, p in overrider_params.items():
+            if key == 'gradient':
+                for grad_key, grad_p in p.items():
+                    p[grad_key] = create_overrider(grad_p)
+                continue
+            overrider_params[key] = create_overrider(p)
 
     def _config_layer(self, node, params):
         # normalizer_fn and activation_fn
@@ -86,6 +91,22 @@ class ParameterTransformer(object):
 
         forward_overriders = params.pop('overrider', {})
         gradient_overriders = params.pop('gradient_overrider', {})
+
+        # DEPRECATED backward compatibility
+        for k, v in list(params.items()):
+            if k.endswith('_gradient_overrider'):
+                ko = k.replace('_gradient_overrider', '')
+                gradient_overriders[ko] = v
+            elif k.endswith('_overrider'):
+                ko = k.replace('_overrider', '')
+                forward_overriders[ko] = v
+            else:
+                continue
+            log.warn(
+                'Overriding by specifying {}_overrider is a deprecated '
+                'feature, please use a nested map "overrider.{}" instead.'
+                .format(k, ko))
+            del params[k]
 
         def custom_gradient(name, overrider):
             def wrapped(op, grad):

@@ -1,0 +1,18 @@
+---
+_import: ../resnet18.yaml
+model:
+    name: resnet18
+    layers:
+        _basic_block: &bb
+            layers:
+                conv1: &conv {overrider: $(_overrider.conv)}
+                conv2: {<<: *conv}
+        conv1: {<<: *conv}
+        b11: {<<: *bb}
+        b12: {<<: *bb}
+        b21: {<<: *bb}
+        b31: {<<: *bb}
+        b32: {<<: *bb}
+        b41: {<<: *bb}
+        b42: {<<: *bb}
+        fc5: {overrider: $(_overrider.logits)}
