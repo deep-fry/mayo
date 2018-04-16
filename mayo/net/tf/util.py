@@ -1,6 +1,5 @@
 import copy
 import contextlib
-import collections
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -96,7 +95,7 @@ class ParameterTransformer(object):
             raise ValueError('Module path is empty.')
 
         forward_overriders = params.pop('overrider', {})
-        gradient_overriders = params.pop('gradient_overrider', {})
+        gradient_overriders = forward_overriders.pop('gradient', {})
 
         def custom_gradient(name, overrider):
             def wrapped(op, grad):
