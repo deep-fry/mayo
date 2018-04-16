@@ -97,14 +97,16 @@ class ParameterTransformer(object):
                 continue
             del params[k]
 
-        def custom_gradient(name, key, overrider, getter):
+        def custom_gradient(name, overrider):
             def wrapped(op, grad):
                 log.debug(
                     'Overriding the gradient of {!r} from {!r} with {!r}.'
                     .format(name, grad, overrider))
-                scope = '{}/gradient'.format(key)
-                __import__('ipdb').set_trace()
-                return overrider.apply(node, scope, getter, grad)
+                # when overriding gradient, we are not inside any variable
+                # scope, so we use the full name for overrider hyperparameter
+                # instantiation
+                scope = '{}/gradient'.format(name)
+                return overrider.apply(node, scope, tf.get_variable, grad)
             return wrapped
 
         def custom_getter(getter, name, *args, **kwargs):
@@ -121,7 +123,7 @@ class ParameterTransformer(object):
             overrider = gradient_overriders.get(key)
             if overrider and self.is_training:
                 gradient_name = '{}/gradient'.format(name)
-                gradient_func = custom_gradient(name, key, overrider, getter)
+                gradient_func = custom_gradient(name, overrider)
                 tf.RegisterGradient(gradient_name)(gradient_func)
                 gradient_map = {'Identity': gradient_name}
                 with self.session.tf_graph.gradient_override_map(gradient_map):
