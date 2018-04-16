@@ -44,7 +44,10 @@ class ParameterTransformer(object):
             return ChainOverrider(session=self.session, overriders=overriders)
 
         overrider_params = params.get('overrider', {})
-        for key, p in overrider_params.items():
+        for key, p in list(overrider_params.items()):
+            if not p:
+                del overrider_params[key]
+                continue
             if key == 'gradient':
                 for grad_key, grad_p in p.items():
                     p[grad_key] = create_overrider(grad_p)
@@ -65,7 +68,8 @@ class ParameterTransformer(object):
             norm_params = params.setdefault('normalizer_params', {})
             norm_params['is_training'] = self.is_training
         # activation
-        activation_overrider = params.pop('activation_overrider', None)
+        overrider_params = params.get('overrider', {})
+        activation_overrider = overrider_params.pop('activation', None)
         if activation_overrider:
             activation_fn = params.get('activation_fn', tf.nn.relu)
             if activation_fn is None:
@@ -91,22 +95,6 @@ class ParameterTransformer(object):
 
         forward_overriders = params.pop('overrider', {})
         gradient_overriders = params.pop('gradient_overrider', {})
-
-        # DEPRECATED backward compatibility
-        for k, v in list(params.items()):
-            if k.endswith('_gradient_overrider'):
-                ko = k.replace('_gradient_overrider', '')
-                gradient_overriders[ko] = v
-            elif k.endswith('_overrider'):
-                ko = k.replace('_overrider', '')
-                forward_overriders[ko] = v
-            else:
-                continue
-            log.warn(
-                'Overriding by specifying {}_overrider is a deprecated '
-                'feature, please use a nested map "overrider.{}" instead.'
-                .format(k, ko))
-            del params[k]
 
         def custom_gradient(name, overrider):
             def wrapped(op, grad):
