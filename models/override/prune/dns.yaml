@@ -1,16 +1,10 @@
 ---
+_import: ../_global.yaml
 _overrider:
-    conv: &dns
-        weights:
+    weights:
+        dns:
             type: mayo.override.DynamicNetworkSurgeryPruner
             alpha: 0
             should_update: true
-    fc: {<<: *dns}
-    logits: {<<: *dns}
-    # squeezenet
-    squeeze: {<<: *dns}
-    expand1: {<<: *dns}
-    expand3: {<<: *dns}
-    # mobilenet
-    # depthwise: {<<: *dns}
-    pointwise: {<<: *dns}
+            _priority: 100
+    depthwise: null  # suppress mobilenet depthwise conv pruning

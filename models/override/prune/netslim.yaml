@@ -2,8 +2,10 @@
 _overrider:
     conv: &slim
         weights:
-            type: mayo.override.NetworkSlimmer
-            density: 1.0
-            weight: 0.00001
-            should_update: true
+            netslim:
+                type: mayo.override.NetworkSlimmer
+                density: 1.0
+                weight: 0.00001
+                should_update: true
+                _priority: 100
     pointwise: {<<: *slim}

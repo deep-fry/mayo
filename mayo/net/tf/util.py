@@ -1,6 +1,6 @@
 import copy
-import itertools
 import contextlib
+import collections
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -35,10 +35,12 @@ class ParameterTransformer(object):
             cls, p = object_from_params(p)
             params[key] = cls(**p)
 
-        def create_overrider(p):
+        def create_overrider(overriders):
+            overriders = list(reversed(sorted(
+                overriders.values(), key=lambda p: p.get('_priority', 0))))
             overriders = [
                 cls(session=self.session, **p)
-                for cls, p in multi_objects_from_params(p)]
+                for cls, p in multi_objects_from_params(overriders)]
             if len(overriders) == 1:
                 return overriders[0]
             return ChainOverrider(session=self.session, overriders=overriders)
