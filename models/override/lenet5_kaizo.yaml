@@ -1,6 +1,10 @@
 ---
 _import: ../lenet5.yaml
-model.layers:
+_horcuxes:
+    _fixed: &fixed
+        type: mayo.override.FixedPointQuantizer
+        width: 8
+        point: 2
     _incremental: &incremental
         type: mayo.override.IncrementalQuantizer
         intervals: [1.0]
@@ -10,14 +14,16 @@ model.layers:
             bias: 10
             overflow_rate: 0.0
             should_update: true
-            # type: mayo.override.Recentralizer # quantizer:
-            #     type: mayo.override.FixedPointQuantizer
-            #     width: 2
-            #     point: 0
-            # mean_quantizer:
-            #     type: mayo.override.FixedPointQuantizer
-            #     width: 2
-            #     point: 1
+    _recentralizer: &recentralizer
+        type: mayo.override.Recentralizer
+        quantizer:
+            type: mayo.override.FixedPointQuantizer
+            width: 2
+            point: 0
+        mean_quantizer:
+            type: mayo.override.FixedPointQuantizer
+            width: 2
+            point: 1
     _mixed: &mixed
         type: mayo.override.MixedQuantizer
         interval: 0.5
@@ -32,10 +38,7 @@ model.layers:
                 type: mayo.override.FixedPointQuantizer
                 width: 8
                 point: 0
-    _fixed: &fixed
-        type: mayo.override.FixedPointQuantizer
-        width: 8
-        point: 2
+model.layers:
     _playground: &playground
         # increment: *incremental
         # mixed: *mixed
@@ -48,7 +51,7 @@ model.layers:
         overrider:
             weights: *playground
             biases: *playground
-            gradient: {weight: *playground}
+            gradient: {weights: *playground}
             activation: *playground
             # activation:
             #     type: mayo.override.ChannelPruner
