@@ -1,0 +1,21 @@
+---
+_import: ../mobilenet.yaml
+model.layers:
+    conv0: {overrider: $(_overrider.conv)}
+    conv1: &depsep
+        layers:
+            depthwise: {overrider: $(_overrider.depthwise)}
+            pointwise: {overrider: $(_overrider.pointwise)}
+    conv2: {<<: *depsep}
+    conv3: {<<: *depsep}
+    conv4: {<<: *depsep}
+    conv5: {<<: *depsep}
+    conv6: {<<: *depsep}
+    conv7: {<<: *depsep}
+    conv8: {<<: *depsep}
+    conv9: {<<: *depsep}
+    conv10: {<<: *depsep}
+    conv11: {<<: *depsep}
+    conv12: {<<: *depsep}
+    conv13: {<<: *depsep}
+    fc: {overrider: $(_overrider.logits)}

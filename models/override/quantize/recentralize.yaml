@@ -1,0 +1,19 @@
+---
+_import: ../_global.yaml
+_overrider:
+    pruner:
+        type: mayo.override.DynamicNetworkSurgeryPruner
+        should_update: false
+    quantizer: &quantizer
+        type: mayo.override.DGQuantizer
+        width: 16
+        overflow_rate: 0.05
+    mean_quantizer: *quantizer
+    weights:
+        - $(_overrider.pruner)
+        - type: mayo.override.Recentralizer
+          quantizer: $(_overrider.quantizer)
+          mean_quantizer: $(_overrider.mean_quantizer)
+    biases:
+        <<: quantizer
+        overflow_rate: 0.001

@@ -1,6 +1,6 @@
 import copy
-import itertools
 import contextlib
+import collections
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -27,41 +27,34 @@ class ParameterTransformer(object):
         self.variables = {}
 
     def _create_hyperobjects(self, params):
-        def _create_object_for_key(params, key):
-            p = params.get(key, None)
-            if p is None:
-                return
-            if 'overrider' in key:
-                overriders = [
-                    cls(session=self.session, **p)
-                    for cls, p in multi_objects_from_params(p)]
-                if len(overriders) == 1:
-                    params[key] = overriders[0]
-                else:
-                    params[key] = ChainOverrider(
-                        session=self.session, overriders=overriders)
-            else:
-                cls, p = object_from_params(p)
-                params[key] = cls(**p)
+        suffixes = ['regularizer', 'initializer']
+        for key, p in params.items():
+            if not any(key.endswith(s) for s in suffixes):
+                continue
+            # regularizer and initializer
+            cls, p = object_from_params(p)
+            params[key] = cls(**p)
 
-        var_names = ['weights', 'biases']
-        obj_names = ['regularizer', 'initializer', 'overrider']
-        param_names = [
-            '{}_{}'.format(v, o)
-            for v, o in itertools.product(var_names, obj_names)]
-        param_names += [
-            'pointwise_regularizer', 'depthwise_regularizer',
-            'activation_overrider']
-        for name in param_names:
-            _create_object_for_key(params, name)
+        def create_overrider(overriders):
+            overriders = list(reversed(sorted(
+                overriders.values(), key=lambda p: p.get('_priority', 0))))
+            overriders = [
+                cls(session=self.session, **p)
+                for cls, p in multi_objects_from_params(overriders)]
+            if len(overriders) == 1:
+                return overriders[0]
+            return ChainOverrider(session=self.session, overriders=overriders)
 
-    @staticmethod
-    def _apply_overrider(component, overrider, tensor):
-        # apply overrider within the given scope named by component, so as
-        # to create variables that are specific to that overrider to avoid
-        # collision within the same layer.
-        with tf.variable_scope(component):
-            return overrider
+        overrider_params = params.get('overrider', {})
+        for key, p in list(overrider_params.items()):
+            if not p:
+                del overrider_params[key]
+                continue
+            if key == 'gradient':
+                for grad_key, grad_p in p.items():
+                    p[grad_key] = create_overrider(grad_p)
+                continue
+            overrider_params[key] = create_overrider(p)
 
     def _config_layer(self, node, params):
         # normalizer_fn and activation_fn
@@ -77,7 +70,8 @@ class ParameterTransformer(object):
             norm_params = params.setdefault('normalizer_params', {})
             norm_params['is_training'] = self.is_training
         # activation
-        activation_overrider = params.pop('activation_overrider', None)
+        overrider_params = params.get('overrider', {})
+        activation_overrider = overrider_params.pop('activation', None)
         if activation_overrider:
             activation_fn = params.get('activation_fn', tf.nn.relu)
             if activation_fn is None:
@@ -101,31 +95,48 @@ class ParameterTransformer(object):
         if not path:
             raise ValueError('Module path is empty.')
 
-        biases_overrider = params.pop('biases_overrider', None)
-        weights_overrider = params.pop('weights_overrider', None)
+        forward_overriders = params.pop('overrider', {})
+        gradient_overriders = params.pop('gradient_overrider', {})
 
-        def custom_getter(getter, *args, **kwargs):
-            v = getter(*args, **kwargs)
+        def custom_gradient(name, overrider):
+            def wrapped(op, grad):
+                log.debug(
+                    'Overriding the gradient of {!r} from {!r} with {!r}.'
+                    .format(name, grad, overrider))
+                # when overriding gradient, we are not inside any variable
+                # scope, so we use the full name for overrider hyperparameter
+                # instantiation
+                scope = '{}/gradient'.format(name)
+                return overrider.apply(node, scope, tf.get_variable, grad)
+            return wrapped
+
+        def custom_getter(getter, name, *args, **kwargs):
+            v = getter(name, *args, **kwargs)
             log.debug('Variable {} created.'.format(v))
-            name = v.op.name
-            overrider = None
-            if name.endswith('biases'):
-                overrider = biases_overrider
-            elif name.endswith('weights'):
-                overrider = weights_overrider
+            key = name.replace('{}/'.format(node.formatted_name()), '')
+            overrider = forward_overriders.get(key)
             if overrider:
-                log.debug('Overriding {!r} with {!r}'.format(name, overrider))
+                log.debug(
+                    'Overriding {!r} with {!r}.'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
                 self.overriders.append(overrider)
-            node_name = node.formatted_name()
-            var_name = name.replace('{}/'.format(node_name), '')
-            self.variables.setdefault(node, {})[var_name] = v
+            # gradient overrider
+            overrider = gradient_overriders.get(key)
+            if overrider and self.is_training:
+                gradient_name = '{}/gradient'.format(name)
+                gradient_func = custom_gradient(name, overrider)
+                tf.RegisterGradient(gradient_name)(gradient_func)
+                gradient_map = {'Identity': gradient_name}
+                with self.session.tf_graph.gradient_override_map(gradient_map):
+                    v = tf.identity(v)
+                self.overriders.append(overrider)
+            self.variables.setdefault(node, {})[name] = v
             return v
 
         @contextlib.contextmanager
         def custom_scope():
             # we do not have direct access to variable creation,
-            # so scope must be used
+            # so scope must be used.
             # FIXME there is currently no possible workaround for
             # auto-generated `name_scope` from `variable_scope` with names that
             # are being uniquified.  See #39.

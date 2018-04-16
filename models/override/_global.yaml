@@ -1,0 +1,21 @@
+---
+# apply overrider hyperparamters across all layers
+_overrider:
+    weights: {}
+    biases: {}
+    activation: {}
+    _overrider: &overrider
+        weights: $(_overrider.weights)
+        biases: $(_overrider.biases)
+        activation: $(_overrider.activation)
+    # interfaces
+    conv: {<<: *overrider}
+    fc: {<<: *overrider}
+    logits: {<<: *overrider}  # you sure?
+    # squeezenet
+    squeeze: {<<: *overrider}
+    expand1: {<<: *overrider}
+    expand3: {<<: *overrider}
+    # mobilenet
+    depthwise: {<<: *overrider}
+    pointwise: {<<: *overrider}

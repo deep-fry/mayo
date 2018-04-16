@@ -1,0 +1,18 @@
+---
+_import: ../squeezenet_v10.yaml
+model.layers:
+    conv1: &conv {overrider: $(_overrider.conv)}
+    fire2: &fire
+        layers:
+            squeeze: {overrider: $(_overrider.squeeze)}
+            expand1: {overrider: $(_overrider.expand1)}
+            expand3: {overrider: $(_overrider.expand3)}
+    fire3: {<<: *fire}
+    fire4: {<<: *fire}
+    fire5: {<<: *fire}
+    fire6: {<<: *fire}
+    fire7: {<<: *fire}
+    fire8: {<<: *fire}
+    fire9: {<<: *fire}
+    conv10: {<<: *conv}
+    logits: {overrider: $(_overrider.logits)}

@@ -126,7 +126,7 @@ class Train(Session):
     @memoize_property
     def _summary_writer(self):
         path = self.config.system.search_path.summary[0]
-        return tf.summary.FileWriter(path, graph=self.graph)
+        return tf.summary.FileWriter(path, graph=self.tf_graph)
 
     def _save_summary(self, epoch):
         summary = self.run(self._summary_op)

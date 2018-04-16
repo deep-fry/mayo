@@ -1,4 +1,5 @@
 ---
+_import: ../lenet5.yaml
 model.layers:
     _incremental: &incremental
         type: mayo.override.IncrementalQuantizer
@@ -9,8 +10,7 @@ model.layers:
             bias: 10
             overflow_rate: 0.0
             should_update: true
-            # type: mayo.override.Recentralizer
-            # quantizer:
+            # type: mayo.override.Recentralizer # quantizer:
             #     type: mayo.override.FixedPointQuantizer
             #     width: 2
             #     point: 0
@@ -19,7 +19,7 @@ model.layers:
             #     width: 2
             #     point: 1
     _mixed: &mixed
-        type: mayo.override.MixedPrecisionQuantizer
+        type: mayo.override.MixedQuantizer
         interval: 0.5
         reg_factor: 0.001
         index: 0
@@ -32,20 +32,28 @@ model.layers:
                 type: mayo.override.FixedPointQuantizer
                 width: 8
                 point: 0
-    _overrider: &playground
-        # - *incremental
-        - *mixed
-        # - {type: mayo.override.EmptyOverrider}
-        # - {type: mayo.override.DynamicNetworkSurgeryPruner}
-        # - {type: mayo.override.FixedPointQuantizer}
-        # - {type: mayo.override.RandomChannelGater, ratio: 0.5}
-        # - {type: mayo.override.ChannelGater, alpha: 0.1, threshold: 0.3}
+    _fixed: &fixed
+        type: mayo.override.FixedPointQuantizer
+        width: 8
+        point: 2
+    _playground: &playground
+        # increment: *incremental
+        # mixed: *mixed
+        fixed: *fixed
+        # empty: {type: mayo.override.EmptyOverrider}
+        # dns: {type: mayo.override.DynamicNetworkSurgeryPruner}
+        # random_gate: {type: mayo.override.RandomChannelGater, ratio: 0.5}
+        # gate: {type: mayo.override.ChannelGater, alpha: 0.1, threshold: 0.3}
     conv0: &overrider
-        weights_overrider: *playground
-        # biases_overrider: *playground
-        # activation_overrider: *quantizer
-        # activation_overrider:
-        #     type: mayo.override.ChannelPruner
-        #     density: 0.1
-        #     should_update: true
+        overrider:
+            weights: *playground
+            biases: *playground
+            gradient: {weight: *playground}
+            activation: *playground
+            # activation:
+            #     type: mayo.override.ChannelPruner
+            #     density: 0.1
+            #     should_update: true
     conv1: {<<: *overrider}
+    fc1: {<<: *overrider}
+    logits: {<<: *overrider}
