@@ -5,6 +5,13 @@ from mayo.net.tf.detect.util import cartesian, iou
 
 
 class YOLOv2(object):
+    """
+    YOLOv2 image detection algorithm.
+
+    references:
+        https://arxiv.org/pdf/1612.08242.pdf
+        https://github.com/allanzelener/YAD2K/blob/master/yad2k/models/keras_yolo.py
+    """
     def __init__(
             self, config, anchors,
             object_scale=1, noobject_scale=0.5,
@@ -36,10 +43,6 @@ class YOLOv2(object):
         """
         Allocates ground truth bounding boxes and labels into a cell grid of
         objectness, bounding boxes and labels.
-
-        references:
-            https://arxiv.org/pdf/1612.08242.pdf
-            https://github.com/allanzelener/YAD2K/blob/master/yad2k/models/keras_yolo.py
 
         truths:
             a (batch x num_truths x 4) tensor where each row is a
