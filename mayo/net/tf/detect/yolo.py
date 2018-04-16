@@ -96,6 +96,11 @@ class YOLOv2(object):
         return objectness, box, label
 
     def _cell_to_global(self, box):
+        """
+        Transform (batch x num_cells x num_cells x num_anchors x 4)
+        raw bounding box (before sigmoid and exponentiation) to the
+        full-image bounding box.
+        """
         # grid setup
         line = tf.range(0, self.num_cells)
         rows = tf.reshape(line, [self.num_cells, 1])
@@ -114,13 +119,21 @@ class YOLOv2(object):
         # normalize box position to 0-1
         return box / self.image_size
 
-    def loss(self, tensor, truth):
+    def loss(self, prediction, truth):
         """
-        truth: (batch_size x num_objects x 5)
+        tensor:
+            a (batch x num_cells x num_cells x num_anchors x (5 + num_classes))
+            prediction, where each element of the last dimension (5 +
+            num_classes) consists of a objectness probability (1), a bounding
+            box (4), and a one-hot list (num_classes) of class probabilities.
+        truth:
+            a (batch x num_objects x 5) tensor, where each item of the
+            last dimension (5) consists of a bounding box (4), and a label (1).
         """
-        cell_obj_p, cell_box_p, cell_onehot_p = tensor
+        cell_obj_p, cell_box_p, cell_onehot_p = tf.split(
+            prediction, [1, 4, self.num_classes], axis=-1)
         # the original box and label values from the dataset
-        global_box, raw_label = truth
+        global_box, raw_label = tf.split(truth, [4, 1])
         cell_obj, cell_box, cell_label = self.transform_truth(
             global_box, raw_label)
         num_objects = global_box.shape[1]

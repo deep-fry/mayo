@@ -9,8 +9,19 @@ from mayo.net.base import NetBase
 from mayo.net.tf.transform import ParameterTransformer
 
 
+class TFTaskBase(object):
+    """Specifies common training and evaluation tasks.  """
+    def train(self, predictions, labels):
+        raise NotImplementedError(
+            'Please implement .train() which returns the loss tensor.')
+
+    def eval(self, predictions, labels):
+        raise NotImplementedError(
+            'Please implement .eval() which returns the evaluation metrics.')
+
+
 class TFNetBase(NetBase):
-    """ Utility functions to create a TensorFlow network.  """
+    """Instantiates a TensorFlow network from the DAG graph.  """
 
     def __init__(self, session, model, images, labels, num_classes, reuse):
         self.session = session
