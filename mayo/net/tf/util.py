@@ -45,6 +45,8 @@ class ParameterTransformer(object):
             return ChainOverrider(session=self.session, overriders=overriders)
 
         overrider_params = params.get('overrider', {})
+        if not overrider_params:
+            return
         for key, p in list(overrider_params.items()):
             if not p:
                 del overrider_params[key]
@@ -69,7 +71,7 @@ class ParameterTransformer(object):
             norm_params = params.setdefault('normalizer_params', {})
             norm_params['is_training'] = self.is_training
         # activation
-        overrider_params = params.get('overrider', {})
+        overrider_params = params.get('overrider') or {}
         activation_overrider = overrider_params.pop('activation', None)
         if activation_overrider:
             activation_fn = params.get('activation_fn', tf.nn.relu)
@@ -94,7 +96,7 @@ class ParameterTransformer(object):
         if not path:
             raise ValueError('Module path is empty.')
 
-        forward_overriders = params.pop('overrider', {})
+        forward_overriders = params.pop('overrider', None) or {}
         gradient_overriders = forward_overriders.pop('gradient', {})
 
         def custom_gradient(name, overrider):
