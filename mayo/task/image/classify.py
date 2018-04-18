@@ -21,6 +21,13 @@ class Classify(ImageTaskBase):
         for images, labels in super().preprocess():
             yield images, labels + self.label_offset
 
+    def _top(self, prediction, truth, num_tops=1):
+        return tf.nn.in_top_k(prediction, truth, num_tops)
+
+    def _accuracy(self, prediction, truth, num_tops=1):
+        top = self._top(prediction, truth, num_tops)
+        return tf.reduce_sum(tf.cast(top, tf.int32)) / top.shape.num_elements()
+
     @memoize_method
     def _train_setup(self, prediction, truth):
         # formatters
@@ -32,20 +39,18 @@ class Classify(ImageTaskBase):
             accuracy, 'accuracy', formatter=accuracy_formatter)
 
     def train(self, net, prediction, truth):
+        prediction = prediction['output']
         self._train_setup(prediction, truth)
         truth = slim.one_hot_encoding(truth, prediction.shape[1])
         return tf.losses.softmax_cross_entropy(
             logits=prediction, onehot_labels=truth)
 
     @memoize_method
-    def _eval(self):
-        def top(prediction, truth, num_tops=1):
-            return tf.nn.in_top_k(prediction, truth, num_tops)
-
+    def _eval_setup(self):
         def metrics(net, prediction, truth):
             prediction = prediction['output']
-            top1 = top(prediction, truth, 1)
-            top5 = top(prediction, truth, 5)
+            top1 = self._top(prediction, truth, 1)
+            top5 = self._top(prediction, truth, 5)
             return top1, top5
 
         top1s, top5s = zip(*self.map(metrics))
@@ -69,4 +74,4 @@ class Classify(ImageTaskBase):
 
     def eval(self, net, prediction, truth):
         # set up eval estimators, once and for all predictions and truths
-        return self._eval()
+        return self._eval_setup()

@@ -19,8 +19,6 @@ system:
     checkpoint:
         load: latest
         save: {interval: 1, countdown: 3}
-    summary:
-        save: {interval: 0.1}
     info:
         plumbing: false
     plot:
@@ -37,8 +35,6 @@ system:
             save: &cp_paths
                 - checkpoints/$(model.name)/$(dataset.name)/
             load: *cp_paths
-        summary:
-            - summaries/$(model.name)/$(dataset.name)/
         plot:
             - plots/$(model.name)/$(dataset.name)/
         profile:

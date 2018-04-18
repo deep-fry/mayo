@@ -46,8 +46,8 @@ def _init_gpus(system):
     if gpus:
         log.info('Using GPUs: {}'.format(gpus))
     else:
-        log.info('No GPUs available, using only one clone on CPU.')
-        # FIXME hacky way to make it instantiate only one tower
+        log.info('No GPUs available, using one clone of the network.')
+        # FIXME doesn't work. hacky way to make it instantiate only one tower
         system.num_gpus = 1
     # force ordering to match PCIE bus id, hopefully the same
     # ordering seen in nvidia-smi
@@ -71,7 +71,7 @@ class Config(ConfigBase):
         self.yaml_update(os.path.join(root, 'system.yaml'))
 
     def _finalize(self):
-        _init_gpus(self.system)
+        _init_gpus(self)
 
     def data_files(self, mode):
         path = self.dataset.path

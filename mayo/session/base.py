@@ -146,23 +146,18 @@ class Session(object, metaclass=SessionMeta):
     def num_examples_per_epoch(self):
         return self.config.dataset.num_examples_per_epoch[self.mode]
 
-    def _mean_metric(self, func):
-        return tf.reduce_mean(list(self.net_map(func)))
-
-    @memoize_property
-    def loss(self):
-        # average loss without regularization, only for human consumption
-        return self._mean_metric(lambda net: net.loss())
-
     def global_variables(self):
         return tf.global_variables()
 
     def trainable_variables(self):
         return tf.trainable_variables()
 
-    def get_collection(self, key):
-        func = lambda net: tf.get_collection(key)
-        return flatten(self.net_map(func))
+    def get_collection(self, key, first_gpu=False):
+        func = lambda net, *args: tf.get_collection(key)
+        collections = list(self.task.map(func))
+        if first_gpu:
+            return collections[0]
+        return flatten(collections)
 
     def assign(self, var, tensor, raw_run=False):
         """

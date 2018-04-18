@@ -22,6 +22,9 @@ model:
             kernel_size: 5
             padding: valid
             num_outputs: 20
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.004
         pool0: &pool
             type: max_pool
             kernel_size: 2
