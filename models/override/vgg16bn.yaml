@@ -2,7 +2,7 @@
 # model/vgg16bn.yaml should in theory import model/vgg16.yaml,
 # so that this file can also import model/override/vgg16.yaml to avoid
 # repetition
-_import: vgg16bn.yaml
+_import: ../vgg16bn.yaml
 model.layers:
     conv1_1: &conv {overrider: $(_overrider.conv)}
     conv1_2: {<<: *conv}
