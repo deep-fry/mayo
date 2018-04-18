@@ -1,9 +1,14 @@
 ---
-_import: ../../vgg16_bn.yaml
+_import: ../vgg16_bn.yaml
 _gate:
-    policy: parametric_gamma
-    density: 0.5
-    weight: 0.00001
+    enable: true
+    policy: parametric
+    density: 1.0
+    pool: avg
+    regularizer:
+        # l1: 0.00000001
+        moe: 0.00001
+    threshold: online
 _trainable: true
 model:
     name: vgg16_bn
