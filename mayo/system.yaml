@@ -1,7 +1,7 @@
 ---
 system:
     num_gpus: 1
-    gpu_mem_bound: 500
+    gpu_memory_bound: 500
     visible_gpus: auto
     preprocess:
         num_threads: 8

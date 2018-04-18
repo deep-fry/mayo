@@ -10,7 +10,7 @@ from mayo.session.base import Session
 class Train(Session):
     mode = 'train'
 
-    def __init__(self, config):
+    def __init__(self, task, config):
         super().__init__(config)
         self._run_train_ops = True
         self._setup_train_operation()
@@ -33,6 +33,10 @@ class Train(Session):
             'Using learning rate {!r} with params {}.'
             .format(lr_class.__name__, params))
         return lr_class(**params)
+
+    @memoize_property
+    def loss(self):
+        return tf.reduce_mean(self.task.map(self.task.train))
 
     @memoize_property
     def optimizer(self):
@@ -70,6 +74,8 @@ class Train(Session):
     def _loss_formatter(key, name):
         def formatter(estimator):
             loss_mean, loss_std = estimator.get_mean_std(key)
+            if math.isnan(loss_mean):
+                raise ValueError('Model diverged with a nan-valued loss.')
             loss_std = '±{}'.format(Percent(loss_std / loss_mean))
             return '{}: {:10f}{:5}'.format(name, loss_mean, loss_std)
         return formatter
@@ -84,11 +90,11 @@ class Train(Session):
                 tf.add_n(regularization), 'regularization',
                 formatter=formatter)
 
-        def gradient(net):
-            loss = tf.add_n([net.loss()] + regularization)
-            return self.optimizer.compute_gradients(loss)
+        def gradient(net, prediction, truth):
+            loss = [self.task.train(prediction, truth)] + regularization
+            return self.optimizer.compute_gradients(tf.add_n(loss))
 
-        tower_grads = self.net_map(gradient)
+        tower_grads = self.task.map(gradient)
         return self._average_gradients(tower_grads)
 
     def _setup_train_operation(self):
@@ -114,12 +120,6 @@ class Train(Session):
 
     def _init(self):
         self.load_checkpoint(self.config.system.checkpoint.load)
-        # formatters
-        accuracy_formatter = lambda e: \
-            'accuracy: {}'.format(Percent(e.get_mean('accuracy')))
-        # register progress update statistics
-        self.estimator.register(
-            self.accuracy, 'accuracy', formatter=accuracy_formatter)
         formatter = self._loss_formatter('loss', 'loss')
         self.estimator.register(self.loss, 'loss', formatter=formatter)
 
@@ -140,10 +140,8 @@ class Train(Session):
 
     def once(self):
         train_op = self._train_op if self._run_train_ops else []
-        tasks = [train_op, self.loss, self.num_epochs]
-        noop, loss, num_epochs = self.run(tasks, batch=True)
-        if math.isnan(loss):
-            raise ValueError('Model diverged with a nan-valued loss.')
+        tasks = [train_op, self.num_epochs]
+        noop, num_epochs = self.run(tasks, batch=True)
         return num_epochs
 
     def _overriders_call(self, func_name):

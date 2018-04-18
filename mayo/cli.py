@@ -10,7 +10,7 @@ from docopt import docopt
 from mayo.log import log
 from mayo.config import Config
 from mayo.session import (
-    Evaluate, FastEvaluate, Train, LayerwiseRetrain, GlobalRetrain, Profile)
+    Evaluate, Train, LayerwiseRetrain, GlobalRetrain, Profile)
 
 _root = os.path.dirname(__file__)
 
@@ -111,13 +111,10 @@ Arguments:
         'model.name',
         'model.layers',
         'model.graph',
-        'dataset.num_classes',
-        'dataset.preprocess.shape',
-        'dataset.background_class.use',
     ]
     _dataset_keys = [
         'dataset.name',
-        'dataset.background_class.has',
+        'dataset.task',
     ]
     _validate_keys = [
         'dataset.path.validate',
@@ -136,7 +133,6 @@ Arguments:
         'retrain-layer': LayerwiseRetrain,
         'retrain-global': GlobalRetrain,
         'validate': Evaluate,
-        'fast-validate': FastEvaluate,
     }
     _keys_map = {
         'train': _train_keys,
@@ -144,7 +140,6 @@ Arguments:
         'retrain-layer': _train_keys,
         'retrain-global': _train_keys,
         'validate': _validate_keys,
-        'fast-validate': _validate_keys,
     }
 
     def _get_session(self, action=None):
@@ -211,13 +206,6 @@ Arguments:
     def cli_retrain_global(self):
         """Performs retraining.  """
         return self._get_session('retrain-global').retrain()
-
-    def cli_fast_eval(self):
-        """
-        Evaluates the approximate accuracy of a saved model with
-        multiple threads.
-        """
-        return self._get_session('fast-validate').eval()
 
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """

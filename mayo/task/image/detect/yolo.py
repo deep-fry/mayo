@@ -1,10 +1,11 @@
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.net.tf.detect.util import cartesian, iou
+from mayo.task.image.base import ImageTaskBase
+from mayo.task.image.detect.util import cartesian, iou
 
 
-class YOLOv2(object):
+class YOLOv2(ImageTaskBase):
     """
     YOLOv2 image detection algorithm.
 
@@ -13,7 +14,7 @@ class YOLOv2(object):
         https://github.com/allanzelener/YAD2K/blob/master/yad2k/models/keras_yolo.py
     """
     def __init__(
-            self, config, anchors,
+            self, session, anchors,
             object_scale=1, noobject_scale=0.5,
             coordinate_scale=5, class_scale=1,
             num_cells=13, iou_threshold=0.6):
@@ -24,6 +25,7 @@ class YOLOv2(object):
             the threshold of IOU upper-bound to suppress the absense
             of object in loss.
         """
+        super().__init__(session)
         self.anchors = anchors
         self.num_anchors = anchors.shape[0]
         height, width = config.image_shape()
@@ -38,6 +40,10 @@ class YOLOv2(object):
         self.cell_size = self.image_size / num_cells
         self.iou_threshold = iou_threshold
         self._base_shape = [num_cells, num_cells, self.num_anchors]
+        self.object_scale = object_scale
+        self.noobject_scale = noobject_scale
+        self.coordinate_scale = coordinate_scale
+        self.class_scale = class_scale
 
     def transform_truth(self, box, label):
         """

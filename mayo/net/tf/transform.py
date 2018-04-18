@@ -16,10 +16,9 @@ def use_name_not_scope(params):
 
 
 class ParameterTransformer(object):
-    def __init__(self, session, num_classes, reuse):
+    def __init__(self, session, reuse):
         super().__init__()
         self.session = session
-        self.num_classes = num_classes
         self.is_training = session.is_training
         self.reuse = reuse
         self.overriders = []
@@ -79,9 +78,6 @@ class ParameterTransformer(object):
                 activation_overrider.apply(
                     node, 'activations', tf.get_variable, x))
             self.overriders.append(activation_overrider)
-        # num outputs
-        if params.get('num_outputs', None) == 'num_classes':
-            params['num_outputs'] = self.num_classes
         # set up other parameters
         params['scope'] = node.name
         try:

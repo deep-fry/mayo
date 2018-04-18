@@ -1,53 +1,33 @@
 import collections
 
 import tensorflow as tf
-from tensorflow.contrib import slim
 
 from mayo.log import log
-from mayo.util import memoize_method, Table, object_from_params
+from mayo.util import Table, object_from_params
 from mayo.net.base import NetBase
 from mayo.net.tf.transform import ParameterTransformer
 
 
-class TFTaskBase(object):
-    """Specifies common training and evaluation tasks.  """
-    def train(self, predictions, labels):
-        raise NotImplementedError(
-            'Please implement .train() which returns the loss tensor.')
-
-    def eval(self, predictions, labels):
-        raise NotImplementedError(
-            'Please implement .eval() which returns the evaluation metrics.')
-
-
 class TFNetBase(NetBase):
     """Instantiates a TensorFlow network from the DAG graph.  """
-
-    def __init__(self, session, model, images, labels, num_classes, reuse):
+    def __init__(self, session, model, inputs, reuse):
         self.session = session
         self.is_training = session.is_training
-        self._transformer = ParameterTransformer(session, num_classes, reuse)
-        super().__init__(model, {'input': images})
-        self._labels = labels
+        self._transformer = ParameterTransformer(session, reuse)
+        super().__init__(model, inputs)
         self._verify_io()
 
     def _verify_io(self):
         nodes = list(self._graph.input_nodes())
         if len(nodes) != 1 and nodes[0].name != 'input':
             raise ValueError(
-                'We expect the graph to have a unique images input named '
+                'We expect the graph to have a unique data input named '
                 '"input", found {!r}.'.format(nodes))
         nodes = list(self._graph.output_nodes())
         if len(nodes) != 1 or nodes[0].name != 'output':
             raise ValueError(
-                'We expect the graph to have a unique logits output named '
+                'We expect the graph to have a unique prediction output named '
                 '"output", found {!r}.'.format(nodes))
-
-    def labels(self):
-        return self._labels
-
-    def logits(self):
-        return self.outputs()['output']
 
     @property
     def overriders(self):
@@ -56,37 +36,6 @@ class TFNetBase(NetBase):
     @property
     def variables(self):
         return self._transformer.variables
-
-    @memoize_method
-    def loss(self):
-        logits = self.logits()
-        with tf.name_scope('loss'):
-            labels = slim.one_hot_encoding(self.labels(), logits.shape[1])
-            loss = tf.losses.softmax_cross_entropy(
-                logits=logits, onehot_labels=labels)
-        return loss
-
-    def top(self, count=1):
-        name = 'top_{}'.format(count)
-        try:
-            return self._tensors[name]
-        except KeyError:
-            pass
-        top = tf.nn.in_top_k(self.logits(), self.labels(), count)
-        self._tensors[name] = top
-        return top
-
-    def accuracy(self, top_n=1):
-        name = 'accuracy_{}'.format(top_n)
-        try:
-            return self._tensors[name]
-        except KeyError:
-            pass
-        top = self.top(top_n)
-        acc = tf.reduce_sum(tf.cast(top, tf.float32))
-        acc /= top.shape.num_elements()
-        self._tensors[name] = acc
-        return acc
 
     def info(self, plumbing):
         def shape(v):

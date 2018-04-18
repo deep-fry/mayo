@@ -1,17 +1,19 @@
 ---
 dataset:
     name: mnist
+    task:
+        type: mayo.task.image.Classify
+        num_classes: 10
+        background_class: {has: false}
+        shape:
+            height: 28
+            width: 28
+            channels: 1
+        preprocess:
+            train: []
     path:
         train: mnist/train.tfrecord
         validate: mnist/test.tfrecord
-    num_classes: 10
-    background_class: {has: false}
     num_examples_per_epoch:
         train: 60000
         validate: 10000
-    shape:
-        height: 28
-        width: 28
-        channels: 1
-    preprocess:
-        train: []

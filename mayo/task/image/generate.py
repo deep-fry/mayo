@@ -1,24 +1,21 @@
 import tensorflow as tf
 
-from mayo.log import log
 from mayo.util import ensure_list
-from mayo.preprocess.augment import Augment
+from mayo.task.image.augment import Augment
 
 
 class Preprocess(object):
-    def __init__(self, session, mode, config, num_gpus):
+    def __init__(self, system, mode, files, actions, shape, moment=None):
         super().__init__()
-        self.session = session
+        self.system = system
+        self.mode = mode
         if mode not in ['train', 'validate']:
             raise ValueError(
-                'Unrecognized preprocessing mode {!r}'.format(mode))
-        self.mode = mode
-        self.config = config
-        self.num_gpus = num_gpus
-        self.batch_size_per_gpu = self.config.system.batch_size_per_gpu
-        self.num_threads = self.config.system.preprocess.num_threads
-        self.moment = self.config.dataset.get('moment')
-        self.image_shape = self.config.image_shape()
+                'Unrecognized preprocessing mode {!r}'.format(self.mode))
+        self.files = files
+        self.actions = actions
+        self.shape = (shape['height'], shape['width'], shape['channels'])
+        self.moment = moment
 
     @staticmethod
     def _decode_jpeg(buffer, channels):
@@ -60,40 +57,35 @@ class Preprocess(object):
         return encoded, label, bboxes, text
 
     def _actions(self, key):
-        actions_map = self.config.dataset.preprocess
-        return ensure_list(actions_map.get(key) or [])
+        return ensure_list(self.actions.get(key) or [])
 
     def _preprocess(self, serialized):
         #  return tf.ones((224, 224, 3), tf.float32), tf.ones(1, tf.int32)
         # unserialize and prepocess image
         buffer, label, bbox, _ = self._parse_proto(serialized)
         # decode jpeg image
-        channels = self.image_shape[-1]
+        channels = self.shape[-1]
         image = self._decode_jpeg(buffer, channels)
         # augment image
-        augment = Augment(image, bbox, self.image_shape, self.moment)
+        augment = Augment(image, bbox, self.shape, self.moment)
         actions = self._actions(self.mode) + self._actions('final_cpu')
         image = augment.augment(actions)
-        # add label offset
-        offset = self.config.label_offset()
-        log.debug('Incrementing label by offset {}...'.format(offset))
-        return image, label + offset
+        return image, label
 
     def preprocess(self):
         # file names
-        files = self.config.data_files(self.mode)
-        num_gpus = self.num_gpus
-        batch_size = self.batch_size_per_gpu * num_gpus
-        dataset = tf.data.Dataset.from_tensor_slices(files)
+        num_gpus = self.system.num_gpus
+        batch_size = self.system.batch_size_per_gpu * num_gpus
+        dataset = tf.data.Dataset.from_tensor_slices(self.files)
         if self.mode == 'train':
             # shuffle .tfrecord files
-            dataset = dataset.shuffle(buffer_size=len(files))
+            dataset = dataset.shuffle(buffer_size=len(self.files))
         # tfrecord files to images
         dataset = dataset.flat_map(tf.data.TFRecordDataset)
         dataset = dataset.repeat()
-        dataset = dataset.map(
-            self._preprocess, num_parallel_calls=self.num_threads)
-        dataset = dataset.prefetch(self.num_threads * batch_size)
+        num_threads = self.system.preprocess.num_threads
+        dataset = dataset.map(self._preprocess, num_parallel_calls=num_threads)
+        dataset = dataset.prefetch(num_threads * batch_size)
         if self.mode == 'train':
             buffer_size = min(1024, 10 * batch_size)
             dataset = dataset.shuffle(buffer_size=buffer_size)
@@ -103,7 +95,7 @@ class Preprocess(object):
         images, labels = iterator.get_next()
         # ensuring the shape of images and labels to be constants
         batch_shape = (batch_size, )
-        images = tf.reshape(images, batch_shape + self.image_shape)
+        images = tf.reshape(images, batch_shape + self.shape)
         labels = tf.reshape(labels, batch_shape)
         batch_images_labels = list(zip(
             tf.split(images, num_gpus), tf.split(labels, num_gpus)))
@@ -113,7 +105,7 @@ class Preprocess(object):
             for gid, (images, labels) in enumerate(batch_images_labels):
                 with tf.device('/gpu:{}'.format(gid)):
                     augment = Augment(
-                        images, None, self.image_shape, self.moment, None)
+                        images, None, self.shape, self.moment, None)
                     images = augment.augment(gpu_actions, ensure_shape=False)
                     batch_images_labels[gid] = (images, labels)
         return batch_images_labels

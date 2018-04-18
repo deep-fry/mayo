@@ -1,40 +1,16 @@
 import math
-import functools
-
-import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import Percent, Table
 from mayo.session.base import Session
 
 
-class EvaluateBase(Session):
+class Evaluate(Session):
     mode = 'validate'
 
-    def __init__(self, config):
-        super().__init__(config)
-        self._setup()
-
-    def _setup(self):
-        # setup metrics
-        metrics_func = lambda net: (net.top(1), net.top(5))
-        top1s, top5s = zip(*self.net_map(metrics_func))
-        top1s = tf.concat(top1s, axis=0)
-        top5s = tf.concat(top5s, axis=0)
-
-        formatted_history = {}
-
-        def formatter(estimator, name):
-            history = formatted_history.setdefault(name, [])
-            value = estimator.get_value(name)
-            history.append(sum(value))
-            accuracy = Percent(sum(history) / (self.batch_size * len(history)))
-            return '{}: {}'.format(name, accuracy)
-
-        for tensor, name in ((top1s, 'top1'), (top5s, 'top5')):
-            self.estimator.register(
-                tensor, name, history='infinite',
-                formatter=functools.partial(formatter, name=name))
+    def _finalize(self):
+        super()._finalize()
+        self.task.map_eval()
 
     def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint
@@ -95,11 +71,3 @@ class EvaluateBase(Session):
         except KeyboardInterrupt:
             pass
         return results
-
-
-class Evaluate(EvaluateBase):
-    num_gpus = 1
-
-
-class FastEvaluate(EvaluateBase):
-    pass
