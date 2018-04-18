@@ -71,7 +71,7 @@ class Config(ConfigBase):
         self.yaml_update(os.path.join(root, 'system.yaml'))
 
     def _finalize(self):
-        _init_gpus(self)
+        _init_gpus(self.system)
 
     def data_files(self, mode):
         path = self.dataset.path
