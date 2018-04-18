@@ -1,0 +1,23 @@
+---
+# model/vgg16bn.yaml should in theory import model/vgg16.yaml,
+# so that this file can also import model/override/vgg16.yaml to avoid
+# repetition
+_import: ../vgg16_bn.yaml
+model.layers:
+    conv1_1: &conv {overrider: $(_overrider.conv)}
+    conv1_2: {<<: *conv}
+    conv2_1: {<<: *conv}
+    conv2_2: {<<: *conv}
+    conv3_1: {<<: *conv}
+    conv3_2: {<<: *conv}
+    conv3_3: {<<: *conv}
+    conv4_1: {<<: *conv}
+    conv4_2: {<<: *conv}
+    conv4_3: {<<: *conv}
+    conv5_1: {<<: *conv}
+    conv5_2: {<<: *conv}
+    conv5_3: {<<: *conv}
+    fc6: &fc {overrider: $(_overrider.fc)}
+    fc7: {<<: *fc}
+    fc8: {<<: *fc}
+    logits: {overrider: $(_overrider.logits)}
