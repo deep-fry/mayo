@@ -1,11 +1,15 @@
 ---
-_import: ../../resnet18.yaml
+_import: ../resnet18.yaml
 _trainable: true
 _gate:
     enable: true
-    density: 0.5
-    policy: parametric_gamma
-    weight: 0.0001
+    policy: parametric
+    density: 1.0
+    pool: avg
+    regularizer:
+        # l1: 0.00000001
+        moe: 0.01
+    threshold: online
 model:
     name: resnet18
     layers:
