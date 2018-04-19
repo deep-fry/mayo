@@ -1,5 +1,5 @@
 ---
-_import: ../../alexnet.yaml
+_import: ../alexnet.yaml
 model:
     description: |
         A variant of alexnet that performs online gating.

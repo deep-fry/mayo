@@ -1,0 +1,7 @@
+---
+_import: ../lenet5_bn.yaml
+model.layers:
+    conv0: &conv {overrider: $(_overrider.conv)}
+    conv1: {<<: *conv}
+    fc1: {overrider: $(_overrider.fc)}
+    logits: {overrider: $(_overrider.logits)}

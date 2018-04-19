@@ -1,5 +1,5 @@
 ---
-_import: ../../squeezenet_v11.yaml
+_import: ../squeezenet_v11.yaml
 _trainable: false
 model:
     name: squeezenet_v11
