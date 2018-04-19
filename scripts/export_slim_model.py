@@ -48,8 +48,14 @@ def reform_weights(overriders):
         return new_weights
 
     import numpy as np
-    layer_names = ['conv0', 'conv1', 'conv2', 'conv3', 'conv4', 'conv5',
-                   'conv6', 'conv7', 'logits']
+    model = 'VGG'
+    if model == 'Cifar':
+        layer_names = ['conv0', 'conv1', 'conv2', 'conv3', 'conv4', 'conv5',
+            'conv6', 'conv7', 'logits']
+    elif model == 'VGG':
+        layer_names = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2', 'conv3_1',
+            'conv3_2', 'conv3_3', 'conv4_1', 'conv4_2', 'conv4_3', 'conv5_1',
+            'conv5_2', 'conv5_3']
     trainables = tf.trainable_variables()
     trainable_names = [trainable.name for trainable in trainables]
     slimed_weights = {}
