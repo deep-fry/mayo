@@ -10,7 +10,7 @@ from docopt import docopt
 from mayo.log import log
 from mayo.config import Config
 from mayo.session import (
-    Evaluate, Train, LayerwiseRetrain, GlobalRetrain, Profile)
+    Test, Evaluate, Train, LayerwiseRetrain, GlobalRetrain, Profile)
 
 _root = os.path.dirname(__file__)
 
@@ -120,6 +120,7 @@ Arguments:
         'dataset.path.validate',
         'dataset.num_examples_per_epoch.validate',
     ]
+    _test_keys = []
     _train_keys = [
         'dataset.path.train',
         'dataset.num_examples_per_epoch.train',
@@ -132,6 +133,7 @@ Arguments:
         'profile': Profile,
         'retrain-layer': LayerwiseRetrain,
         'retrain-global': GlobalRetrain,
+        'test': Test,
         'validate': Evaluate,
     }
     _keys_map = {
@@ -139,6 +141,7 @@ Arguments:
         'profile': _train_keys,
         'retrain-layer': _train_keys,
         'retrain-global': _train_keys,
+        'test': _test_keys,
         'validate': _validate_keys,
     }
 
@@ -153,7 +156,6 @@ Arguments:
                 self.session = self._get_session('validate')
             return self.session
         keys = self._model_keys + self._dataset_keys
-
         try:
             cls = self._session_map[action]
             keys += self._keys_map[action]
@@ -219,6 +221,9 @@ Arguments:
             f.write(result.csv())
         log.info(
             'Evaluation results saved in {!r}.'.format(file_name))
+
+    def cli_test(self):
+        return self._get_session('test').test()
 
     def cli_overriders_update(self):
         """Updates variable overriders in the training session.  """

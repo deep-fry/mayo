@@ -1,4 +1,4 @@
-colorama; sys_platform == 'win32'  # colorama is required for termcolor to run on Windows
+colorama; sys_platform == 'win32'
 docopt
 ipdb
 ipdbplugin
@@ -7,6 +7,7 @@ networkx
 nose
 Pillow
 PyYAML
-readline; sys_platform != 'win32'  # readline is not supposed to work on Windows
-tensorflow-gpu  # apparently, tensorflow w/ and w/o GPU support are two different packages... the gpu-version seems to be more appropriate here
+readline; sys_platform != 'win32'
+tensorflow
+tensorflow-gpu
 termcolor

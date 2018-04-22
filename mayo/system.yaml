@@ -39,3 +39,8 @@ system:
             - plots/$(model.name)/$(dataset.name)/
         profile:
             - profiles/$(model.name)/$(dataset.name)/
+        run:
+            inputs:
+                - runs/$(model.name)/$(dataset.name)/inputs
+            outputs:
+                - runs/$(model.name)/$(dataset.name)/outputs

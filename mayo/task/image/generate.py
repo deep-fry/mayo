@@ -72,6 +72,13 @@ class Preprocess(object):
         image = augment.augment(actions)
         return image, label
 
+    def augment(self, image):
+        # augment for validation
+        augment = Augment(image, None, self.shape, self.moment)
+        actions = self._actions(self.mode) + self._actions('final_cpu')
+        actions += self._actions(self._actions('final_gpu'))
+        return augment.augment(actions)
+
     def preprocess(self):
         # file names
         num_gpus = self.system.num_gpus
@@ -104,8 +111,7 @@ class Preprocess(object):
         if gpu_actions:
             for gid, (images, labels) in enumerate(batch_images_labels):
                 with tf.device('/gpu:{}'.format(gid)):
-                    augment = Augment(
-                        images, None, self.shape, self.moment, None)
+                    augment = Augment(images, None, self.shape, self.moment)
                     images = augment.augment(gpu_actions, ensure_shape=False)
                     batch_images_labels[gid] = (images, labels)
         return batch_images_labels

@@ -2,10 +2,10 @@ import math
 
 from mayo.log import log
 from mayo.util import Percent, Table
-from mayo.session.base import Session
+from mayo.session.base import SessionBase
 
 
-class Evaluate(Session):
+class Evaluate(SessionBase):
     mode = 'validate'
 
     def _finalize(self):

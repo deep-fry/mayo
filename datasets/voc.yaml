@@ -1,6 +1,6 @@
 ---
 dataset:
-    name: voc2012
+    name: voc
     task:
         type: mayo.task.image.YOLOv2
         num_classes: 20
@@ -11,17 +11,19 @@ dataset:
             - [6.63, 11.38]
             - [9.42, 5.11]
             - [16.62, 10.52]
-        object_scale: 5
-        noobject_scale: 1
-        coordinate_scale: 1
-        class_scale: 1
+        scales:
+            object: 5
+            noobject: 1
+            coordinate: 1
+            class: 1
         preprocess:
             train:
                 - {type: random_flip}
                 - {type: distort_color}
     path:
-        train: voc/train.tfrecord
-        validate: voc/test.tfrecord
+        train: voc/train_*.tfrecord
+        validate: voc/test_*.tfrecord
+        label: voc/labels.txt
     num_examples_per_epoch:
-        train: ...
-        validate: ...
+        train: 17125
+        validate: 5138

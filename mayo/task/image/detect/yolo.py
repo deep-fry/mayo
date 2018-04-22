@@ -1,5 +1,10 @@
+import os
+import colorsys
+
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
+from PIL import Image, ImageDraw
 
 from mayo.util import memoize_property
 from mayo.task.image.base import ImageTaskBase
@@ -14,48 +19,53 @@ class YOLOv2(ImageTaskBase):
         https://arxiv.org/pdf/1612.08242.pdf
         https://github.com/allanzelener/YAD2K/blob/master/yad2k/models/keras_yolo.py
     """
+    _default_scales = {
+        'object': 1,
+        'noobject': 0.5,
+        'coordinate': 5,
+        'class': 1,
+    }
+
     def __init__(
             self, session, preprocess, num_classes, shape,
-            anchors, object_scale=1, noobject_scale=0.5,
-            coordinate_scale=5, class_scale=1,
-            num_cells=13, iou_threshold=0.6, score_threshold=0.6,
-            nms_iou_threshold=0.5, max_num_boxes=10):
+            anchors, scales, moment=None, num_cells=13,
+            iou_threshold=0.6, score_threshold=0.6,
+            nms_iou_threshold=0.5, nms_max_boxes=10):
         """
-        anchors: a list of anchor boxes [(h, w), ...].
-        num_cells: the number of cells to divide the image into a grid.
-        iou_threshold:
+        anchors (list): a list of anchor boxes [(h, w), ...].
+        scales (dict): the weights of the losses.
+        num_cells (int): the number of cells to divide the image into a grid.
+        iou_threshold (float):
             the threshold of IOU upper-bound to suppress the absense
             of object in training loss.
-        score_threshold:
+        score_threshold (float):
             the threshold used to filter less confident detections
             during validation.
-        nms_iou_threshold:
+        nms_iou_threshold (float):
             the IOU threshold used by non-max suppression during validation.
         """
-        super().__init__(session)
+        super().__init__(session, preprocess, shape, moment)
+        self.batch_size = session.batch_size
         self._anchors = anchors
         self.num_anchors = len(anchors)
+        self.num_classes = num_classes
+
         height, width = shape['height'], shape['width']
         if height != width:
             raise ValueError('We expect the image to be square for YOLOv2.')
         self.image_size = height
-        self.batch_size = session.batch_size
         if not self.image_size % num_cells:
             raise ValueError(
                 'The size of image must be divisible by the number of cells.')
         self.num_cells = num_cells
-
         self.cell_size = self.image_size / num_cells
         self._base_shape = [num_cells, num_cells, self.num_anchors]
 
-        self.object_scale = object_scale
-        self.noobject_scale = noobject_scale
-        self.coordinate_scale = coordinate_scale
-        self.class_scale = class_scale
+        self.scales = dict(self._default_scales, **scales)
         self.iou_threshold = iou_threshold
         self.score_threshold = score_threshold
         self.nms_iou_threshold = nms_iou_threshold
-        self.max_num_boxes = max_num_boxes
+        self.nms_max_boxes = nms_max_boxes
 
     @memoize_property
     def anchors(self):
@@ -144,41 +154,7 @@ class YOLOv2(ImageTaskBase):
         label = tf.scatter_nd(index, label, self._base_shape)
         return objectness, box, label
 
-    def preprocess(self):
-        """
-        Additional tensor decomposition in preprocessing.
-
-        prediction:
-            a (batch x num_cells x num_cells x num_anchors x (5 + num_classes))
-            prediction, where each element of the last dimension (5 +
-            num_classes) consists of a objectness probability (1), a bounding
-            box (4), and a one-hot list (num_classes) of class probabilities.
-        truth:
-            a (batch x num_objects x 5) tensor, where each item of the
-            last dimension (5) consists of a bounding box (4), and a label (1).
-        """
-        for prediction, truth in super().preprocess():
-            data = {}
-            obj_p, box_p, hot_p = tf.split(
-                prediction, [1, 4, self.num_classes], axis=-1)
-            prediction = {
-                'object': obj_p,
-                'box': box_p,
-                'outbox': self._cell_to_global(box_p),
-                'class': hot_p,
-            }
-            # the original box and label values from the dataset
-            outbox, label = tf.split(truth, [4, 1], axis=-1)
-            obj, box, label = self._truth_to_cell(outbox, label)
-            truth = {
-                'object': obj,
-                'box': box,
-                'rawbox': outbox,
-                'class': slim.one_hot_encoding(label, self.num_classes),
-            }
-            yield prediction, truth
-
-    def _eval(self, prediction):
+    def _test(self, prediction):
         # filter objects with a low confidence score
         # batch x cell x cell x anchors x classes
         confidence = prediction['object'] * prediction['class']
@@ -193,14 +169,88 @@ class YOLOv2(ImageTaskBase):
 
         # non-max suppression
         indices = tf.image.non_max_suppression(
-            boxes, scores, self.max_num_boxes, self.nms_iou_threshold)
+            boxes, scores, self.nms_max_boxes, self.nms_iou_threshold)
         boxes = tf.gather_nd(boxes, indices)
         scores = tf.gather_nd(scores, indices)
         classes = tf.gather_nd(classes, indices)
         return boxes, scores, classes
 
+    def preprocess(self):
+        """
+        Additional tensor decomposition in preprocessing.
+
+        prediction:
+            a (batch x num_cells x num_cells x num_anchors x (5 + num_classes))
+            prediction, where each element of the last dimension (5 +
+            num_classes) consists of a objectness probability (1), a bounding
+            box (4), and a one-hot list (num_classes) of class probabilities.
+        truth:
+            a (batch x num_objects x 5) tensor, where each item of the
+            last dimension (5) consists of a bounding box (4), and a label (1).
+        """
+        for prediction, truth in super().preprocess():
+            obj_predict, box_predict, hot_predict = tf.split(
+                prediction, [1, 4, self.num_classes], axis=-1)
+            prediction = {
+                'object': obj_predict,
+                'box': box_predict,
+                'outbox': self._cell_to_global(box_predict),
+                'class': hot_predict,
+            }
+            box_test, score_test, class_test = self._test(prediction)
+            prediction['test'] = {
+                'box': box_test,
+                'class': class_test,
+                'score': score_test,
+            }
+            # the original box and label values from the dataset
+            outbox, label = tf.split(truth, [4, 1], axis=-1)
+            obj, box, label = self._truth_to_cell(outbox, label)
+            truth = {
+                'object': obj,
+                'box': box,
+                'rawbox': outbox,
+                'class': slim.one_hot_encoding(label, self.num_classes),
+            }
+            yield prediction, truth
+
+    @memoize_property
+    def colors(self):
+        for i in range(self.num_classes):
+            rgb = colorsys.hsv_to_rgb((i / self.num_classes, 1, 1))
+            yield [int(c * 255) for c in rgb]
+
+    def test(self, name, image, prediction):
+        height, width, _ = image.size
+        image = Image.fromarray(np.uint8(image))
+        boxes, scores, classes = prediction['test']
+        thickness = int((height + width) / 300)
+        for box, score, cls in zip(boxes, scores, classes):
+            draw = ImageDraw(image)
+            y, x, h, w = box
+            top = max(0, round(y - h / 2))
+            bottom = min(height, round(y + h / 2))
+            left = max(0, round(x - w / 2))
+            right = min(width, round(x + w / 2))
+            for i in range(thickness):
+                draw.rectangle(
+                    [left + i, top + i, right - i, bottom - i],
+                    outline=self.colors[cls])
+            # draw label
+            label = '{} {:.2f}'.format(self.class_names[cls], score)
+            label_width, label_height = draw.textsize(label)
+            label_pos = [
+                left, max(0, top - label_height),
+                left + label_width, top + label_height]
+            draw.rectangle(label_pos, fill=self.colors[cls])
+            draw.text(label_pos[:2], label, fill=(0, 0, 0))
+        path = self.session.config.system.search_path.run
+        path = os.path.join(path, 'classify')
+        os.makedirs(path, exist_ok=True)
+        path = os.path.join(path, name)
+        image.save(path, quality=90)
+
     def eval(self, net, prediction, truth):
-        boxes, scores, classes = self._eval(prediction)
         ...
 
     def train(self, net, prediction, truth):
@@ -212,16 +262,16 @@ class YOLOv2(ImageTaskBase):
         xy, wh = tf.split(truth['box'], [2, 2], axis=-1)
         coord_loss = (xy - xy_p) ** 2 + (tf.sqrt(wh) - tf.sqrt(wh_p)) ** 2
         coord_loss = tf.reduce_sum(truth['object'] * coord_loss)
-        coord_loss *= self.coordinate_scale
+        coord_loss *= self.scales['coordinate']
 
         # objectness loss
         obj_loss = truth['object'] * (1 - prediction['object']) ** 2
-        obj_loss = self.object_scale * tf.reduce_sum(obj_loss)
+        obj_loss = self.scales['object'] * tf.reduce_sum(obj_loss)
 
         # class loss
         class_loss = (truth['class'] - prediction['class']) ** 2
         class_loss = tf.reduce_sum(truth['object'] * class_loss)
-        class_loss *= self.class_scale
+        class_loss *= self.scales['class']
 
         # no-object loss
         # match shape
@@ -237,6 +287,6 @@ class YOLOv2(ImageTaskBase):
         is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.int32)
         noobj_loss = (1 - truth['object']) * is_obj_absent
         noobj_loss *= prediction['object'] ** 2
-        noobj_loss = self.noobject_scale * tf.reduce_sum(noobj_loss)
+        noobj_loss = self.scales['noobject'] * tf.reduce_sum(noobj_loss)
 
         return obj_loss + noobj_loss + coord_loss + class_loss

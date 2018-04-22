@@ -1,4 +1,5 @@
 import os
+import types
 import functools
 import contextlib
 import collections
@@ -24,6 +25,9 @@ def memoize_method(func):
             return getattr(self, name)
         except AttributeError:
             result = func(self, *args, **kwargs)
+            if isinstance(result, types.GeneratorType):
+                # automatically resolve generators
+                result = list(result)
             setattr(self, name, result)
             return result
     return wrapped

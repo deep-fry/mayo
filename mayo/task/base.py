@@ -11,12 +11,13 @@ class TFTaskBase(object):
     """Specifies common training and evaluation tasks.  """
     def __init__(self, session):
         super().__init__()
+        self.test = getattr(session, 'test', False)
         self.session = session
         self.config = session.config
         self.num_gpus = self.config.system.num_gpus
         self.mode = session.mode
         self.estimator = session.estimator
-        self.nets, self.predictions, self.truths = self._instantiate_nets()
+        self._instantiate_nets()
         self._register_estimates()
 
     @contextmanager
@@ -33,17 +34,34 @@ class TFTaskBase(object):
 
     def _instantiate_nets(self):
         nets = []
+        inputs = []
         predictions = []
         truths = []
+        names = []
         model = self.config.model
-        for i, (inputs, truth) in enumerate(self.preprocess()):
+        if self.test:
+            folder = self.config.system.search_path.run.inputs[0]
+            iterer = self.augment(folder)
+        else:
+            iterer = self.generate()
+        for i, (data, additional) in enumerate(iterer):
+            if self.test:
+                name, truth = additional, None
+            else:
+                name, truth = None, additional
             log.debug('Instantiating graph for GPU #{}...'.format(i))
             with self._gpu_context(i):
-                net = TFNet(self.session, model, inputs, bool(nets))
+                net = TFNet(self.session, model, data, bool(nets))
             nets.append(net)
+            inputs.append(data)
             predictions.append(net.outputs())
             truths.append(truth)
-        return nets, predictions, truths
+            names.append(name)
+        self.nets = nets
+        self.inputs = inputs
+        self.predictions = predictions
+        self.truths = truths
+        self.names = names
 
     def _register_estimates(self):
         history = 'infinite' if self.mode == 'validate' else None
@@ -52,10 +70,14 @@ class TFTaskBase(object):
                 value, 'predictions.{}'.format(key), history=history)
         self.estimator.register(self.truths[0], 'truth', history=history)
 
-    def preprocess(self):
+    def generate(self):
         raise NotImplementedError(
-            'Please implement .preprocess() which produces training samples '
-            'and the expected truth results.')
+            'Please implement .generate() which produces training/validation '
+            'samples and the expected truth results.')
+
+    def augment(self, serialized):
+        raise NotImplementedError(
+            'Please implement .augment() which augments input tensors.')
 
     def train(self, net, prediction, truth):
         raise NotImplementedError(
@@ -64,6 +86,11 @@ class TFTaskBase(object):
     def eval(self, net, prediction, truth):
         raise NotImplementedError(
             'Please implement .eval() which returns the evaluation metrics.')
+
+    def test(self, name, inputs, prediction):
+        raise NotImplementedError(
+            'Please implement .test() which produces human-readable output '
+            'for a given input.')
 
     def map_train(self):
         return list(self.map(self.train))

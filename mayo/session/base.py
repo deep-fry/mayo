@@ -53,11 +53,12 @@ class SessionMeta(type):
         return wrapped
 
 
-class Session(object, metaclass=SessionMeta):
+class SessionBase(object, metaclass=SessionMeta):
     mode = None
 
     def __init__(self, config):
         super().__init__()
+        log.debug('Instantiating...')
         # the default graph is made read-only to ensure
         # we always write to our graph
         default_graph = tf.get_default_graph()
@@ -299,9 +300,12 @@ class Session(object, metaclass=SessionMeta):
             results = self.raw_run(ops, **kwargs)
         return results
 
+    @property
+    def _task_constructor(self):
+        return object_from_params(self.config.dataset.task)
+
     def _instantiate_task(self):
-        log.debug('Instantiating...')
-        task_cls, task_params = object_from_params(self.config.dataset.task)
+        task_cls, task_params = self._task_constructor
         self.task = task_cls(self, **task_params)
 
     def interact(self):

@@ -5,10 +5,10 @@ import tensorflow as tf
 from mayo.log import log
 from mayo.util import (
     Percent, memoize_method, memoize_property, object_from_params)
-from mayo.session.base import Session
+from mayo.session.base import SessionBase
 
 
-class Train(Session):
+class Train(SessionBase):
     mode = 'train'
 
     def __init__(self, config):

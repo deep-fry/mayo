@@ -11,10 +11,10 @@ class Classify(ImageTaskBase):
     def __init__(
             self, session, preprocess,
             background_class, num_classes, shape, moment=None):
-        self.label_offset = \
-            int(background_class.get('use')) - \
-            int(background_class.get('has'))
-        session.config.dataset.task.num_classes += self.label_offset
+        bg = background_class
+        self.label_offset = int(bg.get('use')) - int(bg.get('has'))
+        self.num_classes = num_classes + self.label_offset
+        session.config.dataset.task.num_classes = self.num_classes
         super().__init__(session, preprocess, shape, moment=None)
 
     def preprocess(self):
@@ -41,7 +41,7 @@ class Classify(ImageTaskBase):
     def train(self, net, prediction, truth):
         prediction = prediction['output']
         self._train_setup(prediction, truth)
-        truth = slim.one_hot_encoding(truth, prediction.shape[1])
+        truth = slim.one_hot_encoding(truth, self.num_classes)
         return tf.losses.softmax_cross_entropy(
             logits=prediction, onehot_labels=truth)
 
