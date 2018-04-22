@@ -7,7 +7,9 @@ _gate:
     density: 1.0
     pool: avg
     weight: 0.000001
-    regularizer: [moe, moi]
+    regularizer:
+        l1: 0.00000001
+        moe: 0.0001
     threshold: global
 model:
     name: lenet5

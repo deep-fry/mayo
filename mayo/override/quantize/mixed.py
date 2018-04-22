@@ -75,11 +75,8 @@ class MixedQuantizer(QuantizerBase):
                     result = quantized_values[key] * channel_mask
                 else:
                     result += quantized_values[key] * channel_mask
-            # now handel off_mask
-        channel_mask = tf.reshape(
-            self.channel_mask,
-            [1, 1, 1, self.channel_mask.shape[0]])
-        off_mask = util.cast(util.equal(channel_mask, 0), float)
+        # now handel off_mask
+        off_mask = util.cast(util.equal(self.channel_mask, 0), float)
         return value * off_mask + result
 
     def _quantization_loss(self, value, quantized_value):
