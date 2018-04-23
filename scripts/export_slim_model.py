@@ -15,7 +15,6 @@ def reform_weights(overriders):
                 mask = np.ones(mask.shape)
             else:
                 mask = overrider.mask.eval()
-            mask = overrider.mask.eval()
             name = overrider.name
             overriders_dict[name] = [value, mask]
             mask_dict[name] = mask
