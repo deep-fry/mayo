@@ -12,8 +12,9 @@ class ImageTaskBase(TFTaskBase):
         system = session.config.system
         mode = session.mode
         files = session.config.data_files(mode)
+        after_shape = preprocess['shape']
         self._preprocessor = Preprocess(
-            system, mode, files, preprocess, shape, moment)
+            system, mode, files, preprocess, shape, after_shape, moment)
         super().__init__(session)
 
     def augment(self, folder):

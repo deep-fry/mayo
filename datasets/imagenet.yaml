@@ -1,20 +1,22 @@
 ---
 dataset:
     name: imagenet
+    task:
+        type: mayo.task.image.Classify
+        num_classes: 1001
+        background_class: {has: true}
+        shape:
+            channels: 3
+        preprocess:
+            train:
+                - {type: distort_bbox}
+                - {type: random_flip}
+        moment:
+            mean: [0.485, 0.456, 0.406]
+            std: [0.229, 0.224, 0.225]
     path:
         train: imagenet/train-*
         validate: imagenet/validation-*
-    num_classes: 1001
-    background_class: {has: true}
     num_examples_per_epoch:
         train: 1281167
         validate: 50000
-    shape:
-        channels: 3
-    moment:
-        mean: [0.485, 0.456, 0.406]
-        std: [0.229, 0.224, 0.225]
-    preprocess:
-        train:
-            - {type: distort_bbox}
-            - {type: random_flip}

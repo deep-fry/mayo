@@ -1,19 +1,20 @@
 ---
 dataset:
-    background_class: {use: false}
-    preprocess:
-        shape:
-            height: 224
-            width: 224
-            channels: 3
-        validate:
-            # alternative validate preprocessing pipeline
-            # - {type: resize, height: 256, width: 256, fill: true}
-            # - {type: crop_or_pad, height: 224, width: 224}
-            - {type: central_crop, fraction: 0.875}
-        final_cpu: null
-        final_gpu:
-            - {type: normalize_channels}
+    task:
+        background_class: {use: false}
+        preprocess:
+            shape:
+                height: 224
+                width: 224
+                channels: 3
+            validate:
+                # alternative validate preprocessing pipeline
+                # - {type: resize, height: 256, width: 256, fill: true}
+                # - {type: crop_or_pad, height: 224, width: 224}
+                - {type: central_crop, fraction: 0.875}
+            final_cpu: null
+            final_gpu:
+                - {type: normalize_channels}
 model:
     name: alexnet
     description: |
@@ -63,7 +64,7 @@ model:
         fc7: *fc6
         logits:
             <<: *fc
-            num_outputs: num_classes
+            num_outputs: $(dataset.task.num_classes)
             activation_fn: null
             biases_initializer: {type: tensorflow.zeros_initializer}
     graph:

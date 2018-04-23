@@ -108,7 +108,7 @@ class Augment(object):
             log.warn(
                 'Channel means not supplied, defaulting '
                 'to 0.5 for each channel.')
-            means = [0.5] * i.shape[2]
+            means = [0.5] * i.shape[-1]
         shape = [1, 1, len(means)]
         means = tf.constant(means, shape=shape, name='image_means')
         return i - means

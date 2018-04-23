@@ -5,7 +5,9 @@ from mayo.task.image.augment import Augment
 
 
 class Preprocess(object):
-    def __init__(self, system, mode, files, actions, shape, moment=None):
+    def __init__(
+            self, system, mode, files, actions,
+            before_shape, after_shape, moment=None):
         super().__init__()
         self.system = system
         self.mode = mode
@@ -14,7 +16,10 @@ class Preprocess(object):
                 'Unrecognized preprocessing mode {!r}'.format(self.mode))
         self.files = files
         self.actions = actions
-        self.shape = (shape['height'], shape['width'], shape['channels'])
+        shape_to_tuple = lambda s: (
+            s.get('height'), s.get('width'), s.get('channels'))
+        self.before_shape = shape_to_tuple(before_shape)
+        self.after_shape = shape_to_tuple(after_shape)
         self.moment = moment
 
     @staticmethod
@@ -63,17 +68,17 @@ class Preprocess(object):
         # unserialize and prepocess image
         buffer, label, bbox, _ = self._parse_proto(serialized)
         # decode jpeg image
-        channels = self.shape[-1]
+        channels = self.before_shape[-1]
         image = self._decode_jpeg(buffer, channels)
         # augment image
-        augment = Augment(image, bbox, self.shape, self.moment)
+        augment = Augment(image, bbox, self.after_shape, self.moment)
         actions = self._actions(self.mode) + self._actions('final_cpu')
         image = augment.augment(actions)
         return image, label
 
     def augment(self, image):
         # augment for validation
-        augment = Augment(image, None, self.shape, self.moment)
+        augment = Augment(image, None, self.after_shape, self.moment)
         actions = self._actions(self.mode) + self._actions('final_cpu')
         actions += self._actions(self._actions('final_gpu'))
         return augment.augment(actions)
@@ -101,16 +106,20 @@ class Preprocess(object):
         images, labels = iterator.get_next()
         # ensuring the shape of images and labels to be constants
         batch_shape = (batch_size, )
-        images = tf.reshape(images, batch_shape + self.shape)
+        images = tf.reshape(images, batch_shape + self.after_shape)
         labels = tf.reshape(labels, batch_shape)
         batch_images_labels = list(zip(
             tf.split(images, num_gpus), tf.split(labels, num_gpus)))
+
         # final preprocessing on gpu
         gpu_actions = self._actions('final_gpu')
         if gpu_actions:
+            def augment(i):
+                augment = Augment(i, None, self.after_shape, self.moment)
+                return augment.augment(gpu_actions, ensure_shape=False)
             for gid, (images, labels) in enumerate(batch_images_labels):
                 with tf.device('/gpu:{}'.format(gid)):
-                    augment = Augment(images, None, self.shape, self.moment)
-                    images = augment.augment(gpu_actions, ensure_shape=False)
+                    # FIXME is tf.map_fn good for performance?
+                    images = tf.map_fn(augment, images)
                     batch_images_labels[gid] = (images, labels)
         return batch_images_labels
