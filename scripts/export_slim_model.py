@@ -66,7 +66,7 @@ def reform_weights(overriders):
         np_trainables[name] = trainable.eval()
     for name in layer_names:
         weight = pick_weight(name, np_trainables)
-        if 'fc' in name:
+        if 'fc' in name or 'conv5_3' in name:
             slimed_weights[name] = weight
             continue
         if name != 'logits':
