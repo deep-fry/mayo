@@ -58,7 +58,7 @@ model:
         pool4: *pool
         conv5_1: {<<: *conv, num_outputs: 456}
         conv5_2: {<<: *conv, num_outputs: 435}
-        conv5_3: {<<: *conv, num_outputs: 509}
+        conv5_3: {<<: *conv, num_outputs: 512}
         pool5: *pool
         flatten5: {type: flatten}
         fc6: {<<: *fc, num_outputs: 4096}
