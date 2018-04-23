@@ -222,3 +222,9 @@ def get_shape(tensor):
     if is_tensor(tensor):
         return tensor.get_shape()
     return tensor.shape
+
+
+def random_uniform(tensor):
+    if is_tensor(tensor):
+        return tf.random_uniform(shape=tensor.shape)
+    return np.random_uniform(shape=tensor.shape)
