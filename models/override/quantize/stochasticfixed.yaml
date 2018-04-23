@@ -1,0 +1,10 @@
+---
+_import: ../_global.yaml
+_overrider:
+    weights: &quantizer
+        fixed:
+            type: mayo.override.StochasitcFixedPointQuantizer
+            width: 4
+            point: 1
+            should_update: true
+    biases: {<<: *quantizer}

@@ -1,5 +1,5 @@
 from mayo.override.quantize.fixed import (
-    FixedPointQuantizer, CourbariauxQuantizer,
+    FixedPointQuantizer, StochasitcFixedPointQuantizer, CourbariauxQuantizer,
     DGQuantizer, DGTrainableQuantizer, LogQuantizer)
 from mayo.override.quantize.float import FloatingPointQuantizer, ShiftQuantizer
 from mayo.override.quantize.mixed import MixedQuantizer
@@ -9,7 +9,7 @@ from mayo.override.quantize.recentralize import Recentralizer
 
 __all__ = [
     FloatingPointQuantizer, ShiftQuantizer,
-    FixedPointQuantizer, CourbariauxQuantizer,
+    FixedPointQuantizer, CourbariauxQuantizer, StochasitcFixedPointQuantizer,
     DGQuantizer, DGTrainableQuantizer, LogQuantizer,
     MixedQuantizer, Recentralizer, IncrementalQuantizer,
 ]

@@ -63,6 +63,42 @@ class FixedPointQuantizer(QuantizerBase):
         return self._info_tuple(width=width, point=point)
 
 
+class StochasitcFixedPointQuantizer(FixedPointQuantizer):
+    def __init__(self, session, point=None, width=None, should_update=True):
+        super().__init__(session, None, width, should_update=should_update)
+
+    def _quantize(
+            self, value, point=None, width=None, compute_overflow_rate=False):
+        point = util.cast(self.point if point is None else point, float)
+        width = util.cast(self.width if width is None else width, float)
+        # x << (width - point)
+        shift = 2.0 ** (util.round(width) - util.round(point))
+        value = value * shift
+        # quantize
+        scale = 1 / shift
+        value_floor = util.round(value)
+        value_ceil = util.ceil(value)
+        # probabilities of rounding up
+        prob = (value - value_floor) / scale
+        randoms = util.random_uniform(value)
+        round_up = util.cast(randoms > prob, float)
+        round_down = util.cast(randoms <= prob, float)
+        value = value_ceil * round_up + value_floor * round_down
+
+        # ensure number is representable without overflow
+        if width is not None:
+            max_value = util.cast(2 ** (width - 1), float)
+            if compute_overflow_rate:
+                overflow_value = value[value != 0]
+                overflows = util.logical_or(
+                    overflow_value < -max_value,
+                    overflow_value > max_value - 1)
+                return self._overflow_rate(overflows)
+            value = util.clip_by_value(value, -max_value, max_value - 1)
+        # revert bit-shift earlier
+        return value / shift
+
+
 class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
     """
     a base class to quantize inputs into 2's compliment `width`-bit fixed-point
