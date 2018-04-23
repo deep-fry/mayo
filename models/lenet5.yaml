@@ -3,12 +3,12 @@ dataset:
     task:
         background_class: {use: false}
         preprocess:
+            shape:
+                height: 28
+                width: 28
+                channels: 1
             validate: null
             final_cpu: {type: linear_map, scale: 2.0, shift: -1.0}
-        shape:
-            height: 28
-            width: 28
-            channels: 1
 model:
     name: lenet5
     layers:

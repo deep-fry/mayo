@@ -1,15 +1,16 @@
 ---
 dataset:
-    background_class: {use: true}
-    preprocess:
-        shape:
-            height: 299
-            width: 299
-            channels: 3
-        validate: {type: central_crop, fraction: 0.875}
-        final_cpu:
-            - {type: resize, fill: false}
-            - {type: linear_map, scale: 2.0, shift: -1.0}
+    task:
+        background_class: {use: true}
+        preprocess:
+            shape:
+                height: 299
+                width: 299
+                channels: 3
+            validate: {type: central_crop, fraction: 0.875}
+            final_cpu:
+                - {type: resize, fill: false}
+                - {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: resnet50
     description:
@@ -109,7 +110,7 @@ model:
         logits:
             <<: *conv
             kernel_size: 1
-            num_outputs: num_classes
+            num_outputs: $(dataset.task.num_classes)
             activation_fn: null
             normalizer_fn: null
         squeeze: {type: squeeze, axis: [1, 2]}

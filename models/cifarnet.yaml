@@ -1,15 +1,16 @@
 ---
 dataset:
-    background_class: {use: false}
-    preprocess:
-        shape:
-            height: 32
-            width: 32
-            channels: 3
-        validate:
-            - {type: crop_or_pad}
-        final_cpu:
-            - {type: standardize_image}
+    task:
+        background_class: {use: false}
+        preprocess:
+            shape:
+                height: 32
+                width: 32
+                channels: 3
+            validate:
+                - {type: crop_or_pad}
+            final_cpu:
+                - {type: standardize_image}
 model:
     name: cifarnet
     description: Cifar-10 classification with >91% accuracy.
@@ -43,7 +44,7 @@ model:
         logits:
             <<: *conv
             kernel_size: 1
-            num_outputs: num_classes
+            num_outputs: $(dataset.task.num_classes)
             activation_fn: null
             normalizer_fn: null
         squeeze: {type: squeeze, axis: [1, 2]}
