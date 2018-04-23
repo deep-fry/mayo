@@ -4,7 +4,7 @@ from mayo.override.base import (
 )
 from mayo.override.quantize import (
     FixedPointQuantizer,
-    StochasitcFixedPointQuantizer,
+    StochasticFixedPointQuantizer,
     CourbariauxQuantizer,
     DGQuantizer,
     DGTrainableQuantizer,

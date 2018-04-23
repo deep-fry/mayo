@@ -3,7 +3,7 @@ _import: ../_global.yaml
 _overrider:
     weights: &quantizer
         fixed:
-            type: mayo.override.StochasitcFixedPointQuantizer
+            type: mayo.override.StochasticFixedPointQuantizer
             width: 4
             point: 1
             should_update: true

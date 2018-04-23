@@ -63,7 +63,7 @@ class FixedPointQuantizer(QuantizerBase):
         return self._info_tuple(width=width, point=point)
 
 
-class StochasitcFixedPointQuantizer(FixedPointQuantizer):
+class StochasticFixedPointQuantizer(FixedPointQuantizer):
     def __init__(self, session, point=None, width=None, should_update=True):
         super().__init__(session, None, width, should_update=should_update)
 
