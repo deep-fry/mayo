@@ -75,11 +75,11 @@ class StochasitcFixedPointQuantizer(FixedPointQuantizer):
         shift = 2.0 ** (util.round(width) - util.round(point))
         value = value * shift
         # quantize
-        scale = 1 / shift
-        value_floor = util.round(value)
+        ulp = 1 / shift
+        value_floor = util.floor(value)
         value_ceil = util.ceil(value)
         # probabilities of rounding up
-        prob = (value - value_floor) / scale
+        prob = (value - value_floor) / ulp
         randoms = util.random_uniform(value)
         round_up = util.cast(randoms > prob, float)
         round_down = util.cast(randoms <= prob, float)
