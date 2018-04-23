@@ -17,14 +17,20 @@ class ImageTaskBase(TFTaskBase):
         super().__init__(session)
 
     def augment(self, folder):
+        # FIXME this method is somewhat redundant, as similar
+        # dataset handling happens in generate.py.
         def feed(name):
             image_string = tf.read_file(name)
-            image = tf.image.decode_image(image_string)
+            image = tf.image.decode_jpeg(
+                image_string, channels=self._preprocessor.shape[-1])
+            image = tf.image.convert_image_dtype(image, dtype=tf.float32)
             image = self._preprocessor.augment(image)
             return name, image
         num_gpus = self.config.system.num_gpus
         batch_size = self.config.system.batch_size_per_gpu * num_gpus
-        filenames = tf.constant(os.listdir(folder))
+        filenames = [
+            os.path.join(folder, name) for name in sorted(os.listdir(folder))]
+        filenames = tf.constant(filenames)
         dataset = tf.data.Dataset.from_tensor_slices(filenames)
         dataset = dataset.map(feed)
         dataset = dataset.batch(batch_size)
@@ -40,6 +46,7 @@ class ImageTaskBase(TFTaskBase):
 
     @memoize_property
     def class_names(self):
-        labels_file = self.session.config.dataset.path.label
-        with open(labels_file, 'r') as f:
-            return f.readlines()
+        file = self.session.config.dataset.path.labels
+        file = os.path.join('datasets', file)
+        with open(file, 'r') as f:
+            return f.read().split('\n')

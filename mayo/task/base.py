@@ -5,13 +5,14 @@ import tensorflow as tf
 from mayo.log import log
 from mayo.error import NotImplementedError
 from mayo.net.tf import TFNet
+from mayo.session.test import Test
 
 
 class TFTaskBase(object):
     """Specifies common training and evaluation tasks.  """
     def __init__(self, session):
         super().__init__()
-        self.test = getattr(session, 'test', False)
+        self.is_test = isinstance(session, Test)
         self.session = session
         self.config = session.config
         self.num_gpus = self.config.system.num_gpus
@@ -39,13 +40,13 @@ class TFTaskBase(object):
         truths = []
         names = []
         model = self.config.model
-        if self.test:
+        if self.is_test:
             folder = self.config.system.search_path.run.inputs[0]
             iterer = self.augment(folder)
         else:
             iterer = self.generate()
         for i, (data, additional) in enumerate(iterer):
-            if self.test:
+            if self.is_test:
                 name, truth = additional, None
             else:
                 name, truth = None, additional

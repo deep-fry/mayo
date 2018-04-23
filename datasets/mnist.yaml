@@ -14,6 +14,7 @@ dataset:
     path:
         train: mnist/train.tfrecord
         validate: mnist/test.tfrecord
+        labels: mnist/labels.txt
     num_examples_per_epoch:
         train: 60000
         validate: 10000

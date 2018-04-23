@@ -1,8 +1,12 @@
+import os
 import functools
 
+import yaml
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 
+from mayo.log import log
 from mayo.util import Percent, memoize_method
 from mayo.task.image.base import ImageTaskBase
 
@@ -75,3 +79,18 @@ class Classify(ImageTaskBase):
     def eval(self, net, prediction, truth):
         # set up eval estimators, once and for all predictions and truths
         return self._eval_setup()
+
+    def test(self, names, inputs, predictions):
+        inputs = inputs['input']
+        predictions = predictions['output']
+        results = {}
+        for name, image, prediction in zip(names, inputs, predictions):
+            name = name.decode()
+            label = self.class_names[np.argmax(prediction)]
+            log.info('{} labeled as {}.'.format(name, label))
+            results[name] = label
+        output_dir = self.config.system.search_path.run.outputs[0]
+        os.makedirs(output_dir, exist_ok=True)
+        filename = os.path.join(output_dir, 'predictions.yaml')
+        with open(filename, 'w') as f:
+            yaml.dump(results, f)

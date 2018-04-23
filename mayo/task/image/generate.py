@@ -60,7 +60,6 @@ class Preprocess(object):
         return ensure_list(self.actions.get(key) or [])
 
     def _preprocess(self, serialized):
-        #  return tf.ones((224, 224, 3), tf.float32), tf.ones(1, tf.int32)
         # unserialize and prepocess image
         buffer, label, bbox, _ = self._parse_proto(serialized)
         # decode jpeg image

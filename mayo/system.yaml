@@ -41,6 +41,6 @@ system:
             - profiles/$(model.name)/$(dataset.name)/
         run:
             inputs:
-                - runs/$(model.name)/$(dataset.name)/inputs
+                - runs/$(model.name)/inputs
             outputs:
-                - runs/$(model.name)/$(dataset.name)/outputs
+                - runs/$(model.name)/outputs
