@@ -88,7 +88,7 @@ def reform_weights(overriders):
                 print(name, variable.name)
                 if name in variable.name:
                     np_raw[variable.name] = weights
-        elif 'logits/biases' in variable.name:
+        elif 'biases' in variable.name:
             np_raw[variable.name] = variable.eval()
         else:
             for name, mask in mask_dict.items():
