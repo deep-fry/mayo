@@ -1,5 +1,6 @@
 import copy
 import contextlib
+import collections
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -73,13 +74,21 @@ class ParameterTransformer(object):
         overrider_params = params.get('overrider') or {}
         activation_overrider = overrider_params.pop('activation', None)
         if activation_overrider:
-            activation_fn = params.get('activation_fn', tf.nn.relu)
-            if activation_fn is None:
-                activation_fn = lambda x: x
-            params['activation_fn'] = lambda x: activation_fn(
-                activation_overrider.apply(
-                    node, 'activations', tf.get_variable, x))
+            override_fn = lambda x: activation_overrider.apply(
+                node, 'activations', tf.get_variable, x)
             self.overriders.append(activation_overrider)
+        else:
+            override_fn = None
+        # produce a default ReLU activation for overrider specifically
+        default_fn = tf.nn.relu if override_fn else None
+        activation_fn = params.get('activation_fn', default_fn)
+        activation_params = params.pop('activation_params', {})
+        if override_fn or activation_fn:
+            identity_fn = lambda x: x
+            override_fn = override_fn or identity_fn
+            activation_fn = activation_fn or identity_fn
+            params['activation_fn'] = lambda x: \
+                activation_fn(override_fn(x), **activation_params)
         # set up other parameters
         params['scope'] = node.name
         try:

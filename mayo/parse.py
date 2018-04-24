@@ -98,6 +98,8 @@ class ArithTag(YamlScalarTag):
                 return self._eval(n.orelse)
         if isinstance(n, ast.NameConstant):
             return n.value
+        if isinstance(n, ast.List):
+            return [self._eval(e) for e in n.elts]
         if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
             raise TypeError('Unrecognized operator node {}'.format(n))
         op = self._eval_expr_map[type(n.op)]

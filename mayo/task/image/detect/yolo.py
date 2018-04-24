@@ -50,11 +50,12 @@ class YOLOv2(ImageTaskBase):
         self.num_anchors = len(anchors)
         self.num_classes = num_classes
 
-        height, width = shape['height'], shape['width']
+        after_shape = preprocess.shape
+        height, width = after_shape['height'], after_shape['width']
         if height != width:
             raise ValueError('We expect the image to be square for YOLOv2.')
         self.image_size = height
-        if not self.image_size % num_cells:
+        if self.image_size % num_cells:
             raise ValueError(
                 'The size of image must be divisible by the number of cells.')
         self.num_cells = num_cells

@@ -4,7 +4,6 @@ dataset:
     task:
         type: mayo.task.image.YOLOv2
         num_classes: 20
-        num_cells: 13
         anchors:
             - [1.08, 1.19]
             - [3.42, 4.41]
@@ -18,8 +17,10 @@ dataset:
             class: 1
         preprocess:
             train:
-                - {type: random_flip}
+                # - {type: random_flip}
                 - {type: distort_color}
+        shape:
+            channels: 3
     path:
         train: voc/train_*.tfrecord
         validate: voc/test_*.tfrecord
