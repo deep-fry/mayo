@@ -1,0 +1,19 @@
+---
+_import: ../_global.yaml
+_overrider:
+    weights: &quantizer
+        mixed:
+          type: mayo.override.MixedQuantizer
+          interval: 0.5
+          reg_factor: 0.001
+          index: 0
+          quantizers:
+              quantizer0:
+                  type: mayo.override.FixedPointQuantizer
+                  width: 2
+                  point: 0
+              quantizer1:
+                  type: mayo.override.FixedPointQuantizer
+                  width: 8
+                  point: 0
+    biases: {<<: *quantizer}
