@@ -10,7 +10,11 @@ def reform_weights(overriders):
         mask_dict = {}
         for overrider in overriders:
             value = overrider.after.eval()
-            mask = overrider.mask.eval()
+            if 'conv5_3' in overrider.name:
+                mask = overrider.mask.eval()
+                mask = np.ones(mask.shape)
+            else:
+                mask = overrider.mask.eval()
             name = overrider.name
             overriders_dict[name] = [value, mask]
             mask_dict[name] = mask
@@ -78,7 +82,8 @@ def reform_weights(overriders):
                 weight = compress_weight_test(weight, prev_mask, 'in')
             else:
                 weight = compress_weight_test(weight, prev_mask, 'in')
-                weight = compress_weight_test(weight, mask, 'out')
+                if 'conv5_3' not in name:
+                    weight = compress_weight_test(weight, mask, 'out')
         prev_mask = mask
         slimed_weights[name] = weight
     np_raw = {}
