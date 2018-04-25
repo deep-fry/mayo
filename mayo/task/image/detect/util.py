@@ -32,21 +32,37 @@ def area(y_max, x_max, y_min, x_min):
     return (y_max - y_min) * (x_max - x_min)
 
 
+def shape(tensor):
+    shape_values = list(tensor.shape)
+    shape_tensors = tf.unstack(tf.shape(tensor))
+    for i, s in enumerate(shape_values):
+        if s.value is None:
+            shape_values[i] = shape_tensors[i]
+        else:
+            shape_values[i] = int(s)
+    return shape_values
+
+
 def cartesian(tensor1, tensor2):
     """
     Computes the pair-wise combinations of first dimensions of
     tensor1 and tensor2, leaving the last dimension.
     """
-    shape1 = tensor1.get_shape()
-    shape2 = tensor1.get_shape()
-    ndims1 = shape1.ndims
-    ndims2 = shape2.ndims
+    # exclude last dimension
+    *shape1, last1 = shape(tensor1)
+    *shape2, last2 = shape(tensor2)
+    if last1 != last2:
+        raise ShapeError(
+            'The last dimension of both tensors should be constant '
+            'and should match.')
+    ndims1 = len(shape1)
+    ndims2 = len(shape2)
     # num_rows1 x num_row2 x expected_size tensors to form
     # all possible bbox pairs
-    reshaped1 = tf.reshape(tensor1, shape1 + [1] * ndims2 + [-1])
-    reshaped2 = tf.reshape(tensor2, [1] * ndims1 + shape2 + [-1])
-    tensor1 = tf.tile(reshaped1, [1] * ndims1 + [shape2] + [1])
-    tensor2 = tf.tile(reshaped2, [shape1] + [1] * ndims2 + [1])
+    reshaped1 = tf.reshape(tensor1, shape1 + [1] * ndims2 + [last1])
+    reshaped2 = tf.reshape(tensor2, [1] * ndims1 + shape2 + [last2])
+    tensor1 = tf.tile(reshaped1, [1] * ndims1 + shape2 + [1])
+    tensor2 = tf.tile(reshaped2, shape1 + [1] * ndims2 + [1])
     return tensor1, tensor2
 
 
@@ -65,22 +81,22 @@ def iou(boxes1, boxes2, anchors=False):
     returns: a (...) tensor of IOU values.
     """
     expected_size = 2 if anchors else 4
-    if boxes1.shape[1] != expected_size or boxes2.shape[1] != expected_size:
+    if boxes1.shape[-1] != expected_size or boxes2.shape[-1] != expected_size:
         raise ShapeError(
             'The number of values representing the bounding box should be {}.'
             .format(expected_size))
-    shape1 = boxes1.get_shape()[:-1]
-    shape2 = boxes2.get_shape()[:-1]
+    shape1 = tf.shape(boxes1)
+    shape2 = tf.shape(boxes2)
     # ensure shape can broadcast
     shape = tf.broadcast_dynamic_shape(shape1, shape2)
-    with tf.control_dependencies(shape):
+    with tf.control_dependencies([shape]):
         boxes1 = tf.identity(boxes1)
     if anchors:
         h1, w1 = tf.unstack(boxes1, axis=-1)
         h2, w2 = tf.unstack(boxes2, axis=-1)
         y1_max, x1_max = h1 / 2, w1 / 2
         y2_max, x2_max = h2 / 2, w2 / 2
-        y1_min, x1_min, y2_min, y2_min = -y1_max, -x1_max, -y2_max, -x2_max
+        y1_min, x1_min, y2_min, x2_min = -y1_max, -x1_max, -y2_max, -x2_max
     else:
         y1_max, x1_max, y1_min, x1_min = box_to_corners(boxes1, stack=False)
         y2_max, x2_max, y2_min, x2_min = box_to_corners(boxes2, stack=False)

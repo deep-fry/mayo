@@ -8,13 +8,16 @@ from mayo.task.image.generate import Preprocess
 
 
 class ImageTaskBase(TFTaskBase):
+    _truth_keys = NotImplemented
+
     def __init__(self, session, preprocess, shape, moment=None):
         system = session.config.system
         mode = session.mode
         files = session.config.data_files(mode)
         after_shape = preprocess['shape']
         self._preprocessor = Preprocess(
-            system, mode, files, preprocess, shape, after_shape, moment)
+            system, mode, self._truth_keys, files,
+            preprocess, shape, after_shape, moment)
         super().__init__(session)
 
     def augment(self, folder):
@@ -42,8 +45,11 @@ class ImageTaskBase(TFTaskBase):
             yield {'input': images}, names
 
     def generate(self):
-        for images, labels in self._preprocessor.preprocess():
-            yield {'input': images}, labels
+        for images, *truths in self._preprocessor.preprocess():
+            yield {'input': images}, truths
+
+    def transform(self, net, data, prediction, truth):
+        return data['input'], prediction['output'], truth
 
     @memoize_property
     def class_names(self):

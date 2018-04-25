@@ -6,7 +6,7 @@ from mayo.task.image.augment import Augment
 
 class Preprocess(object):
     def __init__(
-            self, system, mode, files, actions,
+            self, system, mode, truth_keys, files, actions,
             before_shape, after_shape, moment=None):
         super().__init__()
         self.system = system
@@ -14,6 +14,7 @@ class Preprocess(object):
         if mode not in ['train', 'validate']:
             raise ValueError(
                 'Unrecognized preprocessing mode {!r}'.format(self.mode))
+        self.truth_keys = truth_keys
         self.files = files
         self.actions = actions
         shape_to_tuple = lambda s: (
@@ -66,7 +67,7 @@ class Preprocess(object):
 
     def _preprocess(self, serialized):
         # unserialize and prepocess image
-        buffer, label, bbox, _ = self._parse_proto(serialized)
+        buffer, label, bbox, text = self._parse_proto(serialized)
         # decode jpeg image
         channels = self.before_shape[-1]
         image = self._decode_jpeg(buffer, channels)
@@ -74,7 +75,15 @@ class Preprocess(object):
         augment = Augment(image, bbox, self.after_shape, self.moment)
         actions = self._actions(self.mode) + self._actions('final_cpu')
         image = augment.augment(actions)
-        return image, label
+        values = [image]
+        truth_map = {
+            'label': label,
+            'bbox': bbox,
+            'text': text,
+        }
+        for key in self.truth_keys:
+            values.append(truth_map[key])
+        return values
 
     def augment(self, image):
         # augment for validation
@@ -103,13 +112,21 @@ class Preprocess(object):
         dataset = dataset.batch(batch_size)
         # iterator
         iterator = dataset.make_one_shot_iterator()
-        images, labels = iterator.get_next()
+        images, *truths = iterator.get_next()
         # ensuring the shape of images and labels to be constants
         batch_shape = (batch_size, )
         images = tf.reshape(images, batch_shape + self.after_shape)
-        labels = tf.reshape(labels, batch_shape)
-        batch_images_labels = list(zip(
-            tf.split(images, num_gpus), tf.split(labels, num_gpus)))
+        for i, (key, truth) in enumerate(zip(self.truth_keys, truths)):
+            if key in ['text', 'label']:
+                truth = tf.reshape(truth, batch_shape)
+            elif key == 'bbox':
+                truth = tf.reshape(truth, batch_shape + (-1, 4))
+            else:
+                raise KeyError('Unrecognized truth key.')
+            truths[i] = truth
+        batch = [images] + truths
+        batch_splits = list(zip(
+            *(tf.split(each, num_gpus, axis=0) for each in batch)))
 
         # final preprocessing on gpu
         gpu_actions = self._actions('final_gpu')
@@ -117,9 +134,8 @@ class Preprocess(object):
             def augment(i):
                 augment = Augment(i, None, self.after_shape, self.moment)
                 return augment.augment(gpu_actions, ensure_shape=False)
-            for gid, (images, labels) in enumerate(batch_images_labels):
+            for gid, (images, *_) in enumerate(batch_splits):
                 with tf.device('/gpu:{}'.format(gid)):
                     # FIXME is tf.map_fn good for performance?
-                    images = tf.map_fn(augment, images)
-                    batch_images_labels[gid] = (images, labels)
-        return batch_images_labels
+                    batch_splits[gid][0] = tf.map_fn(augment, images)
+        return batch_splits

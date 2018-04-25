@@ -12,6 +12,8 @@ from mayo.task.image.base import ImageTaskBase
 
 
 class Classify(ImageTaskBase):
+    _truth_keys = ['label']
+
     def __init__(
             self, session, preprocess,
             background_class, num_classes, shape, moment=None):
@@ -20,6 +22,9 @@ class Classify(ImageTaskBase):
         self.num_classes = num_classes + self.label_offset
         session.config.dataset.task.num_classes = self.num_classes
         super().__init__(session, preprocess, shape, moment=None)
+
+    def transform(self, net, data, prediction, truth):
+        return data['input'], prediction['output'], truth[0]
 
     def preprocess(self):
         for images, labels in super().preprocess():
@@ -43,7 +48,6 @@ class Classify(ImageTaskBase):
             accuracy, 'accuracy', formatter=accuracy_formatter)
 
     def train(self, net, prediction, truth):
-        prediction = prediction['output']
         self._train_setup(prediction, truth)
         truth = slim.one_hot_encoding(truth, self.num_classes)
         return tf.losses.softmax_cross_entropy(
@@ -52,7 +56,6 @@ class Classify(ImageTaskBase):
     @memoize_method
     def _eval_setup(self):
         def metrics(net, prediction, truth):
-            prediction = prediction['output']
             top1 = self._top(prediction, truth, 1)
             top5 = self._top(prediction, truth, 5)
             return top1, top5
@@ -81,8 +84,6 @@ class Classify(ImageTaskBase):
         return self._eval_setup()
 
     def test(self, names, inputs, predictions):
-        inputs = inputs['input']
-        predictions = predictions['output']
         results = {}
         for name, image, prediction in zip(names, inputs, predictions):
             name = name.decode()

@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 
 from mayo.util import memoize_property
 from mayo.task.image.base import ImageTaskBase
-from mayo.task.image.detect.util import cartesian, iou
+from mayo.task.image.detect.util import cartesian, iou, shape
 
 
 class YOLOv2(ImageTaskBase):
@@ -17,8 +17,10 @@ class YOLOv2(ImageTaskBase):
 
     references:
         https://arxiv.org/pdf/1612.08242.pdf
-        https://github.com/allanzelener/YAD2K/blob/master/yad2k/models/keras_yolo.py
+        https://github.com/allanzelener/YAD2K/
+        https://github.com/experiencor/keras-yolo2/
     """
+    _truth_keys = ['label', 'bbox']
     _default_scales = {
         'object': 1,
         'noobject': 0.5,
@@ -44,12 +46,10 @@ class YOLOv2(ImageTaskBase):
         nms_iou_threshold (float):
             the IOU threshold used by non-max suppression during validation.
         """
-        super().__init__(session, preprocess, shape, moment)
         self.batch_size = session.batch_size
         self._anchors = anchors
         self.num_anchors = len(anchors)
         self.num_classes = num_classes
-
         after_shape = preprocess.shape
         height, width = after_shape['height'], after_shape['width']
         if height != width:
@@ -67,6 +67,8 @@ class YOLOv2(ImageTaskBase):
         self.score_threshold = score_threshold
         self.nms_iou_threshold = nms_iou_threshold
         self.nms_max_boxes = nms_max_boxes
+
+        super().__init__(session, preprocess, shape, moment)
 
     @memoize_property
     def anchors(self):
@@ -86,7 +88,7 @@ class YOLOv2(ImageTaskBase):
         cols = tf.tile(cols, [self.num_cells, 1])
         grid = tf.stack([rows, cols], axis=-1)
         grid = tf.reshape(grid, [1, self.num_cells, self.num_cells, 1, 2])
-        grid *= self.cell_size
+        grid = tf.cast(grid, tf.float32) * self.cell_size
         # box transformation
         yx, hw = tf.split(box, [2, 2], axis=-1)
         yx = grid + tf.sigmoid(yx)
@@ -101,7 +103,7 @@ class YOLOv2(ImageTaskBase):
         Allocates ground truth bounding boxes and labels into a cell grid of
         objectness, bounding boxes and labels.
 
-        truths:
+        box:
             a (batch x num_truths x 4) tensor where each row is a
             boudning box denoted by [y, x, h, w].
         labels:
@@ -125,9 +127,10 @@ class YOLOv2(ImageTaskBase):
         # ious: batch x num_truths x num_boxes
         pair_box, pair_anchor = cartesian(
             tf.stack([h, w], axis=-1), self.anchors)
-        ious = iou(pair_box, pair_anchor)
+        ious = iou(pair_box, pair_anchor, anchors=True)
         # box indices: (batch x num_truths)
         _, anchor_index = tf.nn.top_k(ious)
+        anchor_index = tf.squeeze(anchor_index, axis=-1)
         # coalesced indices (batch x num_truths x 3), where 3 values denote
         # (#row, #column, #anchor)
         index = tf.stack([row, col, anchor_index], axis=-1)
@@ -136,7 +139,8 @@ class YOLOv2(ImageTaskBase):
         # for each (batch), indices (num_truths x 3) are used to scatter values
         # into a (num_cells x num_cells x num_anchors) tensor.
         # resulting in a (batch x num_cells x num_cells x num_anchors) tensor.
-        objectness = tf.map_fn(tf.scatter_nd, (index, 1, self._base_shape))
+        fn = lambda each: tf.scatter_nd(each, 1, self._base_shape)
+        objectness = tf.map_fn(fn, index)
 
         # boxes
         # best anchors
@@ -144,24 +148,24 @@ class YOLOv2(ImageTaskBase):
         # (batch x num_truths)
         h_anchor, w_anchor = tf.unstack(best_anchor, axis=-1)
         # adjusted relative to cell row and col (batch x num_truths x 4)
-        # FIXME shouldn't we adjust to the center of each grid cell,
-        # rather than its top-left?
         box = [y - row, x - col, tf.log(h / h_anchor), tf.log(w / w_anchor)]
         box = tf.stack(box, axis=-1)
         # boxes, batch-wise allocation
-        box = tf.scatter_nd(index, box, self._base_shape + [4])
+        fn = lambda each: tf.scatter_nd(each, box, self._base_shape + [4])
+        box = tf.map_fn(fn, index)
 
         # labels, batch-wise allocation
-        label = tf.scatter_nd(index, label, self._base_shape)
+        fn = lambda each: tf.scatter_nd(each, label, self._base_shape)
+        label = tf.map_fn(fn, index)
         return objectness, box, label
 
-    def _test(self, prediction):
+    def _filter(self, prediction):
         # filter objects with a low confidence score
         # batch x cell x cell x anchors x classes
         confidence = prediction['object'] * prediction['class']
         # batch x cell x cell x anchors
         classes = tf.argmax(confidence, axis=-1)
-        scores = tf.reduce_max(confidence)
+        scores = tf.reduce_max(confidence, axis=-1)
         mask = scores >= self.score_threshold
         # only confident objects are left
         boxes = tf.boolean_mask(prediction['outbox'], mask)
@@ -176,7 +180,7 @@ class YOLOv2(ImageTaskBase):
         classes = tf.gather_nd(classes, indices)
         return boxes, scores, classes
 
-    def preprocess(self):
+    def transform(self, net, data, prediction, truth):
         """
         Additional tensor decomposition in preprocessing.
 
@@ -189,31 +193,35 @@ class YOLOv2(ImageTaskBase):
             a (batch x num_objects x 5) tensor, where each item of the
             last dimension (5) consists of a bounding box (4), and a label (1).
         """
-        for prediction, truth in super().preprocess():
-            obj_predict, box_predict, hot_predict = tf.split(
-                prediction, [1, 4, self.num_classes], axis=-1)
-            prediction = {
-                'object': obj_predict,
-                'box': box_predict,
-                'outbox': self._cell_to_global(box_predict),
-                'class': hot_predict,
-            }
-            box_test, score_test, class_test = self._test(prediction)
-            prediction['test'] = {
-                'box': box_test,
-                'class': class_test,
-                'score': score_test,
-            }
-            # the original box and label values from the dataset
-            outbox, label = tf.split(truth, [4, 1], axis=-1)
-            obj, box, label = self._truth_to_cell(outbox, label)
-            truth = {
-                'object': obj,
-                'box': box,
-                'rawbox': outbox,
-                'class': slim.one_hot_encoding(label, self.num_classes),
-            }
-            yield prediction, truth
+        prediction = prediction['output']
+        batch, height, width, channels = prediction.shape
+        prediction = tf.reshape(
+            prediction,
+            (batch, height, width, self.num_anchors, self.num_classes + 5))
+        box_predict, obj_predict, hot_predict = tf.split(
+            prediction, [4, 1, self.num_classes], axis=-1)
+        prediction = {
+            'object': obj_predict,
+            'box': box_predict,
+            'outbox': self._cell_to_global(box_predict),
+            'class': hot_predict,
+        }
+        box_test, score_test, class_test = self._filter(prediction)
+        prediction['test'] = {
+            'box': box_test,
+            'class': class_test,
+            'score': score_test,
+        }
+        # the original box and label values from the dataset
+        label, truebox = truth
+        obj, box, label = self._truth_to_cell(truebox, label)
+        truth = {
+            'object': obj,
+            'box': box,
+            'rawbox': truebox,
+            'class': slim.one_hot_encoding(label, self.num_classes),
+        }
+        return data, prediction, truth
 
     @memoize_property
     def colors(self):

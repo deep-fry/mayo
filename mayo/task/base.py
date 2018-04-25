@@ -19,7 +19,6 @@ class TFTaskBase(object):
         self.mode = session.mode
         self.estimator = session.estimator
         self._instantiate_nets()
-        self._register_estimates()
 
     @contextmanager
     def _gpu_context(self, gid):
@@ -54,8 +53,13 @@ class TFTaskBase(object):
             with self._gpu_context(i):
                 net = TFNet(self.session, model, data, bool(nets))
             nets.append(net)
+            prediction = net.outputs()
+            if i == 0:
+                self._register_estimates(prediction, truth)
+            data, prediction, truth = self.transform(
+                net, data, prediction, truth)
             inputs.append(data)
-            predictions.append(net.outputs())
+            predictions.append(prediction)
             truths.append(truth)
             names.append(name)
         self.nets = nets
@@ -64,12 +68,15 @@ class TFTaskBase(object):
         self.truths = truths
         self.names = names
 
-    def _register_estimates(self):
+    def _register_estimates(self, prediction, truth):
         history = 'infinite' if self.mode == 'validate' else None
-        for key, value in self.predictions[0].items():
+        for key, value in prediction.items():
             self.estimator.register(
                 value, 'predictions.{}'.format(key), history=history)
-        self.estimator.register(self.truths[0], 'truth', history=history)
+        self.estimator.register(truth, 'truth', history=history)
+
+    def transform(self, net, data, prediction, truth):
+        return data, prediction, truth
 
     def generate(self):
         raise NotImplementedError(
