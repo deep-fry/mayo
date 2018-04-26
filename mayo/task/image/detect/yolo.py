@@ -176,7 +176,7 @@ class YOLOv2(ImageTaskBase):
     def _filter(self, prediction):
         # filter objects with a low confidence score
         # batch x cell x cell x anchors x classes
-        confidence = prediction['object'] * prediction['class']
+        confidence = prediction['object_mask'] * prediction['class']
         # batch x cell x cell x anchors
         classes = tf.argmax(confidence, axis=-1)
         scores = tf.reduce_max(confidence, axis=-1)
@@ -214,9 +214,11 @@ class YOLOv2(ImageTaskBase):
             (batch, height, width, self.num_anchors, self.num_classes + 5))
         box_predict, obj_predict, hot_predict = tf.split(
             prediction, [4, 1, self.num_classes], axis=-1)
+        obj_predict_squeeze = tf.squeeze(obj_predict, -1)
         yx_predict, hw_predict = self._activate(box_predict)
         prediction = {
-            'object': obj_predict,
+            'object': obj_predict_squeeze,
+            'object_mask': obj_predict,
             'box': tf.concat([yx_predict, hw_predict], axis=-1),
             'outbox': self._cell_to_global(yx_predict, hw_predict),
             'class': hot_predict,
@@ -232,6 +234,7 @@ class YOLOv2(ImageTaskBase):
         obj, box, label = self._truth_to_cell(truebox, label)
         truth = {
             'object': obj,
+            'object_mask': tf.expand_dims(obj, -1),
             'box': box,
             'rawbox': truebox,
             'class': slim.one_hot_encoding(label, self.num_classes),
@@ -279,12 +282,11 @@ class YOLOv2(ImageTaskBase):
 
     def train(self, net, prediction, truth):
         """Training loss.  """
-        num_objects = truth['rawbox'].shape[1]
+        num_objects = tf.shape(truth['rawbox'])[1]
 
         # coordinate loss
-        xy_p, wh_p = tf.split(prediction['box'], [2, 2], axis=-1)
-        xy, wh = tf.split(truth['box'], [2, 2], axis=-1)
-        coord_loss = (xy - xy_p) ** 2 + (tf.sqrt(wh) - tf.sqrt(wh_p)) ** 2
+        coord_loss = tf.reduce_sum(
+            (prediction['box'] - truth['box']) ** 2, axis=-1)
         coord_loss = tf.reduce_sum(truth['object'] * coord_loss)
         coord_loss *= self.scales['coordinate']
 
@@ -294,7 +296,7 @@ class YOLOv2(ImageTaskBase):
 
         # class loss
         class_loss = (truth['class'] - prediction['class']) ** 2
-        class_loss = tf.reduce_sum(truth['object'] * class_loss)
+        class_loss = tf.reduce_sum(truth['object_mask'] * class_loss)
         class_loss *= self.scales['class']
 
         # no-object loss
@@ -308,9 +310,9 @@ class YOLOv2(ImageTaskBase):
         outbox = tf.reshape(truth['rawbox'], shape)
         iou_score = iou(outbox_p, outbox)
         iou_score = tf.reduce_max(iou_score, axis=4, keepdims=True)
-        is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.int32)
-        noobj_loss = (1 - truth['object']) * is_obj_absent
-        noobj_loss *= prediction['object'] ** 2
+        is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.float32)
+        noobj_loss = (1 - truth['object_mask']) * is_obj_absent
+        noobj_loss *= prediction['object_mask'] ** 2
         noobj_loss = self.scales['noobject'] * tf.reduce_sum(noobj_loss)
 
         return obj_loss + noobj_loss + coord_loss + class_loss

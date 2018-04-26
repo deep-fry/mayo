@@ -32,12 +32,11 @@ class Preprocess(object):
     @staticmethod
     def _parse_proto(proto):
         string = tf.FixedLenFeature([], dtype=tf.string, default_value='')
-        integer = tf.FixedLenFeature([1], dtype=tf.int64, default_value=-1)
         float32s = tf.VarLenFeature(dtype=tf.float32)
         # dense features
         feature_map = {
             'image/encoded': string,
-            'image/class/label': integer,
+            'image/class/label': tf.VarLenFeature(dtype=tf.int64),
             'image/class/text': string,
         }
         # bounding boxes
@@ -49,7 +48,7 @@ class Preprocess(object):
 
         # parsing
         features = tf.parse_single_example(proto, feature_map)
-        label = tf.cast(features['image/class/label'], dtype=tf.int32)
+        label = tf.cast(features['image/class/label'].values, dtype=tf.int32)
 
         # bbox handling
         # force the variable number of bounding boxes into the shape
@@ -109,21 +108,12 @@ class Preprocess(object):
         if self.mode == 'train':
             buffer_size = min(1024, 10 * batch_size)
             dataset = dataset.shuffle(buffer_size=buffer_size)
-        dataset = dataset.batch(batch_size)
+        dataset = dataset.apply(
+            tf.contrib.data.batch_and_drop_remainder(batch_size))
         # iterator
         iterator = dataset.make_one_shot_iterator()
         images, *truths = iterator.get_next()
         # ensuring the shape of images and labels to be constants
-        batch_shape = (batch_size, )
-        images = tf.reshape(images, batch_shape + self.after_shape)
-        for i, (key, truth) in enumerate(zip(self.truth_keys, truths)):
-            if key in ['text', 'label']:
-                truth = tf.reshape(truth, batch_shape)
-            elif key == 'bbox':
-                truth = tf.reshape(truth, batch_shape + (-1, 4))
-            else:
-                raise KeyError('Unrecognized truth key.')
-            truths[i] = truth
         batch = [images] + truths
         batch_splits = list(zip(
             *(tf.split(each, num_gpus, axis=0) for each in batch)))

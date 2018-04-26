@@ -24,7 +24,7 @@ class Classify(ImageTaskBase):
         super().__init__(session, preprocess, shape, moment=None)
 
     def transform(self, net, data, prediction, truth):
-        return data['input'], prediction['output'], truth[0]
+        return data['input'], prediction['output'], truth[0][..., 0]
 
     def preprocess(self):
         for images, labels in super().preprocess():
