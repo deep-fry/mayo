@@ -74,10 +74,17 @@ class YOLOv2(ImageTaskBase):
     def anchors(self):
         return tf.constant(self._anchors)
 
-    def _cell_to_global(self, box):
+    def _activate(self, box):
+        """ Activation functions for bounding box coordinates.  """
+        yx, hw = tf.split(box, [2, 2], axis=-1)
+        yx = tf.sigmoid(yx)
+        hw = tf.exp(hw)
+        return [yx, hw]
+
+    def _cell_to_global(self, yx, hw):
         """
         Transform (batch x num_cells x num_cells x num_anchors x 4)
-        raw bounding box (before sigmoid and exponentiation) to the
+        raw bounding box (after sigmoid and exponentiation) to the
         full-image bounding box.
         """
         # grid setup
@@ -90,9 +97,7 @@ class YOLOv2(ImageTaskBase):
         grid = tf.reshape(grid, [1, self.num_cells, self.num_cells, 1, 2])
         grid = tf.cast(grid, tf.float32) * self.cell_size
         # box transformation
-        yx, hw = tf.split(box, [2, 2], axis=-1)
-        yx = grid + tf.sigmoid(yx)
-        hw = tf.exp(hw)
+        yx += grid
         hw *= tf.reshape(self.anchors, [1, 1, 1, self.num_anchors, 2])
         box = tf.concat([yx, hw], axis=-1)
         # normalize box position to 0-1
@@ -122,7 +127,8 @@ class YOLOv2(ImageTaskBase):
         # indices of the box-containing cells (batch x num_truths)
         # any position within [k * cell_size, (k + 1) * cell_size)
         # gets mapped to the index k.
-        row, col = (tf.cast(tf.floor(v), tf.int32) for v in (y, x))
+        row_float, col_float = (tf.floor(v) for v in (y, x))
+        row, col = (tf.cast(v, tf.int32) for v in (row_float, col_float))
 
         # ious: batch x num_truths x num_boxes
         pair_box, pair_anchor = cartesian(
@@ -139,24 +145,32 @@ class YOLOv2(ImageTaskBase):
         # for each (batch), indices (num_truths x 3) are used to scatter values
         # into a (num_cells x num_cells x num_anchors) tensor.
         # resulting in a (batch x num_cells x num_cells x num_anchors) tensor.
-        fn = lambda each: tf.scatter_nd(each, 1, self._base_shape)
-        objectness = tf.map_fn(fn, index)
+        fn = lambda each: tf.scatter_nd(
+            each, tf.ones_like([1]), self._base_shape)
+        objectness = tf.map_fn(fn, index, tf.float32)
 
         # boxes
         # best anchors
-        best_anchor = tf.gather_nd(self.anchors, anchor_index)
-        # (batch x num_truths)
+        def best_anchor_fn(each_anchor_index):
+            # anchor_index: (num_truths)
+            each_anchor = tf.gather_nd(self.anchors, each_anchor_index)
+            # (num_filtered_truths x 2)
+            return tf.reshape(each_anchor, shape(each_anchor_index) + [2])
+        # (batch x num_filtered_truths x 2)
+        best_anchor = tf.map_fn(best_anchor_fn, anchor_index, dtype=tf.float32)
         h_anchor, w_anchor = tf.unstack(best_anchor, axis=-1)
         # adjusted relative to cell row and col (batch x num_truths x 4)
-        box = [y - row, x - col, tf.log(h / h_anchor), tf.log(w / w_anchor)]
+        box = [y - row_float, x - col_float, h / h_anchor, w / w_anchor]
         box = tf.stack(box, axis=-1)
         # boxes, batch-wise allocation
-        fn = lambda each: tf.scatter_nd(each, box, self._base_shape + [4])
-        box = tf.map_fn(fn, index)
+        fn = lambda each: tf.scatter_nd(
+            each[0], each[1], self._base_shape + [4])
+        box = tf.map_fn(fn, (index, box), dtype=tf.float32)
 
         # labels, batch-wise allocation
-        fn = lambda each: tf.scatter_nd(each, label, self._base_shape)
-        label = tf.map_fn(fn, index)
+        fn = lambda each: tf.scatter_nd(each[0], each[1], self._base_shape)
+        label = tf.expand_dims(label, -1)
+        label = tf.map_fn(fn, (index, label), dtype=tf.int32)
         return objectness, box, label
 
     def _filter(self, prediction):
@@ -200,10 +214,11 @@ class YOLOv2(ImageTaskBase):
             (batch, height, width, self.num_anchors, self.num_classes + 5))
         box_predict, obj_predict, hot_predict = tf.split(
             prediction, [4, 1, self.num_classes], axis=-1)
+        yx_predict, hw_predict = self._activate(box_predict)
         prediction = {
             'object': obj_predict,
-            'box': box_predict,
-            'outbox': self._cell_to_global(box_predict),
+            'box': tf.concat([yx_predict, hw_predict], axis=-1),
+            'outbox': self._cell_to_global(yx_predict, hw_predict),
             'class': hot_predict,
         }
         box_test, score_test, class_test = self._filter(prediction)
