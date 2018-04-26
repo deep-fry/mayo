@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 
 from mayo.util import memoize_property
 from mayo.task.image.base import ImageTaskBase
-from mayo.task.image.detect.util import cartesian, iou, shape
+from mayo.task.image.detect.util import cartesian, iou
 
 
 class YOLOv2(ImageTaskBase):
@@ -20,7 +20,7 @@ class YOLOv2(ImageTaskBase):
         https://github.com/allanzelener/YAD2K/
         https://github.com/experiencor/keras-yolo2/
     """
-    _truth_keys = ['label', 'bbox']
+    _truth_keys = ['bbox/label', 'bbox', 'bbox/count']
     _default_scales = {
         'object': 1,
         'noobject': 0.5,
@@ -34,7 +34,8 @@ class YOLOv2(ImageTaskBase):
             iou_threshold=0.6, score_threshold=0.6,
             nms_iou_threshold=0.5, nms_max_boxes=10):
         """
-        anchors (list): a list of anchor boxes [(h, w), ...].
+        anchors (tensor):
+            a (num_anchors x 2) tensor of anchor boxes [(h, w), ...].
         scales (dict): the weights of the losses.
         num_cells (int): the number of cells to divide the image into a grid.
         iou_threshold (float):
@@ -103,74 +104,70 @@ class YOLOv2(ImageTaskBase):
         # normalize box position to 0-1
         return box / self.image_size
 
-    def _truth_to_cell(self, box, label):
+    def _truth_to_cell(self, each):
         """
         Allocates ground truth bounding boxes and labels into a cell grid of
         objectness, bounding boxes and labels.
 
         box:
-            a (batch x num_truths x 4) tensor where each row is a
+            a (num_truths x 4) tensor where each row is a
             boudning box denoted by [y, x, h, w].
-        labels:
-            a (batch x num_truths) tensor of labels.
+        label: a (num_truths) tensor of labels.
+        count: num_truths.
         returns:
-            - a (batch x num_cells x num_cells x num_anchors)
+            - a (num_cells x num_cells x num_anchors)
               tensor of objectness.
-            - a (batch x num_cells x num_cells x num_anchors x 4)
+            - a (num_cells x num_cells x num_anchors x 4)
               tensor of bounding boxes.
-            - a (batch x num_cells x num_cells x num_anchors) tensor of labels.
+            - a (num_cells x num_cells x num_anchors) tensor of labels.
         """
+        box, label, count = each
+        with tf.control_dependencies([tf.assert_greater(count, 0)]):
+            box = box[:count, :]
+            label = label[:count]
+
         # normalize the scale of bounding boxes to the size of each cell
-        # y, x, h, w are (batch x num_truths)
+        # y, x, h, w are (num_truths)
         y, x, h, w = tf.unstack(box * self.cell_size, axis=-1)
 
-        # indices of the box-containing cells (batch x num_truths)
+        # indices of the box-containing cells (num_truths)
         # any position within [k * cell_size, (k + 1) * cell_size)
         # gets mapped to the index k.
         row_float, col_float = (tf.floor(v) for v in (y, x))
         row, col = (tf.cast(v, tf.int32) for v in (row_float, col_float))
 
-        # ious: batch x num_truths x num_boxes
+        # ious: num_truths x num_boxes
         pair_box, pair_anchor = cartesian(
             tf.stack([h, w], axis=-1), self.anchors)
         ious = iou(pair_box, pair_anchor, anchors=True)
-        # box indices: (batch x num_truths)
+        # box indices: (num_truths)
         _, anchor_index = tf.nn.top_k(ious)
-        anchor_index = tf.squeeze(anchor_index, axis=-1)
-        # coalesced indices (batch x num_truths x 3), where 3 values denote
+        anchor_index_squeezed = tf.squeeze(anchor_index, axis=-1)
+        # coalesced indices (num_truths x 3), where 3 values denote
         # (#row, #column, #anchor)
-        index = tf.stack([row, col, anchor_index], axis=-1)
+        index = tf.stack([row, col, anchor_index_squeezed], axis=-1)
 
-        # objectness tensor, batch-wise allocation
+        # objectness tensor
         # for each (batch), indices (num_truths x 3) are used to scatter values
         # into a (num_cells x num_cells x num_anchors) tensor.
         # resulting in a (batch x num_cells x num_cells x num_anchors) tensor.
-        fn = lambda each: tf.scatter_nd(
-            each, tf.ones_like([1]), self._base_shape)
-        objectness = tf.map_fn(fn, index, tf.float32)
+        objectness = tf.scatter_nd(
+            index, tf.ones_like([count]), self._base_shape)
 
         # boxes
-        # best anchors
-        def best_anchor_fn(each_anchor_index):
-            # anchor_index: (num_truths)
-            each_anchor = tf.gather_nd(self.anchors, each_anchor_index)
-            # (num_filtered_truths x 2)
-            return tf.reshape(each_anchor, shape(each_anchor_index) + [2])
-        # (batch x num_filtered_truths x 2)
-        best_anchor = tf.map_fn(best_anchor_fn, anchor_index, dtype=tf.float32)
+        # anchor_index: (num_truths)
+        # best_anchor: (num_truths x 2)
+        best_anchor = tf.gather_nd(self.anchors, anchor_index)
+        best_anchor = best_anchor
         h_anchor, w_anchor = tf.unstack(best_anchor, axis=-1)
-        # adjusted relative to cell row and col (batch x num_truths x 4)
+        # adjusted relative to cell row and col (num_truths x 4)
         box = [y - row_float, x - col_float, h / h_anchor, w / w_anchor]
         box = tf.stack(box, axis=-1)
-        # boxes, batch-wise allocation
-        fn = lambda each: tf.scatter_nd(
-            each[0], each[1], self._base_shape + [4])
-        box = tf.map_fn(fn, (index, box), dtype=tf.float32)
+        # boxes
+        box = tf.scatter_nd(index, box, self._base_shape + [4])
 
-        # labels, batch-wise allocation
-        fn = lambda each: tf.scatter_nd(each[0], each[1], self._base_shape)
-        label = tf.expand_dims(label, -1)
-        label = tf.map_fn(fn, (index, label), dtype=tf.int32)
+        # labels
+        label = tf.scatter_nd(index, label, self._base_shape)
         return objectness, box, label
 
     def _filter(self, prediction):
@@ -230,14 +227,17 @@ class YOLOv2(ImageTaskBase):
             'score': score_test,
         }
         # the original box and label values from the dataset
-        label, truebox = truth
-        obj, box, label = self._truth_to_cell(truebox, label)
+        label, truebox, count = truth
+        obj, box, label = tf.map_fn(
+            self._truth_to_cell, (truebox, label, count),
+            dtype=(tf.float32, tf.float32, tf.int32))
         truth = {
             'object': obj,
             'object_mask': tf.expand_dims(obj, -1),
             'box': box,
             'rawbox': truebox,
             'class': slim.one_hot_encoding(label, self.num_classes),
+            'count': count,
         }
         return data, prediction, truth
 

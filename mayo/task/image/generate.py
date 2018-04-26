@@ -30,14 +30,28 @@ class Preprocess(object):
             return tf.image.convert_image_dtype(i, dtype=tf.float32)
 
     @staticmethod
-    def _parse_proto(proto):
-        string = tf.FixedLenFeature([], dtype=tf.string, default_value='')
+    def _pad_to_shape(tensor, shape, default_value=0):
+        tensor_shape = tf.unstack(tf.shape(tensor))
+        paddings = [
+            [0, max_size - size]
+            for max_size, size in zip(shape, tensor_shape)]
+        tensor = tf.pad(tensor, paddings, constant_values=default_value)
+        return tf.reshape(tensor, shape)
+
+    _max_objects = 100
+
+    @classmethod
+    def _parse_proto(cls, proto):
+        int64 = tf.FixedLenFeature([], dtype=tf.int64, default_value=-1)
+        int64s = tf.VarLenFeature(dtype=tf.int64)
         float32s = tf.VarLenFeature(dtype=tf.float32)
+        string = tf.FixedLenFeature([], dtype=tf.string, default_value='')
         # dense features
         feature_map = {
             'image/encoded': string,
-            'image/class/label': tf.VarLenFeature(dtype=tf.int64),
+            'image/class/label': int64,
             'image/class/text': string,
+            'image/object/bbox/label': int64s,
         }
         # bounding boxes
         bbox_keys = [
@@ -48,25 +62,35 @@ class Preprocess(object):
 
         # parsing
         features = tf.parse_single_example(proto, feature_map)
-        label = tf.cast(features['image/class/label'].values, dtype=tf.int32)
+        class_label = tf.cast(features['image/class/label'], dtype=tf.int32)
+        bbox_label = tf.cast(
+            features['image/object/bbox/label'].values, dtype=tf.int32)
+        bbox_count = tf.shape(bbox_label)[0]
+        # FIXME annoying hack for batching different sized shapes
+        bbox_label = cls._pad_to_shape(bbox_label, [cls._max_objects], -1)
 
         # bbox handling
         # force the variable number of bounding boxes into the shape
-        # [1, num_boxes, coords]
+        # [num_boxes, coords]
         bboxes = [features[k].values for k in bbox_keys]
-        bboxes = tf.expand_dims(tf.stack(axis=-1, values=bboxes), 0)
+        bboxes = tf.stack(axis=-1, values=bboxes)
+        # FIXME annoying hack for batching different sized shapes,
+        # even though bboxes are padded, the new bboxes are all zeros,
+        # effectively results in an IOU of 0, and should hopefully be filtered.
+        bboxes = cls._pad_to_shape(bboxes, [cls._max_objects, 4], 0)
 
         # other
         encoded = features['image/encoded']
         text = features['image/class/text']
-        return encoded, label, bboxes, text
+        return encoded, class_label, bboxes, bbox_count, bbox_label, text
 
     def _actions(self, key):
         return ensure_list(self.actions.get(key) or [])
 
     def _preprocess(self, serialized):
         # unserialize and prepocess image
-        buffer, label, bbox, text = self._parse_proto(serialized)
+        buffer, label, bbox, count, bbox_label, text = \
+            self._parse_proto(serialized)
         # decode jpeg image
         channels = self.before_shape[-1]
         image = self._decode_jpeg(buffer, channels)
@@ -76,8 +100,10 @@ class Preprocess(object):
         image = augment.augment(actions)
         values = [image]
         truth_map = {
-            'label': label,
+            'class/label': label,
             'bbox': bbox,
+            'bbox/label': bbox_label,
+            'bbox/count': count,
             'text': text,
         }
         for key in self.truth_keys:
