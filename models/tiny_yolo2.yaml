@@ -1,6 +1,8 @@
 ---
 dataset:
     task:
+        # only supports YOLOv2
+        type: mayo.task.image.YOLOv2
         num_cells: 13
         preprocess:
             validate: null
@@ -11,6 +13,9 @@ dataset:
                 channels: 3
 model:
     name: tiny_yolo2
+    description:
+        Tiny YOLOv2 implementation from::
+            https://github.com/experiencor/keras-yolo2/blob/master/backend.py
     layers:
         _conv: &conv
             type: convolution

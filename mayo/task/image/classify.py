@@ -18,7 +18,8 @@ class Classify(ImageTaskBase):
             self, session, preprocess,
             background_class, num_classes, shape, moment=None):
         bg = background_class
-        self.label_offset = int(bg.get('use')) - int(bg.get('has'))
+        self.label_offset = \
+            int(bg.get('use', False)) - int(bg.get('has', False))
         self.num_classes = num_classes + self.label_offset
         session.config.dataset.task.num_classes = self.num_classes
         super().__init__(session, preprocess, shape, moment=None)
