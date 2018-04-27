@@ -8,7 +8,7 @@ from PIL import Image, ImageDraw
 
 from mayo.util import memoize_property
 from mayo.task.image.base import ImageTaskBase
-from mayo.task.image.detect.util import cartesian, iou
+from mayo.task.image.detect import util
 
 
 class YOLOv2(ImageTaskBase):
@@ -122,13 +122,14 @@ class YOLOv2(ImageTaskBase):
             - a (num_cells x num_cells x num_anchors) tensor of labels.
         """
         box, label, count = each
+        count = 3
         with tf.control_dependencies([tf.assert_greater(count, 0)]):
             box = box[:count, :]
             label = label[:count]
 
         # normalize the scale of bounding boxes to the size of each cell
         # y, x, h, w are (num_truths)
-        y, x, h, w = tf.unstack(box * self.cell_size, axis=-1)
+        y, x, h, w = tf.unstack(box * self.num_cells, axis=-1)
 
         # indices of the box-containing cells (num_truths)
         # any position within [k * cell_size, (k + 1) * cell_size)
@@ -137,9 +138,9 @@ class YOLOv2(ImageTaskBase):
         row, col = (tf.cast(v, tf.int32) for v in (row_float, col_float))
 
         # ious: num_truths x num_boxes
-        pair_box, pair_anchor = cartesian(
+        pair_box, pair_anchor = util.cartesian(
             tf.stack([h, w], axis=-1), self.anchors)
-        ious = iou(pair_box, pair_anchor, anchors=True)
+        ious = util.iou(pair_box, pair_anchor, anchors=True)
         # box indices: (num_truths)
         _, anchor_index = tf.nn.top_k(ious)
         anchor_index_squeezed = tf.squeeze(anchor_index, axis=-1)
@@ -151,8 +152,7 @@ class YOLOv2(ImageTaskBase):
         # for each (batch), indices (num_truths x 3) are used to scatter values
         # into a (num_cells x num_cells x num_anchors) tensor.
         # resulting in a (batch x num_cells x num_cells x num_anchors) tensor.
-        objectness = tf.scatter_nd(
-            index, tf.ones_like([count]), self._base_shape)
+        objectness = tf.scatter_nd(index, tf.ones([count]), self._base_shape)
 
         # boxes
         # anchor_index: (num_truths)
@@ -184,8 +184,9 @@ class YOLOv2(ImageTaskBase):
         classes = tf.boolean_mask(classes, mask)
 
         # non-max suppression
-        indices = tf.image.non_max_suppression(
-            boxes, scores, self.nms_max_boxes, self.nms_iou_threshold)
+        fn = lambda each: tf.image.non_max_suppression(
+            each[0], each[1], self.nms_max_boxes, self.nms_iou_threshold)
+        indices = tf.map_fn(fn, (boxes, scores), dtype=tf.int32)
         boxes = tf.gather_nd(boxes, indices)
         scores = tf.gather_nd(scores, indices)
         classes = tf.gather_nd(classes, indices)
@@ -205,7 +206,7 @@ class YOLOv2(ImageTaskBase):
             last dimension (5) consists of a bounding box (4), and a label (1).
         """
         prediction = prediction['output']
-        batch, height, width, channels = prediction.shape
+        batch, height, width, channels = util.shape(prediction)
         prediction = tf.reshape(
             prediction,
             (batch, height, width, self.num_anchors, self.num_classes + 5))
@@ -227,18 +228,19 @@ class YOLOv2(ImageTaskBase):
             'score': score_test,
         }
         # the original box and label values from the dataset
-        label, truebox, count = truth
-        obj, box, label = tf.map_fn(
-            self._truth_to_cell, (truebox, label, count),
-            dtype=(tf.float32, tf.float32, tf.int32))
-        truth = {
-            'object': obj,
-            'object_mask': tf.expand_dims(obj, -1),
-            'box': box,
-            'rawbox': truebox,
-            'class': slim.one_hot_encoding(label, self.num_classes),
-            'count': count,
-        }
+        if truth:
+            label, truebox, count = truth
+            obj, box, label = tf.map_fn(
+                self._truth_to_cell, (truebox, label, count),
+                dtype=(tf.float32, tf.float32, tf.int32))
+            truth = {
+                'object': obj,
+                'object_mask': tf.expand_dims(obj, -1),
+                'box': box,
+                'rawbox': truebox,
+                'class': slim.one_hot_encoding(label, self.num_classes),
+                'count': count,
+            }
         return data, prediction, truth
 
     @memoize_property
@@ -308,7 +310,7 @@ class YOLOv2(ImageTaskBase):
         outbox_p = tf.reshape(prediction['outbox'], shape)
         shape = [self.batch_size, 1, 1, 1, num_objects, 4]
         outbox = tf.reshape(truth['rawbox'], shape)
-        iou_score = iou(outbox_p, outbox)
+        iou_score = util.iou(outbox_p, outbox)
         iou_score = tf.reduce_max(iou_score, axis=4, keepdims=True)
         is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.float32)
         noobj_loss = (1 - truth['object_mask']) * is_obj_absent

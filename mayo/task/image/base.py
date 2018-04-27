@@ -26,7 +26,7 @@ class ImageTaskBase(TFTaskBase):
         def feed(name):
             image_string = tf.read_file(name)
             image = tf.image.decode_jpeg(
-                image_string, channels=self._preprocessor.shape[-1])
+                image_string, channels=self._preprocessor.before_shape[-1])
             image = tf.image.convert_image_dtype(image, dtype=tf.float32)
             image = self._preprocessor.augment(image)
             return name, image
