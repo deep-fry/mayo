@@ -1,6 +1,6 @@
 import tensorflow as tf
 
-from mayo.util import ensure_list
+from mayo.util import ensure_list, pad_to_shape
 from mayo.task.image.augment import Augment
 
 
@@ -28,15 +28,6 @@ class Preprocess(object):
         with tf.name_scope(values=[buffer], name='decode_jpeg'):
             i = tf.image.decode_jpeg(buffer, channels=channels)
             return tf.image.convert_image_dtype(i, dtype=tf.float32)
-
-    @staticmethod
-    def _pad_to_shape(tensor, shape, default_value=0):
-        tensor_shape = tf.unstack(tf.shape(tensor))
-        paddings = [
-            [0, max_size - size]
-            for max_size, size in zip(shape, tensor_shape)]
-        tensor = tf.pad(tensor, paddings, constant_values=default_value)
-        return tf.reshape(tensor, shape)
 
     _max_objects = 100
 
@@ -66,18 +57,14 @@ class Preprocess(object):
         bbox_label = tf.cast(
             features['image/object/bbox/label'].values, dtype=tf.int32)
         bbox_count = tf.shape(bbox_label)[0]
-        # FIXME annoying hack for batching different sized shapes
-        bbox_label = cls._pad_to_shape(bbox_label, [cls._max_objects], -1)
+        bbox_label = pad_to_shape(bbox_label, [cls._max_objects], -1)
 
         # bbox handling
         # force the variable number of bounding boxes into the shape
         # [num_boxes, coords]
         bboxes = [features[k].values for k in bbox_keys]
         bboxes = tf.stack(axis=-1, values=bboxes)
-        # FIXME annoying hack for batching different sized shapes,
-        # even though bboxes are padded, the new bboxes are all zeros,
-        # effectively results in an IOU of 0, and should hopefully be filtered.
-        bboxes = cls._pad_to_shape(bboxes, [cls._max_objects, 4], 0)
+        bboxes = pad_to_shape(bboxes, [cls._max_objects, 4], 0)
 
         # other
         encoded = features['image/encoded']

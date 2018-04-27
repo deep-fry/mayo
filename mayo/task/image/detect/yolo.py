@@ -171,22 +171,25 @@ class YOLOv2(ImageTaskBase):
         return objectness, box, label
 
     def _filter(self, prediction):
+        object_mask, cls, outbox = prediction
         # filter objects with a low confidence score
-        # batch x cell x cell x anchors x classes
-        confidence = prediction['object_mask'] * prediction['class']
-        # batch x cell x cell x anchors
-        classes = tf.argmax(confidence, axis=-1)
+        # cell x cell x anchors x classes
+        confidence = object_mask * cls
+        base_shape = [self.num_cells * self.num_cells * self.num_anchors]
+        confidence = tf.reshape(confidence, base_shape + [self.num_classes])
+        # cell x cell x anchors
+        classes = tf.argmax(confidence, axis=-1, output_type=tf.int32)
         scores = tf.reduce_max(confidence, axis=-1)
         mask = scores >= self.score_threshold
         # only confident objects are left
-        boxes = tf.boolean_mask(prediction['outbox'], mask)
+        boxes = tf.boolean_mask(tf.reshape(outbox, base_shape + [4]), mask)
         scores = tf.boolean_mask(scores, mask)
         classes = tf.boolean_mask(classes, mask)
 
         # non-max suppression
-        fn = lambda each: tf.image.non_max_suppression(
-            each[0], each[1], self.nms_max_boxes, self.nms_iou_threshold)
-        indices = tf.map_fn(fn, (boxes, scores), dtype=tf.int32)
+        indices = tf.image.non_max_suppression(
+            boxes, scores, self.nms_max_boxes, self.nms_iou_threshold)
+        indices = tf.expand_dims(indices, -1)
         boxes = tf.gather_nd(boxes, indices)
         scores = tf.gather_nd(scores, indices)
         classes = tf.gather_nd(classes, indices)
@@ -221,7 +224,11 @@ class YOLOv2(ImageTaskBase):
             'outbox': self._cell_to_global(yx_predict, hw_predict),
             'class': hot_predict,
         }
-        box_test, score_test, class_test = self._filter(prediction)
+        inputs = (
+            prediction['object_mask'], prediction['class'],
+            prediction['outbox'])
+        box_test, score_test, class_test = tf.map_fn(
+            self._filter, inputs, dtype=(tf.float32, tf.float32, tf.int32))
         prediction['test'] = {
             'box': box_test,
             'class': class_test,
@@ -241,21 +248,20 @@ class YOLOv2(ImageTaskBase):
                 'class': slim.one_hot_encoding(label, self.num_classes),
                 'count': count,
             }
-        return data, prediction, truth
+        return data['input'], prediction, truth
 
     @memoize_property
     def colors(self):
         for i in range(self.num_classes):
-            rgb = colorsys.hsv_to_rgb((i / self.num_classes, 1, 1))
-            yield [int(c * 255) for c in rgb]
+            rgb = colorsys.hsv_to_rgb(i / self.num_classes, 1, 1)
+            yield tuple(int(c * 255) for c in rgb)
 
-    def test(self, name, image, prediction):
-        height, width, _ = image.size
-        image = Image.fromarray(np.uint8(image))
-        boxes, scores, classes = prediction['test']
+    def _test(self, name, image, boxes, scores, classes):
+        height, width, channels = image.shape
+        image = Image.fromarray(np.uint8(255.0 * image))
         thickness = int((height + width) / 300)
         for box, score, cls in zip(boxes, scores, classes):
-            draw = ImageDraw(image)
+            draw = ImageDraw.ImageDraw(image)
             y, x, h, w = box
             top = max(0, round(y - h / 2))
             bottom = min(height, round(y + h / 2))
@@ -263,7 +269,7 @@ class YOLOv2(ImageTaskBase):
             right = min(width, round(x + w / 2))
             for i in range(thickness):
                 draw.rectangle(
-                    [left + i, top + i, right - i, bottom - i],
+                    (left + i, top + i, right - i, bottom - i),
                     outline=self.colors[cls])
             # draw label
             label = '{} {:.2f}'.format(self.class_names[cls], score)
@@ -273,11 +279,21 @@ class YOLOv2(ImageTaskBase):
                 left + label_width, top + label_height]
             draw.rectangle(label_pos, fill=self.colors[cls])
             draw.text(label_pos[:2], label, fill=(0, 0, 0))
-        path = self.session.config.system.search_path.run
-        path = os.path.join(path, 'classify')
+        path = self.session.config.system.search_path.run.outputs[0]
+        path = os.path.join(path, 'detect')
         os.makedirs(path, exist_ok=True)
-        path = os.path.join(path, name)
+        name = os.path.split(str(name))[1]
+        name, ext = os.path.splitext(name)
+        path = os.path.join(path, '{}.png'.format(name))
         image.save(path, quality=90)
+
+    def test(self, names, images, predictions):
+        predictions = predictions['test']
+        boxes = predictions['box']
+        scores = predictions['score']
+        classes = predictions['class']
+        for args in zip(names, images, boxes, scores, classes):
+            self._test(*args)
 
     def eval(self, net, prediction, truth):
         ...

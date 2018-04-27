@@ -24,7 +24,7 @@ dataset:
     path:
         train: voc/train_*.tfrecord
         validate: voc/test_*.tfrecord
-        label: voc/labels.txt
+        labels: voc/labels.txt
     num_examples_per_epoch:
         train: 17125
         validate: 5138
