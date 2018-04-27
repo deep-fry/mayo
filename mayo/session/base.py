@@ -1,17 +1,13 @@
-import os
-import re
 import functools
-import subprocess
 from contextlib import contextmanager
 
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize_property, flatten, Change, Table, Percent
-from mayo.net.tf import TFNet
+from mayo.util import (
+    memoize_property, flatten, Change, Table, Percent, object_from_params)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
-from mayo.preprocess import Preprocess
 from mayo.session.checkpoint import CheckpointHandler
 
 
@@ -57,11 +53,12 @@ class SessionMeta(type):
         return wrapped
 
 
-class Session(object, metaclass=SessionMeta):
+class SessionBase(object, metaclass=SessionMeta):
     mode = None
 
     def __init__(self, config):
         super().__init__()
+        log.debug('Instantiating...')
         # the default graph is made read-only to ensure
         # we always write to our graph
         default_graph = tf.get_default_graph()
@@ -71,7 +68,6 @@ class Session(object, metaclass=SessionMeta):
         self.finalizers = {}
         self.config = config
         self.change = Change()
-        self._init_gpus()
         self.tf_graph = tf.Graph()
         self.initialized_variables = []
         self._assign_operators = {}
@@ -79,14 +75,11 @@ class Session(object, metaclass=SessionMeta):
             graph=self.tf_graph,
             config=tf.ConfigProto(allow_soft_placement=True))
         self.tf_session.mayo_session = self
-        self.preprocessor = Preprocess(
-            self.tf_session, self.mode, config, self.num_gpus)
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
         self.estimator = ResourceEstimator(config.system.batch_size_per_gpu)
         self._register_progress()
-        self.nets = self._instantiate_nets()
-        self._register_estimates()
+        self._instantiate_task()
         self._finalize()
 
     def __del__(self):
@@ -105,16 +98,6 @@ class Session(object, metaclass=SessionMeta):
         self.estimator.register(
             self.imgs_seen_op, 'imgs_seen',
             history=1, formatter=progress_formatter)
-
-    def _register_estimates(self):
-        # labels
-        def label_transformer(index):
-            # TODO label transformer
-            return index
-        history = 'infinite' if self.mode == 'validate' else None
-        self.estimator.register(
-            self.nets[0].labels(), 'labels', history=history,
-            transformer=label_transformer)
 
     def _finalize(self):
         for name, finalizer in self.finalizers.items():
@@ -138,43 +121,6 @@ class Session(object, metaclass=SessionMeta):
     @property
     def num_gpus(self):
         return self.config.system.num_gpus
-
-    def _auto_select_gpus(self):
-        mem_bound = self.config.system.gpu_mem_bound
-        try:
-            info = subprocess.check_output(
-                'nvidia-smi', shell=True, stderr=subprocess.STDOUT)
-            info = re.findall('(\d+)MiB\s/', info.decode('utf-8'))
-            log.debug('GPU memory usages (MB): {}'.format(', '.join(info)))
-            info = [int(m) for m in info]
-            gpus = [i for i in range(len(info)) if info[i] <= mem_bound]
-        except subprocess.CalledProcessError:
-            gpus = []
-        if len(gpus) < self.num_gpus:
-            log.warn(
-                'Number of GPUs available {} is less than the number of '
-                'GPUs requested {}.'.format(len(gpus), self.num_gpus))
-        return ','.join(str(g) for g in gpus[:self.num_gpus])
-
-    def _init_gpus(self):
-        cuda_key = 'CUDA_VISIBLE_DEVICES'
-        if cuda_key in os.environ:
-            log.info('Using {}: {}'.format(cuda_key, os.environ[cuda_key]))
-        gpus = self.config.system.get('visible_gpus', 'auto')
-        if gpus != 'auto':
-            if isinstance(gpus, list):
-                gpus = ','.join(str(g) for g in gpus)
-            else:
-                gpus = str(gpus)
-        else:
-            gpus = self._auto_select_gpus()
-        if gpus:
-            log.info('Using GPUs: {}'.format(gpus))
-        else:
-            log.info('No GPUs available, using only one clone on CPU.')
-            # FIXME hacky way to make it instantiate only one tower
-            self.config.system.num_gpus = 1
-        os.environ[cuda_key] = gpus
 
     def _tf_scalar(self, name, dtype=tf.int64):
         return tf.get_variable(
@@ -201,27 +147,18 @@ class Session(object, metaclass=SessionMeta):
     def num_examples_per_epoch(self):
         return self.config.dataset.num_examples_per_epoch[self.mode]
 
-    def _mean_metric(self, func):
-        return tf.reduce_mean(list(self.net_map(func)))
-
-    @memoize_property
-    def accuracy(self):
-        return self._mean_metric(lambda net: net.accuracy())
-
-    @memoize_property
-    def loss(self):
-        # average loss without regularization, only for human consumption
-        return self._mean_metric(lambda net: net.loss())
-
     def global_variables(self):
         return tf.global_variables()
 
     def trainable_variables(self):
         return tf.trainable_variables()
 
-    def get_collection(self, key):
-        func = lambda net: tf.get_collection(key)
-        return flatten(self.net_map(func))
+    def get_collection(self, key, first_gpu=False):
+        func = lambda net, *args: tf.get_collection(key)
+        collections = list(self.task.map(func))
+        if first_gpu:
+            return collections[0]
+        return flatten(collections)
 
     def assign(self, var, tensor, raw_run=False):
         """
@@ -256,7 +193,7 @@ class Session(object, metaclass=SessionMeta):
         self.checkpoint.save(name)
 
     def info(self, plumbing=False):
-        net = self.nets[0]
+        net = self.task.nets[0]
         info_dict = net.info(plumbing)
         # layer info
         stats = self.estimator.get_estimates(net)
@@ -277,7 +214,7 @@ class Session(object, metaclass=SessionMeta):
                 sum(layer_info.get_column(k)) for k in keys]
             layer_info.set_footer(['', '    total:'] + formatted_footers)
             info_dict['layers'] = layer_info
-        if self.nets[0].overriders:
+        if self.task.nets[0].overriders:
             info_dict['overriders'] = self._overrider_info(plumbing)
         return info_dict
 
@@ -290,11 +227,11 @@ class Session(object, metaclass=SessionMeta):
                     yield o
         info_dict = {}
         if plumbing:
-            for o in flatten(self.nets[0].overriders):
+            for o in flatten(self.task.nets[0].overriders):
                 info = tuple(o.info())
                 info_dict.setdefault(o.__class__, []).append(info)
         else:
-            for o in flatten(self.nets[0].overriders):
+            for o in flatten(self.task.nets[0].overriders):
                 info = o.info()
                 table = info_dict.setdefault(o.__class__, Table(info._fields))
                 table.add_row(info)
@@ -304,7 +241,7 @@ class Session(object, metaclass=SessionMeta):
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
-        for o in self.nets[0].overriders:
+        for o in self.task.nets[0].overriders:
             o.assign_parameters()
 
     @contextmanager
@@ -363,32 +300,13 @@ class Session(object, metaclass=SessionMeta):
             results = self.raw_run(ops, **kwargs)
         return results
 
-    def _preprocess(self):
-        return self.preprocessor.preprocess()
+    @property
+    def _task_constructor(self):
+        return object_from_params(self.config.dataset.task)
 
-    @contextmanager
-    def _gpu_context(self, gid):
-        with tf.device('/gpu:{}'.format(gid)):
-            with tf.name_scope('tower_{}'.format(gid)) as scope:
-                yield scope
-
-    def _instantiate_nets(self):
-        log.debug('Instantiating...')
-        num_classes = self.config.num_classes()
-        nets = []
-        for i, (images, labels) in enumerate(self._preprocess()):
-            log.debug('Instantiating graph for GPU #{}...'.format(i))
-            with self._gpu_context(i):
-                net = TFNet(
-                    self, self.config.model, images, labels, num_classes,
-                    bool(nets))
-            nets.append(net)
-        return nets
-
-    def net_map(self, func):
-        for i, net in enumerate(self.nets):
-            with self._gpu_context(i):
-                yield func(net)
+    def _instantiate_task(self):
+        task_cls, task_params = self._task_constructor
+        self.task = task_cls(self, **task_params)
 
     def interact(self):
         from IPython import embed

@@ -1,8 +1,10 @@
-checkpoints/*/*/*
 !checkpoints/*/*/pretrained.*
-summaries/
-plots/
-datasets/imagenet/
-__pycache__
 .DS_Store
 .idea
+__pycache__
+checkpoints/
+datasets/*/*.tfrecord
+datasets/imagenet/*-*-of-*
+plots/
+runs/
+summaries/

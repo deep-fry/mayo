@@ -1,8 +1,8 @@
 import tensorflow as tf
 from tensorflow.contrib import slim
 
-from mayo.net.tf.util import use_name_not_scope
 from mayo.net.tf.base import TFNetBase
+from mayo.net.tf.transform import use_name_not_scope
 
 
 class Layers(TFNetBase):
@@ -136,6 +136,9 @@ class Layers(TFNetBase):
     def instantiate_concat(self, node, tensors, params):
         return tf.concat(tensors, **use_name_not_scope(params))
 
+    def instantiate_space_to_depth(self, node, tensors, params):
+        return tf.space_to_depth(tensors, **use_name_not_scope(params))
+
     def instantiate_add(self, node, tensors, params):
         return tf.add_n(tensors, name=params['scope'])
 
@@ -146,7 +149,8 @@ class Layers(TFNetBase):
         return tf.multiply(tensors[0], tensors[1], name=params['scope'])
 
     def instantiate_activation(self, node, tensors, params):
-        supported_modes = ['relu', 'relu6', 'elu', 'sigmoid', 'tanh']
+        supported_modes = [
+            'relu', 'relu6', 'elu', 'sigmoid', 'tanh', 'leaky_relu']
         mode = params['mode']
         if mode not in supported_modes:
             raise TypeError(

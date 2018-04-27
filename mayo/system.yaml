@@ -1,7 +1,7 @@
 ---
 system:
     num_gpus: 1
-    gpu_mem_bound: 500
+    gpu_memory_bound: 500
     visible_gpus: auto
     preprocess:
         num_threads: 8
@@ -19,8 +19,6 @@ system:
     checkpoint:
         load: latest
         save: {interval: 1, countdown: 3}
-    summary:
-        save: {interval: 0.1}
     info:
         plumbing: false
     plot:
@@ -37,9 +35,12 @@ system:
             save: &cp_paths
                 - checkpoints/$(model.name)/$(dataset.name)/
             load: *cp_paths
-        summary:
-            - summaries/$(model.name)/$(dataset.name)/
         plot:
             - plots/$(model.name)/$(dataset.name)/
         profile:
             - profiles/$(model.name)/$(dataset.name)/
+        run:
+            inputs:
+                - runs/$(model.name)/inputs
+            outputs:
+                - runs/$(model.name)/outputs

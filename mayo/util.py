@@ -1,4 +1,5 @@
 import os
+import types
 import functools
 import contextlib
 import collections
@@ -13,6 +14,16 @@ def null_scope():
     yield
 
 
+def pad_to_shape(tensor, shape, default_value=0):
+    # FIXME annoying hack for batching different sized shapes
+    tensor_shape = tf.unstack(tf.shape(tensor))
+    paddings = [
+        [0, max_size - size]
+        for max_size, size in zip(shape, tensor_shape)]
+    tensor = tf.pad(tensor, paddings, constant_values=default_value)
+    return tf.reshape(tensor, shape)
+
+
 def memoize_method(func):
     """
     A decorator to remember the result of the method call
@@ -24,6 +35,9 @@ def memoize_method(func):
             return getattr(self, name)
         except AttributeError:
             result = func(self, *args, **kwargs)
+            if isinstance(result, types.GeneratorType):
+                # automatically resolve generators
+                result = list(result)
             setattr(self, name, result)
             return result
     return wrapped

@@ -1,15 +1,16 @@
 ---
 dataset:
-    background_class: {use: true}
-    preprocess:
-        shape:
-            height: 32
-            width: 32
-            channels: 3
-        validate: {type: central_crop, fraction: 0.875}
-        final_cpu:
-            - {type: resize, fill: false}
-            - {type: linear_map, scale: 2.0, shift: -1.0}
+    task:
+        background_class: {use: true}
+        preprocess:
+            shape:
+                height: 32
+                width: 32
+                channels: 3
+            validate: {type: central_crop, fraction: 0.875}
+            final_cpu:
+                - {type: resize, fill: false}
+                - {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: se-resnet50-cifar10
     description:
@@ -133,7 +134,7 @@ model:
         flatten: {type: flatten}
         dense:
             type: fully_connected
-            num_outputs: num_classes
+            num_outputs: $(dataset.task.num_classes)
             activation_fn: null
             normalizer_fn: null
     graph:

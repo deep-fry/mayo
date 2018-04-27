@@ -1,7 +1,8 @@
-import tensorflow as tf
-import operator
-import numpy as np
 import re
+import operator
+
+import numpy as np
+import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import import_from_string
