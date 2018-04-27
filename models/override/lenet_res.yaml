@@ -1,0 +1,14 @@
+---
+_import: ../lenet5_res.yaml
+model.layers:
+    _basic_block: &bb
+        layers:
+            conv1: &conv {overrider: $(_overrider.conv)}
+            conv2: {<<: *conv}
+    conv0: {overrider: $(_overrider.conv)}
+    b11: {<<: *bb}
+    b21: {<<: *bb}
+    b22: {<<: *bb}
+    b31: {<<: *bb}
+    b32: {<<: *bb}
+    logits: {overrider: $(_overrider.logits)}

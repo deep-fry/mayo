@@ -1,13 +1,14 @@
 ---
 dataset:
-    background_class: {use: false}
-    preprocess:
-        shape:
-            height: 28
-            width: 28
-            channels: 1
-        validate: null
-        final_cpu: {type: linear_map, scale: 2.0, shift: -1.0}
+    task:
+        background_class: {use: false}
+        preprocess:
+            shape:
+                height: 28
+                width: 28
+                channels: 1
+            validate: null
+            final_cpu: {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: lenet5_res
     layers:
@@ -56,19 +57,9 @@ model:
         b31: {<<: *bb, stride: 2, depth: 64, shortcut: downsample}
         b32: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
         conv0:
-            type: convolution
-            weights_initializer:
-                type: tensorflow.truncated_normal_initializer
-                stddev: 0.09
+            <<: *conv
             kernel_size: 3
-            padding: valid
             num_outputs: 16
-            normalizer_fn: tensorflow.contrib.slim.batch_norm
-            normalizer_params:
-                center: true
-                scale: true
-                decay: 0.9997
-                epsilon: 0.001
         pool0: &pool
             type: max_pool
             kernel_size: 3
@@ -81,7 +72,7 @@ model:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
             activation_fn: null
-            num_outputs: num_classes
+            num_outputs: $(dataset.task.num_classes)
     graph:
         from: input
         with: [conv0, pool0, b11, b21, b22, b31, b32, flatten, logits]
