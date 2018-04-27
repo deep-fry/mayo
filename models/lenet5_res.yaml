@@ -13,7 +13,6 @@ model:
     layers:
         _conv: &conv
             type: convolution
-            trainable: $(_trainable)
             normalizer_fn: tensorflow.contrib.slim.batch_norm
             normalizer_params:
                 scale: true
@@ -44,7 +43,7 @@ model:
                     padding: valid
                     activation_fn: null
                 identity_shortcut: {type: identity}
-                add: {type: gated_add}
+                add: {type: add}
                 relu: {type: activation, mode: relu}
             graph:
                 - {from: input, with: [conv1, conv2], to: a}
