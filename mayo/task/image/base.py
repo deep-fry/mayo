@@ -34,6 +34,9 @@ class ImageTaskBase(TFTaskBase):
         batch_size = self.config.system.batch_size_per_gpu * num_gpus
         filenames = [
             os.path.join(folder, name) for name in sorted(os.listdir(folder))]
+        suffixes = ['.jpg', '.jpeg', '.png']
+        filenames = [
+            n for n in filenames if any(n.endswith(s) for s in suffixes)]
         filenames = tf.constant(filenames)
         dataset = tf.data.Dataset.from_tensor_slices(filenames)
         dataset = dataset.map(feed)

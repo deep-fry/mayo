@@ -12,9 +12,9 @@ dataset:
                 width: 416
                 channels: 3
 model:
-    name: tiny_yolo2
+    name: tiny_yolo
     description:
-        Tiny YOLOv2 implementation from::
+        Tiny YOLO implementation from::
             https://github.com/experiencor/keras-yolo2/blob/master/backend.py
     layers:
         _conv: &conv
@@ -56,16 +56,17 @@ model:
         pool6: {<<: *pool, stride: 1}
         conv7: {<<: *conv, num_outputs: 1024}
         conv8: {<<: *conv, num_outputs: 1024}
-        extract9:
+        conv9:
             <<: *conv
             kernel_size: 1
             num_outputs: !arith >
                 (5 + $(dataset.task.num_classes)) *
                 len($(dataset.task.anchors))
+            normalizer_fn: null
             activation_fn: null
     graph:
         from: input
         with: [
             conv1, pool1, conv2, pool2, conv3, pool3, conv4, pool4,
-            conv5, pool5, conv6, pool6, conv7, conv8, extract9]
+            conv5, pool5, conv6, pool6, conv7, conv8, conv9]
         to: output

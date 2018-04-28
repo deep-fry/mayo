@@ -6,6 +6,7 @@ import tensorflow as tf
 from tensorflow.contrib import slim
 from PIL import Image, ImageDraw
 
+from mayo.log import log
 from mayo.util import memoize_property
 from mayo.task.image.base import ImageTaskBase
 from mayo.task.image.detect import util
@@ -96,13 +97,12 @@ class YOLOv2(ImageTaskBase):
         cols = tf.tile(cols, [self.num_cells, 1])
         grid = tf.stack([rows, cols], axis=-1)
         grid = tf.reshape(grid, [1, self.num_cells, self.num_cells, 1, 2])
-        grid = tf.cast(grid, tf.float32) * self.cell_size
+        grid = tf.cast(grid, tf.float32)
         # box transformation
         yx += grid
         hw *= tf.reshape(self.anchors, [1, 1, 1, self.num_anchors, 2])
-        box = tf.concat([yx, hw], axis=-1)
-        # normalize box position to 0-1
-        return box / self.image_size
+        box = tf.concat([yx, hw], axis=-1) / self.num_cells
+        return box
 
     def _truth_to_cell(self, each):
         """
@@ -176,15 +176,16 @@ class YOLOv2(ImageTaskBase):
         # cell x cell x anchors x classes
         confidence = object_mask * cls
         base_shape = [self.num_cells * self.num_cells * self.num_anchors]
+        boxes = tf.reshape(outbox, base_shape + [4])
         confidence = tf.reshape(confidence, base_shape + [self.num_classes])
         # cell x cell x anchors
         classes = tf.argmax(confidence, axis=-1, output_type=tf.int32)
         scores = tf.reduce_max(confidence, axis=-1)
-        mask = scores >= self.score_threshold
+        #  mask = scores >= self.score_threshold
         # only confident objects are left
-        boxes = tf.boolean_mask(tf.reshape(outbox, base_shape + [4]), mask)
-        scores = tf.boolean_mask(scores, mask)
-        classes = tf.boolean_mask(classes, mask)
+        #  boxes = tf.boolean_mask(boxes, mask)
+        #  scores = tf.boolean_mask(scores, mask)
+        #  classes = tf.boolean_mask(classes, mask)
 
         # non-max suppression
         indices = tf.image.non_max_suppression(
@@ -209,12 +210,14 @@ class YOLOv2(ImageTaskBase):
             last dimension (5) consists of a bounding box (4), and a label (1).
         """
         prediction = prediction['output']
-        batch, height, width, channels = util.shape(prediction)
+        batch = util.shape(prediction)[0]
         prediction = tf.reshape(
             prediction,
-            (batch, height, width, self.num_anchors, self.num_classes + 5))
+            (batch, self.num_cells, self.num_cells,
+             self.num_anchors, 4 + 1 + self.num_classes))
         box_predict, obj_predict, hot_predict = tf.split(
             prediction, [4, 1, self.num_classes], axis=-1)
+        obj_predict = tf.nn.sigmoid(obj_predict)
         obj_predict_squeeze = tf.squeeze(obj_predict, -1)
         yx_predict, hw_predict = self._activate(box_predict)
         prediction = {
@@ -263,6 +266,7 @@ class YOLOv2(ImageTaskBase):
         for box, score, cls in zip(boxes, scores, classes):
             draw = ImageDraw.ImageDraw(image)
             y, x, h, w = box
+            y, x, h, w = y * height, x * width, h * height, w * width
             top = max(0, round(y - h / 2))
             bottom = min(height, round(y + h / 2))
             left = max(0, round(x - w / 2))
@@ -272,13 +276,17 @@ class YOLOv2(ImageTaskBase):
                     (left + i, top + i, right - i, bottom - i),
                     outline=self.colors[cls])
             # draw label
-            label = '{} {:.2f}'.format(self.class_names[cls], score)
+            cls_name = self.class_names[cls]
+            label = '{} {:.2f}'.format(cls_name, score)
             label_width, label_height = draw.textsize(label)
             label_pos = [
                 left, max(0, top - label_height),
                 left + label_width, top + label_height]
             draw.rectangle(label_pos, fill=self.colors[cls])
             draw.text(label_pos[:2], label, fill=(0, 0, 0))
+            log.info(
+                'Confidence: {:.2f}, class: {}, box: {}'
+                .format(score, cls_name, ((top, left), (bottom, right))))
         path = self.session.config.system.search_path.run.outputs[0]
         path = os.path.join(path, 'detect')
         os.makedirs(path, exist_ok=True)
@@ -288,10 +296,8 @@ class YOLOv2(ImageTaskBase):
         image.save(path, quality=90)
 
     def test(self, names, images, predictions):
-        predictions = predictions['test']
-        boxes = predictions['box']
-        scores = predictions['score']
-        classes = predictions['class']
+        test = predictions['test']
+        boxes, scores, classes = test['box'], test['score'], test['class']
         for args in zip(names, images, boxes, scores, classes):
             self._test(*args)
 
