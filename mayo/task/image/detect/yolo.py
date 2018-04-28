@@ -7,7 +7,7 @@ from tensorflow.contrib import slim
 from PIL import Image, ImageDraw, ImageFont
 
 from mayo.log import log
-from mayo.util import memoize_property
+from mayo.util import memoize_property, pad_to_shape
 from mayo.task.image.base import ImageTaskBase
 from mayo.task.image.detect import util
 
@@ -33,7 +33,7 @@ class YOLOv2(ImageTaskBase):
             self, session, preprocess, num_classes, shape,
             anchors, scales, moment=None, num_cells=13,
             iou_threshold=0.6, score_threshold=0.6,
-            nms_iou_threshold=0.5, nms_max_boxes=10):
+            nms_iou_threshold=0.4, nms_max_boxes=10):
         """
         anchors (tensor):
             a (num_anchors x 2) tensor of anchor boxes [(h, w), ...].
@@ -194,7 +194,11 @@ class YOLOv2(ImageTaskBase):
         boxes = tf.gather_nd(boxes, indices)
         scores = tf.gather_nd(scores, indices)
         classes = tf.gather_nd(classes, indices)
-        return boxes, scores, classes
+        count = tf.shape(boxes)[0]
+        boxes = pad_to_shape(boxes, [self.nms_max_boxes, 4])
+        scores = pad_to_shape(scores, [self.nms_max_boxes])
+        classes = pad_to_shape(classes, [self.nms_max_boxes])
+        return boxes, scores, classes, count
 
     def transform(self, net, data, prediction, truth):
         """
@@ -230,12 +234,14 @@ class YOLOv2(ImageTaskBase):
         inputs = (
             prediction['object_mask'], prediction['class'],
             prediction['outbox'])
-        box_test, score_test, class_test = tf.map_fn(
-            self._filter, inputs, dtype=(tf.float32, tf.float32, tf.int32))
+        box_test, score_test, class_test, count_test = tf.map_fn(
+            self._filter, inputs,
+            dtype=(tf.float32, tf.float32, tf.int32, tf.int32))
         prediction['test'] = {
             'box': box_test,
             'class': class_test,
             'score': score_test,
+            'count': count_test,
         }
         # the original box and label values from the dataset
         if truth:
@@ -259,15 +265,16 @@ class YOLOv2(ImageTaskBase):
             rgb = colorsys.hsv_to_rgb(i / self.num_classes, 0.5, 1)
             yield tuple(int(c * 255) for c in rgb)
 
-    def _test(self, name, image, boxes, scores, classes):
+    def _test(self, name, image, boxes, scores, classes, count):
         height, width, channels = image.shape
         image = Image.fromarray(np.uint8(255.0 * image))
         image = image.convert('RGBA')
         thickness = int((height + width) / 300)
-        log.info(name.decode())
+        log.info('{}: {} boxes.'.format(name.decode(), count))
         font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
         font = ImageFont.truetype(font, 12)
         max_score = max(scores)
+        boxes = boxes[:count]
         for box, score, cls in zip(boxes, scores, classes):
             layer = Image.new('RGBA', image.size, (255, 255, 255, 0))
             draw = ImageDraw.ImageDraw(layer)
@@ -304,8 +311,9 @@ class YOLOv2(ImageTaskBase):
 
     def test(self, names, images, predictions):
         test = predictions['test']
-        boxes, scores, classes = test['box'], test['score'], test['class']
-        for args in zip(names, images, boxes, scores, classes):
+        boxes, scores, classes, count = \
+            test['box'], test['score'], test['class'], test['count']
+        for args in zip(names, images, boxes, scores, classes, count):
             self._test(*args)
 
     def eval(self, net, prediction, truth):
