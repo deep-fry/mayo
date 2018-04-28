@@ -82,7 +82,8 @@ class Preprocess(object):
         channels = self.before_shape[-1]
         image = self._decode_jpeg(buffer, channels)
         # augment image
-        augment = Augment(image, bbox, self.after_shape, self.moment)
+        augment_bbox = tf.expand_dims(bbox[:count], 0)
+        augment = Augment(image, augment_bbox, self.after_shape, self.moment)
         actions = self._actions(self.mode) + self._actions('final_cpu')
         image = augment.augment(actions)
         values = [image]
