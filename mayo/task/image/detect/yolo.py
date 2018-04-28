@@ -267,7 +267,7 @@ class YOLOv2(ImageTaskBase):
         log.info(name.decode())
         font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
         font = ImageFont.truetype(font, 12)
-        transparency = 200
+        max_score = max(scores)
         for box, score, cls in zip(boxes, scores, classes):
             layer = Image.new('RGBA', image.size, (255, 255, 255, 0))
             draw = ImageDraw.ImageDraw(layer)
@@ -277,6 +277,7 @@ class YOLOv2(ImageTaskBase):
             bottom = min(height, round(y + h / 2))
             left = max(0, round(x - w / 2))
             right = min(width, round(x + w / 2))
+            transparency = 127 + int(128 * score / max_score)
             color = self.colors[cls] + (transparency, )
             for i in range(thickness):
                 draw.rectangle(
