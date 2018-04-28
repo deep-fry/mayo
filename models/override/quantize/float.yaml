@@ -8,4 +8,5 @@ _overrider:
             exponent_bias: 2
             mantissa_width: 2
             should_update: true
+            stochastic: false 
     biases: {<<: *quantizer}

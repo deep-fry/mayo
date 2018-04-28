@@ -27,12 +27,13 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def __init__(
             self, session, width, exponent_bias, mantissa_width,
-            overflow_rate=0.0, should_update=True):
+            overflow_rate=0.0, should_update=True, stochastic=None):
         super().__init__(session, should_update)
         self.width = width
         self.exponent_bias = exponent_bias
         self.mantissa_width = mantissa_width
         self.overflow_rate = overflow_rate
+        self.stochastic = stochastic
         exponent_width = width - mantissa_width
         is_valid = exponent_width >= 0 and mantissa_width >= 0
         is_valid = is_valid and (
@@ -72,7 +73,13 @@ class FloatingPointQuantizer(QuantizerBase):
         exponent_max = 2 ** exponent_width - 1 - exponent_bias
         exponent = util.clip_by_value(exponent, exponent_min, exponent_max)
         shift = util.cast(2 ** mantissa_width, float)
-        mantissa = util.round(mantissa * shift) / shift
+        # quantize
+        if self.stochastic:
+            mantissa = util.stochastic_round(mantissa * shift, self.stochastic)
+            mantissa /= shift
+        else:
+            mantissa = util.round(mantissa * shift) / shift
+
         # if the mantissa value gets rounded to >= 2 then we need to divide it
         # by 2 and increment exponent by 1
         is_out_of_range = util.greater_equal(mantissa, 2)
@@ -146,10 +153,11 @@ class FloatingPointQuantizer(QuantizerBase):
 class ShiftQuantizer(FloatingPointQuantizer):
     def __init__(
             self, session, overflow_rate, width=None, bias=None,
-            should_update=True):
+            should_update=True, stochastic=None):
         super().__init__(
             session=session, width=width, exponent_bias=bias,
-            mantissa_width=0, should_update=should_update)
+            mantissa_width=0, should_update=should_update,
+            stochastic=stochastic)
         self.overflow_rate = overflow_rate
 
     def _quantize(self, value):

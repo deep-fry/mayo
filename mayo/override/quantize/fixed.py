@@ -22,7 +22,8 @@ class FixedPointQuantizer(QuantizerBase):
     width = Parameter('width', 32, [], 'int')
     point = Parameter('point', 2, [], 'int')
 
-    def __init__(self, session, point=None, width=None, should_update=True):
+    def __init__(self, session, point=None, width=None, should_update=True,
+                 stochastic=None):
         super().__init__(session, should_update)
         if point is not None:
             self.point = point
@@ -31,6 +32,9 @@ class FixedPointQuantizer(QuantizerBase):
                 raise ValueError(
                     'Width of quantized value must be greater than 0.')
             self.width = width
+        if stochastic is None:
+            self.stochastic = False
+        self.stochastic = stochastic
 
     def _quantize(
             self, value, point=None, width=None, compute_overflow_rate=False):
@@ -40,7 +44,10 @@ class FixedPointQuantizer(QuantizerBase):
         shift = 2.0 ** (util.round(width) - util.round(point))
         value = value * shift
         # quantize
-        value = util.round(value)
+        if self.stochastic:
+            value = util.stochastic_round(value, self.stochastic)
+        else:
+            value = util.round(value)
         # ensure number is representable without overflow
         if width is not None:
             max_value = util.cast(2 ** (width - 1), float)
@@ -63,42 +70,6 @@ class FixedPointQuantizer(QuantizerBase):
         return self._info_tuple(width=width, point=point)
 
 
-class StochasticFixedPointQuantizer(FixedPointQuantizer):
-    def __init__(self, session, point=None, width=None, should_update=True):
-        super().__init__(session, None, width, should_update=should_update)
-
-    def _quantize(
-            self, value, point=None, width=None, compute_overflow_rate=False):
-        point = util.cast(self.point if point is None else point, float)
-        width = util.cast(self.width if width is None else width, float)
-        # x << (width - point)
-        shift = 2.0 ** (util.round(width) - util.round(point))
-        value = value * shift
-        # quantize
-        ulp = 1 / shift
-        value_floor = util.floor(value)
-        value_ceil = util.ceil(value)
-        # probabilities of rounding up
-        prob = (value - value_floor) / ulp
-        randoms = util.random_uniform(value)
-        round_up = util.cast(randoms > prob, float)
-        round_down = util.cast(randoms <= prob, float)
-        value = value_ceil * round_up + value_floor * round_down
-
-        # ensure number is representable without overflow
-        if width is not None:
-            max_value = util.cast(2 ** (width - 1), float)
-            if compute_overflow_rate:
-                overflow_value = value[value != 0]
-                overflows = util.logical_or(
-                    overflow_value < -max_value,
-                    overflow_value > max_value - 1)
-                return self._overflow_rate(overflows)
-            value = util.clip_by_value(value, -max_value, max_value - 1)
-        # revert bit-shift earlier
-        return value / shift
-
-
 class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
     """
     a base class to quantize inputs into 2's compliment `width`-bit fixed-point
@@ -113,8 +84,11 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
             use this information to compute a corresponding binary point using
             an update policy.
     """
-    def __init__(self, session, width, overflow_rate, should_update=True):
-        super().__init__(session, None, width, should_update=should_update)
+    def __init__(self, session, width, overflow_rate, should_update=True,
+                 stochastic=None):
+        super().__init__(
+            session, None, width, should_update=should_update,
+            stochastic=stochastic)
         self.overflow_rate = overflow_rate
         # self.sync_point = sync_point
 
@@ -173,7 +147,8 @@ class DGTrainableQuantizer(DGQuantizer):
 
 
 class LogQuantizer(QuantizerBase):
-    def __init__(self, session, width, overflow_rate, should_update=True):
+    def __init__(self, session, width, overflow_rate, should_update=True,
+                 stochastic=None):
         super().__init__(session, should_update)
         self.width = width
         if width is not None and width < 1:
@@ -181,7 +156,7 @@ class LogQuantizer(QuantizerBase):
                 'Width of quantized value must be greater than 0.')
         # internal fixed-point quantizer to quantize value in log-domain
         self.quantizer = DGQuantizer(
-            session, width, overflow_rate, should_update)
+            session, width, overflow_rate, should_update, stochastic)
 
     def _quantize(self, value, point, width, compute_overflow_rate=False):
         # decompose

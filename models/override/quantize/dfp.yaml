@@ -6,4 +6,6 @@ _overrider:
             type: mayo.override.DGQuantizer
             width: 4
             overflow_rate: 0.0
+            should_update: true
+            stochastic: false
     biases: {<<: *quantizer}

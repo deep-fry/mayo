@@ -224,7 +224,21 @@ def get_shape(tensor):
     return tensor.shape
 
 
-def random_uniform(tensor):
+def stochastic_round(tensor, stochastic):
+    value_floor = floor(tensor)
+    value_ceil = ceil(tensor)
+    if stochastic == 'naive':
+        prob = 0.5
+    elif stochastic == 'ulp':
+        # tensor is scaled so ulp is 1
+        prob = (tensor - value_floor)
+    else:
+        raise TypeError(
+            'Stochastic argument {} not recognized.'.format(stochastic))
     if is_tensor(tensor):
-        return tf.random_uniform(shape=tensor.shape)
-    return np.random_uniform(shape=tensor.shape)
+        randoms = tf.random_uniform(shape=tensor.shape)
+    else:
+        randoms = np.random_uniform(shape=tensor.shape)
+    round_up = cast(randoms > prob, float)
+    round_down = cast(randoms <= prob, float)
+    return value_ceil * round_up + value_floor * round_down
