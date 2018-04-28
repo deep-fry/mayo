@@ -181,11 +181,11 @@ class YOLOv2(ImageTaskBase):
         # cell x cell x anchors
         classes = tf.argmax(confidence, axis=-1, output_type=tf.int32)
         scores = tf.reduce_max(confidence, axis=-1)
-        #  mask = scores >= self.score_threshold
+        mask = scores >= self.score_threshold
         # only confident objects are left
-        #  boxes = tf.boolean_mask(boxes, mask)
-        #  scores = tf.boolean_mask(scores, mask)
-        #  classes = tf.boolean_mask(classes, mask)
+        boxes = tf.boolean_mask(boxes, mask)
+        scores = tf.boolean_mask(scores, mask)
+        classes = tf.boolean_mask(classes, mask)
 
         # non-max suppression
         indices = tf.image.non_max_suppression(
