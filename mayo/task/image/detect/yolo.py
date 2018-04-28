@@ -4,7 +4,7 @@ import colorsys
 import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageFont
 
 from mayo.log import log
 from mayo.util import memoize_property
@@ -256,36 +256,42 @@ class YOLOv2(ImageTaskBase):
     @memoize_property
     def colors(self):
         for i in range(self.num_classes):
-            rgb = colorsys.hsv_to_rgb(i / self.num_classes, 1, 1)
+            rgb = colorsys.hsv_to_rgb(i / self.num_classes, 0.5, 1)
             yield tuple(int(c * 255) for c in rgb)
 
     def _test(self, name, image, boxes, scores, classes):
         height, width, channels = image.shape
         image = Image.fromarray(np.uint8(255.0 * image))
+        image = image.convert('RGBA')
         thickness = int((height + width) / 300)
+        log.info(name.decode())
+        font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
+        font = ImageFont.truetype(font, 12)
+        transparency = 200
         for box, score, cls in zip(boxes, scores, classes):
-            draw = ImageDraw.ImageDraw(image)
+            layer = Image.new('RGBA', image.size, (255, 255, 255, 0))
+            draw = ImageDraw.ImageDraw(layer)
             y, x, h, w = box
             y, x, h, w = y * height, x * width, h * height, w * width
             top = max(0, round(y - h / 2))
             bottom = min(height, round(y + h / 2))
             left = max(0, round(x - w / 2))
             right = min(width, round(x + w / 2))
+            color = self.colors[cls] + (transparency, )
             for i in range(thickness):
                 draw.rectangle(
-                    (left + i, top + i, right - i, bottom - i),
-                    outline=self.colors[cls])
+                    (left + i, top + i, right - i, bottom - i), outline=color)
             # draw label
             cls_name = self.class_names[cls]
-            label = '{} {:.2f}'.format(cls_name, score)
-            label_width, label_height = draw.textsize(label)
-            label_pos = [
-                left, max(0, top - label_height),
-                left + label_width, top + label_height]
-            draw.rectangle(label_pos, fill=self.colors[cls])
-            draw.text(label_pos[:2], label, fill=(0, 0, 0))
+            label = ' {} {:.2f} '.format(cls_name, score)
+            label_width, label_height = draw.textsize(label, font=font)
+            label_pos = [left, top]
+            label_rect = [left + label_width, top + label_height]
+            draw.rectangle(label_pos + label_rect, fill=color)
+            draw.text(label_pos, label, fill=(0, 0, 0, 127), font=font)
+            image = Image.alpha_composite(image, layer)
             log.info(
-                'Confidence: {:.2f}, class: {}, box: {}'
+                '  Confidence: {:.2f}, class: {}, box: {}'
                 .format(score, cls_name, ((top, left), (bottom, right))))
         path = self.session.config.system.search_path.run.outputs[0]
         path = os.path.join(path, 'detect')
