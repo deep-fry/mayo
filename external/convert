@@ -291,6 +291,11 @@ def main():
         print(yaml.dump(importer.var_to_shape))
     elif args['to']:
         to_file = args['<to_file>']
+        directory = os.path.split(to_file)[0]
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        else:
+            directory = '.'
         exporter_cls = _porter(to_file, _exporters)
         exporter = exporter_cls(importer.var_to_tensor, rules)
         exporter.export(to_file, args['--dry-run'])
