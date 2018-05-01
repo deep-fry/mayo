@@ -7,5 +7,6 @@ _overrider:
             width: 4
             point: 1
             should_update: true
-            stochastic: false 
+            stochastic: false
     biases: {<<: *quantizer}
+    activation: {<<: *quantizer}
