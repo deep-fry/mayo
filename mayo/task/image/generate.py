@@ -129,6 +129,7 @@ class Preprocess(object):
         images, *truths = iterator.get_next()
         # ensuring the shape of images and labels to be constants
         batch = [images] + truths
+        batch_splits = []
         batch_splits = list(zip(
             *(tf.split(each, num_gpus, axis=0) for each in batch)))
 
@@ -138,8 +139,9 @@ class Preprocess(object):
             def augment(i):
                 augment = Augment(i, None, self.after_shape, self.moment)
                 return augment.augment(gpu_actions, ensure_shape=False)
-            for gid, (images, *_) in enumerate(batch_splits):
+            for gid, (images, *truths) in enumerate(batch_splits):
                 with tf.device('/gpu:{}'.format(gid)):
                     # FIXME is tf.map_fn good for performance?
-                    batch_splits[gid][0] = tf.map_fn(augment, images)
+                    images = tf.map_fn(augment, images)
+                batch_splits[gid] = [images] + truths
         return batch_splits
