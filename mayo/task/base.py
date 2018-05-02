@@ -1,3 +1,4 @@
+import collections
 from contextlib import contextmanager
 
 import tensorflow as tf
@@ -54,10 +55,10 @@ class TFTaskBase(object):
                 net = TFNet(self.session, model, data, bool(nets))
             nets.append(net)
             prediction = net.outputs()
-            if i == 0:
-                self._register_estimates(prediction, truth)
             data, prediction, truth = self.transform(
                 net, data, prediction, truth)
+            if i == 0:
+                self._register_estimates(prediction, truth)
             inputs.append(data)
             predictions.append(prediction)
             truths.append(truth)
@@ -69,11 +70,15 @@ class TFTaskBase(object):
         self.names = names
 
     def _register_estimates(self, prediction, truth):
-        history = 'infinite' if self.mode == 'validate' else None
-        for key, value in prediction.items():
-            self.estimator.register(
-                value, 'predictions.{}'.format(key), history=history)
-        self.estimator.register(truth, 'truth', history=history)
+        def register(root, mapping):
+            history = 'infinite' if self.mode == 'validate' else None
+            if not isinstance(mapping, collections.Mapping):
+                self.estimator.register(mapping, root, history=history)
+                return
+            for key, value in mapping.items():
+                register(value, '{}.{}'.format(root, key))
+        register('prediction', prediction)
+        register('truth', truth)
 
     def transform(self, net, data, prediction, truth):
         return data, prediction, truth
