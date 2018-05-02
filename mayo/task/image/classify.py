@@ -22,14 +22,11 @@ class Classify(ImageTaskBase):
             int(bg.get('use', False)) - int(bg.get('has', False))
         self.num_classes = num_classes + self.label_offset
         session.config.dataset.task.num_classes = self.num_classes
-        super().__init__(session, preprocess, shape, moment=None)
+        super().__init__(session, preprocess, shape, moment=moment)
 
     def transform(self, net, data, prediction, truth):
-        return data['input'], prediction['output'], truth[0]
-
-    def preprocess(self):
-        for images, labels in super().preprocess():
-            yield images, labels + self.label_offset
+        truth = truth[0] + self.label_offset
+        return data['input'], prediction['output'], truth
 
     def _top(self, prediction, truth, num_tops=1):
         return tf.nn.in_top_k(prediction, truth, num_tops)
