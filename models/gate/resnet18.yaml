@@ -3,9 +3,14 @@ _import: ../../resnet18.yaml
 _trainable: true
 _gate:
     enable: true
-    density: 0.5
-    policy: parametric_gamma
-    weight: 0.0001
+    policy: parametric
+    density: 1.0
+    pool: avg
+    regularizer:
+        # l1: 0.00000001
+        moe: 0.01
+    threshold: online
+    trainable: true
 model:
     name: resnet18
     layers:
@@ -14,11 +19,10 @@ model:
             gate_params: $(_gate)
             trainable: $(_gate.trainable)
         _basic_block: &bb
-            kwargs: {enable: true}
             layers:
                 conv1: &bb_gated_conv
                     <<: *gated_conv
-                    gate_params: {enable: ^(enable)}
+                    gate_params: $(_gate)
                 conv2: {<<: *bb_gated_conv}
                 downsample_shortcut: {<<: *bb_gated_conv}
         conv1: {<<: *gated_conv}
