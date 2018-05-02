@@ -1,0 +1,28 @@
+# Conversion rules for pytorch YOLO models from
+#     https://github.com/admk/pytorch-yolo2
+#
+# Steps:
+# 1. Clone `https://github.com/admk/pytorch-yolo2.git` and `cd` into it.
+# 2. Run darknet .weights to .pth conversion:
+#    ```
+#    curl -O https://pjreddie.com/media/files/yolov2.weights
+#    python convert.py cfg/yolo.cfg yolov2.weights yolo2.pth
+#    ```
+# 3. Run mayo conversion:
+#    ```
+#    external/convert yolo2.pth to yolo2 --rules=<this file>
+#    ```
+---
+permute:
+    2: [{type: transpose, axes: [1, 0]}]
+    4: [{type: transpose, axes: [2, 3, 1, 0]}]
+rename:
+    \.: /
+    bias: biases
+    weight: weights
+    models/\d+/: tiny_yolo/
+    bn(\d): conv\1/BatchNorm
+    BatchNorm/weights: BatchNorm/gamma
+    BatchNorm/biases: BatchNorm/beta
+    BatchNorm/running_mean: BatchNorm/moving_mean
+    BatchNorm/running_var: BatchNorm/moving_variance

@@ -1,5 +1,5 @@
 ---
-_import: ../../resnet18.yaml
+_import: ../resnet18.yaml
 _trainable: true
 _gate:
     enable: true

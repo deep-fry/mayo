@@ -1,17 +1,19 @@
 ---
 dataset:
     name: flowers
+    task:
+        type: mayo.task.image.Classify
+        num_classes: 5
+        background_class: {has: false}
+        shape:
+            channels: 3
+        preprocess:
+            train:
+                - {type: distort_color}
+                - {type: random_flip}
     path:
         train: flowers/flowers_train_*.tfrecord
         validate: flowers/flowers_validation_*.tfrecord
-    num_classes: 5
-    background_class: {has: false}
     num_examples_per_epoch:
         train: 3320
         validate: 350
-    shape:
-        channels: 3
-    preprocess:
-        train:
-            - {type: distort_color}
-            - {type: random_flip}

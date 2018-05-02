@@ -1,0 +1,12 @@
+---
+_import: ../_global.yaml
+_overrider:
+    weights: &quantizer
+        fixed:
+            type: mayo.override.FixedPointQuantizer
+            width: 4
+            point: 1
+            should_update: true
+            stochastic: false
+    biases: {<<: *quantizer}
+    activation: {<<: *quantizer}

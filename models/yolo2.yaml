@@ -1,0 +1,93 @@
+---
+dataset:
+    task:
+        num_cells: 13
+        preprocess:
+            validate: null
+            final_cpu: null
+            shape:
+                height: 416
+                width: 416
+                channels: 3
+model:
+    name: yolo2
+    description:
+        YOLOv2 implementation from::
+            https://github.com/experiencor/keras-yolo2/blob/master/backend.py
+    layers:
+        _conv: &conv
+            type: convolution
+            kernel_size: [3, 3]
+            stride: 1
+            padding: same
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params:
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
+            activation_fn: tensorflow.nn.leaky_relu
+            activation_params: {alpha: 0.1}
+        _pool: &pool
+            type: max_pool
+            kernel_size: 2
+            stride: 2
+            padding: same
+        conv1: {<<: *conv, num_outputs: 32}
+        pool1: *pool
+        conv2: {<<: *conv, num_outputs: 64}
+        pool2: *pool
+        conv3: {<<: *conv, num_outputs: 128}
+        conv4: {<<: *conv, num_outputs: 64}
+        conv5: {<<: *conv, num_outputs: 128}
+        pool5: *pool
+        conv6: {<<: *conv, num_outputs: 256}
+        conv7: {<<: *conv, num_outputs: 128}
+        conv8: {<<: *conv, num_outputs: 256}
+        pool8: *pool
+        conv9: {<<: *conv, num_outputs: 512}
+        conv10: {<<: *conv, num_outputs: 256}
+        conv11: {<<: *conv, num_outputs: 512}
+        conv12: {<<: *conv, num_outputs: 256}
+        conv13: {<<: *conv, num_outputs: 512}
+        pool13: *pool
+        conv14: {<<: *conv, num_outputs: 1024}
+        conv15: {<<: *conv, num_outputs: 512}
+        conv16: {<<: *conv, num_outputs: 1024}
+        conv17: {<<: *conv, num_outputs: 512}
+        conv18: {<<: *conv, num_outputs: 1024}
+        conv19: {<<: *conv, num_outputs: 1024}
+        conv20: {<<: *conv, num_outputs: 1024}
+        conv21: {<<: *conv, num_outputs: 64}
+        reorg21: {type: space_to_depth, block_size: 2}
+        concat21: {type: concat, axis: -1}
+        conv22: {<<: *conv, num_outputs: 1024}
+        extract23:
+            <<: *conv
+            kernel_size: 1
+            num_outputs: !arith >
+                (5 + $(dataset.task.num_classes)) *
+                len($(dataset.task.anchors))
+            normalizer_fn: null
+            activation_fn: null
+    graph:
+        - from: input
+          with: [
+              conv1, pool1, conv2, pool2, conv3, conv4,
+              conv5, pool5, conv6, conv7, conv8, pool8,
+              conv9, conv10, conv11, conv12, conv13]
+          to: skip13
+        - from: skip13
+          with: [
+              pool13, conv14, conv15, conv16,
+              conv17, conv18, conv19, conv20]
+          to: conv20
+        - {from: skip13, with: [conv21, reorg21], to: reorg21}
+        - {from: [reorg21, conv20], with: concat21, to: concat21}
+        - {from: concat21, with: [conv22, extract23], to: output}

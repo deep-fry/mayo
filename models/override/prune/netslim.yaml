@@ -1,0 +1,13 @@
+---
+_overrider:
+    conv: &slim
+        activation:
+            netslim:
+                type: mayo.override.NetworkSlimmer
+                density: 1.0
+                weight: 0.00001
+                should_update: true
+                _priority: 100
+    pointwise: {<<: *slim}
+    fc: null
+    logits: null

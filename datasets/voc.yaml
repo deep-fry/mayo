@@ -1,0 +1,30 @@
+---
+dataset:
+    name: voc
+    task:
+        type: mayo.task.image.YOLOv2
+        num_classes: 20
+        anchors:
+            - [1.08, 1.19]
+            - [3.42, 4.41]
+            - [6.63, 11.38]
+            - [9.42, 5.11]
+            - [16.62, 10.52]
+        scales:
+            object: 5
+            noobject: 1
+            coordinate: 1
+            class: 1
+        preprocess:
+            train:
+                # - {type: random_flip}
+                - {type: distort_color}
+        shape:
+            channels: 3
+    path:
+        train: voc/train_*.tfrecord
+        validate: voc/test_*.tfrecord
+        labels: voc/labels.txt
+    num_examples_per_epoch:
+        train: 17125
+        validate: 5138

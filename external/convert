@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import re
+import collections
 
 import yaml
 import numpy as np
@@ -60,7 +61,8 @@ class CheckpointImporter(BaseImporter):
 
 
 class PickleImporter(BaseImporter):
-    def _import(self, file, rules):
+    @staticmethod
+    def _import(file, rules):
         file = open(file, 'rb')
         var_to_tensor = {}
         for key, item in pickle.load(file).items():
@@ -69,7 +71,8 @@ class PickleImporter(BaseImporter):
 
 
 class PyTorchImporter(BaseImporter):
-    def _import(self, file, rules):
+    @staticmethod
+    def _import(file, rules):
         import torch
         var_to_tensor = {}
         for k, v in torch.load(file).items():
@@ -77,6 +80,23 @@ class PyTorchImporter(BaseImporter):
                 v = v.data
             var_to_tensor[k] = v.numpy()
         return var_to_tensor
+
+
+class HDF5Importer(BaseImporter):
+    @classmethod
+    def _traverse(cls, mapping):
+        if not isinstance(mapping, collections.Mapping):
+            return [mapping]
+        values = []
+        for k, v in mapping.items():
+            values += cls._traverse(v)
+        return values
+
+    @classmethod
+    def _import(cls, file, rules):
+        import h5py
+        tensors = cls._traverse(h5py.File(file, 'r'))
+        return {t.name: t[...] for t in tensors}
 
 
 def permute(var_to_tensor, rules):
@@ -182,6 +202,8 @@ _importers = {
     '.npy': NumpyImporter,
     '.pth': PyTorchImporter,
     '.pkl': PickleImporter,
+    '.h5': HDF5Importer,
+    '.hdf5': HDF5Importer,
 }
 _exporters = {
     '': CheckpointExporter,
@@ -269,6 +291,11 @@ def main():
         print(yaml.dump(importer.var_to_shape))
     elif args['to']:
         to_file = args['<to_file>']
+        directory = os.path.split(to_file)[0]
+        if directory:
+            os.makedirs(directory, exist_ok=True)
+        else:
+            directory = '.'
         exporter_cls = _porter(to_file, _exporters)
         exporter = exporter_cls(importer.var_to_tensor, rules)
         exporter.export(to_file, args['--dry-run'])

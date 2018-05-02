@@ -79,6 +79,9 @@ class Parameter(object):
             pass
         kwargs = self._getter_kwargs(instance)
         var = instance._getter(**kwargs)
+        if not isinstance(var, tf.Variable):
+            raise TypeError(
+                'Curious, variable instantiation does not return a variable.')
         instance._parameter_variables[self.name] = var
         return var
 
@@ -154,6 +157,8 @@ class OverriderBase(object):
             var = getter(var_name, *args, **kwargs)
             self.internals[name] = var
             return var
+        wrapped.__qualname__ = '{}.wrapped.{}'.format(
+            self._tracking_getter.__qualname__, getter)
         return wrapped
 
     def apply(self, node, scope, getter, value):
@@ -161,11 +166,10 @@ class OverriderBase(object):
         Things to apply to the variable in `value`, returns the
         overridden result.
         """
-        # TODO is multiple application allowed?
-        # if self._applied:
-        #     raise OverrideAlreadyAppliedError(
-        #         'Overrider has already been applied to {!r}'
-        #         .format(self.before))
+        if self._applied:
+            raise OverrideAlreadyAppliedError(
+                'Overrider has already been applied to {!r}'
+                .format(self.before))
         self._applied = True
         self.node = node
         self.name = value.op.name

@@ -10,7 +10,11 @@ def reform_weights(overriders):
         mask_dict = {}
         for overrider in overriders:
             value = overrider.after.eval()
-            mask = overrider.mask.eval()
+            if 'conv5_3' in overrider.name:
+                mask = overrider.mask.eval()
+                mask = np.ones(mask.shape)
+            else:
+                mask = overrider.mask.eval()
             name = overrider.name
             overriders_dict[name] = [value, mask]
             mask_dict[name] = mask
@@ -48,8 +52,14 @@ def reform_weights(overriders):
         return new_weights
 
     import numpy as np
-    layer_names = ['conv0', 'conv1', 'conv2', 'conv3', 'conv4', 'conv5',
-                   'conv6', 'conv7', 'logits']
+    model = 'VGG'
+    if model == 'Cifar':
+        layer_names = ['conv0', 'conv1', 'conv2', 'conv3', 'conv4', 'conv5',
+            'conv6', 'conv7', 'logits']
+    elif model == 'VGG':
+        layer_names = ['conv1_1', 'conv1_2', 'conv2_1', 'conv2_2', 'conv3_1',
+            'conv3_2', 'conv3_3', 'conv4_1', 'conv4_2', 'conv4_3', 'conv5_1',
+            'conv5_2', 'conv5_3', 'fc6', 'fc7', 'fc8']
     trainables = tf.trainable_variables()
     trainable_names = [trainable.name for trainable in trainables]
     slimed_weights = {}
@@ -60,6 +70,9 @@ def reform_weights(overriders):
         np_trainables[name] = trainable.eval()
     for name in layer_names:
         weight = pick_weight(name, np_trainables)
+        if 'fc' in name:
+            slimed_weights[name] = weight
+            continue
         if name != 'logits':
             mask = pick_mask(name, mask_dict)
         if prev_mask is None:
@@ -69,7 +82,8 @@ def reform_weights(overriders):
                 weight = compress_weight_test(weight, prev_mask, 'in')
             else:
                 weight = compress_weight_test(weight, prev_mask, 'in')
-                weight = compress_weight_test(weight, mask, 'out')
+                if 'conv5_3' not in name:
+                    weight = compress_weight_test(weight, mask, 'out')
         prev_mask = mask
         slimed_weights[name] = weight
     np_raw = {}
@@ -79,7 +93,7 @@ def reform_weights(overriders):
                 print(name, variable.name)
                 if name in variable.name:
                     np_raw[variable.name] = weights
-        elif 'logits/biases' in variable.name:
+        elif 'biases' in variable.name:
             np_raw[variable.name] = variable.eval()
         else:
             for name, mask in mask_dict.items():

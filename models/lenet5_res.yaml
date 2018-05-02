@@ -1,0 +1,79 @@
+---
+dataset:
+    task:
+        background_class: {use: false}
+        preprocess:
+            shape:
+                height: 28
+                width: 28
+                channels: 1
+            validate: null
+            final_cpu: {type: linear_map, scale: 2.0, shift: -1.0}
+model:
+    name: lenet5_res
+    layers:
+        _conv: &conv
+            type: convolution
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params:
+                scale: true
+                decay: 0.997
+                epsilon: 0.00001
+            weights_initializer: &initializer
+                type: tensorflow.variance_scaling_initializer
+            weights_regularizer: &regularizer
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0001
+        _basic_block: &bb
+            type: module
+            kwargs: {stride: null, depth: null, shortcut: null}
+            layers:
+                conv1: &bbconv
+                    <<: *conv
+                    kernel_size: 3
+                    stride: ^(stride)
+                    padding: 1
+                    num_outputs: ^(depth)
+                conv2:
+                    <<: *bbconv
+                    stride: 1
+                    activation_fn: null
+                downsample_shortcut:
+                    <<: *bbconv
+                    kernel_size: 1
+                    padding: valid
+                    activation_fn: null
+                identity_shortcut: {type: identity}
+                add: {type: add}
+                relu: {type: activation, mode: relu}
+            graph:
+                - {from: input, with: [conv1, conv2], to: a}
+                - {from: input, with: ^(shortcut)_shortcut, to: b}
+                - {from: [a, b], with: add, to: preact}
+                - {from: preact, with: relu, to: output}
+        b11: {<<: *bb, stride: 1, depth: 16, shortcut: identity}
+        b21: {<<: *bb, stride: 2, depth: 32, shortcut: downsample}
+        b22: {<<: *bb, stride: 1, depth: 32, shortcut: identity}
+        b31: {<<: *bb, stride: 2, depth: 64, shortcut: downsample}
+        b32: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
+        conv0:
+            <<: *conv
+            kernel_size: 3
+            num_outputs: 16
+        pool0: &pool
+            type: max_pool
+            kernel_size: 3
+            stride: 2
+            padding: valid
+        flatten: {type: flatten}
+        logits:
+            type: fully_connected
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            activation_fn: null
+            num_outputs: $(dataset.task.num_classes)
+    graph:
+        from: input
+        with: [conv0, pool0, b11, b21, b22, b31, b32, flatten, logits]
+        to: output

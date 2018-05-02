@@ -1,0 +1,11 @@
+---
+_import: ../cifarnet.yaml
+model.layers:
+    conv1: &conv {overrider: $(_overrider.conv)}
+    conv2: {<<: *conv}
+    conv3: {<<: *conv}
+    conv4: {<<: *conv}
+    conv5: {<<: *conv}
+    conv6: {<<: *conv}
+    conv7: {<<: *conv}
+    logits: {overrider: $(_overrider.logits)}

@@ -265,7 +265,7 @@ class ResourceEstimator(object):
             return 1
         valids = sum(np.sum(g.astype(np.int32)) for g in gates)
         totals = sum(g.size for g in gates)
-        return valids / totals
+        return float(valids / totals)
 
     def _gate_for_node(self, node):
         """
