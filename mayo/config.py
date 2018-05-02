@@ -25,7 +25,7 @@ def _auto_select_gpus(num_gpus, memory_bound):
     return ','.join(str(g) for g in gpus[:num_gpus])
 
 
-def _init_gpus(system):
+def _setup_gpus(system):
     """
     gpus: 'auto' -> auto select GPUs.
     """
@@ -60,18 +60,15 @@ class Config(ConfigBase):
     def __init__(self):
         merge_hook = {
             'system.log': self._setup_log_level,
+            'system.num_gpus': self._setup_gpus,
         }
         super().__init__(merge_hook)
         self._setup_excepthook()
         self._init_system_config()
-        self._finalize()
 
     def _init_system_config(self):
         root = os.path.dirname(__file__)
         self.yaml_update(os.path.join(root, 'system.yaml'))
-
-    def _finalize(self):
-        _init_gpus(self.system)
 
     def data_files(self, mode):
         path = self.dataset.path
@@ -112,3 +109,6 @@ class Config(ConfigBase):
         log.frame = self.get('system.log.frame', False)
         tf_level = self.get('system.log.tensorflow', 0)
         os.environ['TF_CPP_MIN_LOG_LEVEL'] = str(tf_level)
+
+    def _setup_gpus(self):
+        _setup_gpus(self.system)
