@@ -71,9 +71,9 @@ class SessionBase(object, metaclass=SessionMeta):
         self.tf_graph = tf.Graph()
         self.initialized_variables = []
         self._assign_operators = {}
-        self.tf_session = tf.Session(
-            graph=self.tf_graph,
-            config=tf.ConfigProto(allow_soft_placement=True))
+        tf_config = tf.ConfigProto(allow_soft_placement=True)
+        tf_config.gpu_options.allow_growth = True
+        self.tf_session = tf.Session(graph=self.tf_graph, config=tf_config)
         self.tf_session.mayo_session = self
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
