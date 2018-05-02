@@ -26,16 +26,9 @@ def _auto_select_gpus(num_gpus, memory_bound):
 
 
 def _setup_gpus(system):
-    """
-    gpus: 'auto' -> auto select GPUs.
-    """
-    cuda_key = 'CUDA_VISIBLE_DEVICES'
-    if os.environ.pop(cuda_key, None):
-        log.warn(
-            'Ignoring {!r}, as it is overridden '
-            'by config "system.visible_gpus".'.format(cuda_key))
     gpus = system.visible_gpus
     if gpus != 'auto':
+        # system.visible_gpus == 'auto' -> auto select GPUs
         if isinstance(gpus, list):
             gpus = ','.join(str(g) for g in gpus)
         else:
@@ -53,7 +46,7 @@ def _setup_gpus(system):
     # ordering seen in nvidia-smi
     os.environ['CUDA_DEVICE_ORDER'] = 'PCI_BUS_ID'
     # sets the visible GPUs
-    os.environ[cuda_key] = gpus
+    os.environ['CUDA_VISIBLE_DEVICES'] = gpus
 
 
 class Config(ConfigBase):
@@ -69,6 +62,10 @@ class Config(ConfigBase):
     def _init_system_config(self):
         root = os.path.dirname(__file__)
         self.yaml_update(os.path.join(root, 'system.yaml'))
+        if os.environ.pop('CUDA_VISIBLE_DEVICES', None):
+            log.warn(
+                'Ignoring "CUDA_VISIBLE_DEVICES", as it is overridden '
+                'by "system.visible_gpus".')
 
     def data_files(self, mode):
         path = self.dataset.path
