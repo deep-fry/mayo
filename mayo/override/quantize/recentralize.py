@@ -3,6 +3,7 @@ import tensorflow as tf
 from mayo.util import memoize_property, object_from_params
 from mayo.override import util
 from mayo.override.base import OverriderBase, Parameter
+from mayo.log import log
 
 
 class Recentralizer(OverriderBase):
@@ -92,7 +93,7 @@ class Recentralizer(OverriderBase):
 
     def _update(self):
         # update positives mask and mean values
-        value = self.eval(self.before)
+        value = self.session.run(self.before)
         # divide them into two groups
         # mean = util.mean(value)
         mean = 0.0
@@ -102,13 +103,20 @@ class Recentralizer(OverriderBase):
         self.positives_mean = util.mean(value[util.where(positives)])
         negatives = util.logical_and(util.logical_not(positives), value != 0)
         self.negatives_mean = util.mean(value[util.where(negatives)])
+        if self.positives_mean.eval() == 0 or self.negatives_mean.eval() == 0:
+            log.warn('means are skewed, pos mean is {} and neg mean is {}'
+                     .format(self.positives_mean.eval(),
+                             self.negatives_mean.eval()))
         # update internal quantizer
         self.quantizer.update()
 
     def _info(self):
         info = self.quantizer.info()._asdict()
-        if self.mean_quantizer:
-            mean_info = self.mean_quantizer.info()
+        if self.pos_mean_quantizer:
+            mean_info = self.pos_mean_quantizer.info()
             for key, value in mean_info._asdict().items():
-                info['mean_' + key] = value
+                info['pos_mean_' + key] = value
+            mean_info = self.neg_mean_quantizer.info()
+            for key, value in mean_info._asdict().items():
+                info['neg_mean_' + key] = value
         return self._info_tuple(**info)

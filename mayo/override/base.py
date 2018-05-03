@@ -171,7 +171,7 @@ class OverriderBase(object):
             # raise OverrideAlreadyAppliedError(
             #     'Overrider has already been applied to {!r}'
             #     .format(self.before))
-            log.warn('Overrider has already been applied to {!r}'
+            log.debug('Overrider has already been applied to {!r}'
                      .format(self.before))
             return self.after
         self._applied = True
