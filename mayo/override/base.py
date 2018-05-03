@@ -167,9 +167,13 @@ class OverriderBase(object):
         overridden result.
         """
         if self._applied:
-            raise OverrideAlreadyAppliedError(
-                'Overrider has already been applied to {!r}'
-                .format(self.before))
+            ## FIXME: not sure whether this fix affects other behaviors
+            # raise OverrideAlreadyAppliedError(
+            #     'Overrider has already been applied to {!r}'
+            #     .format(self.before))
+            log.warn('Overrider has already been applied to {!r}'
+                     .format(self.before))
+            return self.after
         self._applied = True
         self.node = node
         self.name = value.op.name

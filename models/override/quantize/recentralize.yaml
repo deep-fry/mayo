@@ -4,16 +4,21 @@ _overrider:
     pruner:
         type: mayo.override.DynamicNetworkSurgeryPruner
         should_update: false
-    quantizer: &quantizer
-        type: mayo.override.DGQuantizer
-        width: 16
-        overflow_rate: 0.05
-    mean_quantizer: *quantizer
-    weights:
-        - $(_overrider.pruner)
-        - type: mayo.override.Recentralizer
-          quantizer: $(_overrider.quantizer)
-          mean_quantizer: $(_overrider.mean_quantizer)
+    quantizer: &shift
+        type: mayo.override.ShiftQuantizer
+        width: 4
+        bias: 2
+        overflow_rate: 0.0
+        should_update: true
+        stochastic: false
+    mean_quantizer:
+        {<<: *shift, should_update: false}
+    weights: &quantizer
+        dns:
+            $(_overrider.pruner)
+        recentralize:
+            type: mayo.override.Recentralizer
+            quantizer: $(_overrider.quantizer)
+            mean_quantizer: $(_overrider.mean_quantizer)
     biases:
-        <<: quantizer
-        overflow_rate: 0.001
+        {<<: *quantizer}
