@@ -12,14 +12,12 @@ class IncrementalQuantizer(OverriderBase):
     interval = Parameter('interval', 0.1, [], 'float')
     mask = Parameter('mask', None, None, 'bool')
 
-    def __init__(self, session, quantizer, intervals, should_update=True):
+    def __init__(self, session, quantizer, interval, should_update=True):
         super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(session, **params)
-        if intervals is not None:
-            self.intervals = intervals
-            self.interval = intervals[0]
-            self.interval_index = 0
+        if interval is not None:
+            self.interval_val = interval
 
     def _quantize(self, value, mean_quantizer=False):
         quantizer = self.quantizer
@@ -50,8 +48,7 @@ class IncrementalQuantizer(OverriderBase):
         off_mask = util.cast(
             util.logical_not(util.cast(previous_mask, bool)), float)
         metric = value - quantized
-        flat_value = metric * off_mask
-        flat_value = flat_value.flatten()
+        flat_value = (metric * off_mask).flatten()
         if interval >= 1.0:
             th = flat_value.max() + 1.0
         else:
@@ -66,10 +63,9 @@ class IncrementalQuantizer(OverriderBase):
         self.quantizer.assign_parameters()
 
     def update_interval(self):
-        if self.intervals == []:
+        if not hasattr(self, 'interval_val'):
             return False
-        self.session.assign(self.interval, self.intervals[self.interval_index])
-        self.interval_index += 1
+        self.session.assign(self.interval, self.interval_val)
         return True
 
     def _update(self):

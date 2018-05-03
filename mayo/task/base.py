@@ -78,7 +78,7 @@ class TFTaskBase(object):
                 return
             for key, value in mapping.items():
                 register(value, '{}.{}'.format(root, key))
-        if 'test' in prediction.keys():
+        if isinstance(prediction, dict) and 'test' in prediction.keys():
             tmp = copy.copy(prediction)
             test = tmp.pop('test')
             register('test', test)
