@@ -4,6 +4,7 @@ _overrider:
     pruner:
         type: mayo.override.DynamicNetworkSurgeryPruner
         should_update: false
+        _priority: 100
     quantizer:
         type: mayo.override.FloatingPointQuantizer
         width: 32
@@ -19,8 +20,7 @@ _overrider:
         should_update: true
         stochastic: false
     weights: &quantizer
-        dns:
-            $(_overrider.pruner)
+        dns: $(_overrider.pruner)
         recentralize:
             type: mayo.override.Recentralizer
             quantizer: $(_overrider.quantizer)
