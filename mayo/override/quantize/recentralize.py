@@ -10,11 +10,27 @@ class Recentralizer(OverriderBase):
     """ Recentralizes the distribution of pruned weights.  """
 
     class QuantizedParameter(Parameter):
+        def _quantize(self, instance, value):
+            scope = '{}/{}/{}'.format(
+                instance._scope, instance.__class__.__name__, self.name)
+            quantizer = instance.parameter_quantizers.get(self.name)
+            if not quantizer:
+                return value
+            return quantizer.apply(
+                instance.node, scope, instance._original_getter, value)
+
         def __get__(self, instance, owner):
             if instance is None:
                 return self
+            name = '_quantized_{}'.format(self.name)
+            try:
+                return instance._parameter_variables[name]
+            except KeyError:
+                pass
             var = super().__get__(instance, owner)
-            return instance._quantize(var, mean_quantizer=self.name)
+            var = self._quantize(instance, var)
+            instance._parameter_variables[name] = var
+            return var
 
     positives = Parameter('positives', None, None, 'bool')
     positives_mean = QuantizedParameter('positives_mean', 1, [], 'float')
@@ -29,8 +45,12 @@ class Recentralizer(OverriderBase):
         self.reg = reg
         if mean_quantizer:
             cls, params = object_from_params(mean_quantizer)
-            self.pos_mean_quantizer = cls(session, **params)
-            self.neg_mean_quantizer = cls(session, **params)
+            self.parameter_quantizers = {
+                'positives_mean': cls(session, **params),
+                'negatives_mean': cls(session, **params),
+            }
+        else:
+            self.parameter_quantizers = {}
 
     @memoize_property
     def negatives(self):
@@ -39,25 +59,12 @@ class Recentralizer(OverriderBase):
     def assign_parameters(self):
         super().assign_parameters()
         self.quantizer.assign_parameters()
-        if self.pos_mean_quantizer:
-            self.pos_mean_quantizer.assign_parameters()
-        if self.neg_mean_quantizer:
-            self.neg_mean_quantizer.assign_parameters()
+        for quantizer in self.parameter_quantizers.values():
+            quantizer.assign_parameters()
 
-    def _quantize(self, value, mean_quantizer=None):
-        if mean_quantizer:
-            if 'pos' in mean_quantizer:
-                quantizer = self.pos_mean_quantizer
-            elif 'neg' in mean_quantizer:
-                quantizer = self.neg_mean_quantizer
-            else:
-                raise ValueError(
-                    'no matching for mean quantizer {}'.format(mean_quantizer))
-        else:
-            quantizer = self.quantizer
+    def _quantize(self, value):
+        quantizer = self.quantizer
         scope = '{}/{}'.format(self._scope, self.__class__.__name__)
-        if mean_quantizer:
-            scope = '{}/{}'.format(scope, mean_quantizer)
         return quantizer.apply(self.node, scope, self._original_getter, value)
 
     def _apply(self, value):
@@ -81,11 +88,13 @@ class Recentralizer(OverriderBase):
             (self.quantized + self.positives_mean)
         quantized_value += non_zeros * negatives * \
             (self.quantized + self.negatives_mean)
-        if self.reg != 0.0:
-            self._recen_loss(value, quantized_value)
+
+        self._quantization_loss_regularizer(value, quantized_value)
         return quantized_value
 
-    def _recen_loss(self, value, quantized_value):
+    def _quantization_loss_regularizer(self, value, quantized_value):
+        if self.reg == 0.0:
+            return
         loss = tf.reduce_sum(tf.abs(value - quantized_value))
         loss *= self.reg
         loss_name = tf.GraphKeys.REGULARIZATION_LOSSES
@@ -109,14 +118,16 @@ class Recentralizer(OverriderBase):
                              self.negatives_mean.eval()))
         # update internal quantizer
         self.quantizer.update()
+        for quantizer in self.parameter_quantizers.values():
+            quantizer.update()
 
     def _info(self):
         info = self.quantizer.info()._asdict()
-        if self.pos_mean_quantizer:
-            mean_info = self.pos_mean_quantizer.info()
-            for key, value in mean_info._asdict().items():
-                info['pos_mean_' + key] = value
-            mean_info = self.neg_mean_quantizer.info()
-            for key, value in mean_info._asdict().items():
-                info['neg_mean_' + key] = value
+        for name, quantizer in self.parameter_quantizers.items():
+            param_info = quantizer.info()
+            param_info = {
+                '{}_{}'.format(name, key): value
+                for key, value in param_info._asdict().items()
+            }
+            info.update(param_info)
         return self._info_tuple(**info)
