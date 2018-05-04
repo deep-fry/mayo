@@ -6,11 +6,10 @@ dataset:
             height: 224
             width: 224
             channels: 3
-        validate:
-            - {type: central_crop, fraction: 0.875}
-        final_cpu: null
-        final_gpu:
-            - {type: normalize_channels}
+        validate: null
+        final_cpu:
+            - {type: subtract_channel_means}
+            - {type: linear_map, scale: 255.0}
 model:
     name: vgg16_bn
     layers:
