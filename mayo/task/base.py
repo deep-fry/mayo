@@ -77,7 +77,7 @@ class TFTaskBase(object):
                 self.estimator.register(mapping, root, history=history)
                 return
             for key, value in mapping.items():
-                register(value, '{}.{}'.format(root, key))
+                register('{}.{}'.format(root, key), value)
         if isinstance(prediction, dict) and 'test' in prediction.keys():
             tmp = copy.copy(prediction)
             test = tmp.pop('test')
