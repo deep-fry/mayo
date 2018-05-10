@@ -17,10 +17,7 @@ def box_to_corners(box, unstack=True, stack=True):
 
 def corners_to_box(corners, unstack=True, stack=True):
     if unstack:
-        if isinstance(corners, (tf.Tensor, tf.Variable)):
-            corners = tf.unstack(corners, axis=-1)
-        else:
-            corners = np.unstack(corners, axis=-1)
+        corners = tf.unstack(corners, axis=-1)
     y_min, x_min, y_max, x_max = corners
     y = (y_min + y_max) / 2
     x = (x_min + x_max) / 2
@@ -28,10 +25,7 @@ def corners_to_box(corners, unstack=True, stack=True):
     w = x_max - x_min
     box = [y, x, h, w]
     if stack:
-        if isinstance(corners, (tf.Tensor, tf.Variable)):
-            return tf.stack(box, axis=-1)
-        else:
-            return np.stack(box, axis=-1)
+        return tf.stack(box, axis=-1)
     return box
 
 
@@ -129,8 +123,6 @@ def np_iou(a, b):
 
     reference: https://github.com/rbgirshick/py-faster-rcnn.
     """
-    # convert b to boxes
-    b = corners_to_box(b)
     iw = np.minimum(a[:, 3], b[:, 3]) - np.maximum(a[:, 1], b[:, 1])
     ih = np.minimum(a[:, 2], b[:, 2]) - np.maximum(a[:, 0], b[:, 0])
     iw = np.maximum(iw, 0)

@@ -254,7 +254,7 @@ class YOLOv2(ImageDetectTaskBase):
                 'box': box,
                 'class': slim.one_hot_encoding(label, self.num_classes),
                 'count': count,
-                'rawbox': truebox,
+                'rawbox': util.corners_to_box(truebox),
                 'rawclass': rawlabel,
             }
         return data['input'], prediction, truth
