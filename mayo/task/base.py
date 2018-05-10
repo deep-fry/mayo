@@ -2,7 +2,6 @@ import collections
 from contextlib import contextmanager
 
 import tensorflow as tf
-import copy
 
 from mayo.log import log
 from mayo.error import NotImplementedError
@@ -78,13 +77,7 @@ class TFTaskBase(object):
                 return
             for key, value in mapping.items():
                 register('{}.{}'.format(root, key), value)
-        if isinstance(prediction, dict) and 'test' in prediction.keys():
-            tmp = copy.copy(prediction)
-            test = tmp.pop('test')
-            register('test', test)
-            register('prediction', tmp)
-        else:
-            register('prediction', prediction)
+        register('prediction', prediction)
         register('truth', truth)
 
     def transform(self, net, data, prediction, truth):
