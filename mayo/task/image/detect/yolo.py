@@ -122,7 +122,6 @@ class YOLOv2(ImageDetectTaskBase):
             - a (num_cells x num_cells x num_anchors) tensor of labels.
         """
         box, label, count = each
-        count = 3
         with tf.control_dependencies([tf.assert_greater(count, 0)]):
             box = box[:count, :]
             label = label[:count]
