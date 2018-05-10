@@ -5,7 +5,8 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_property, flatten, Change, Table, Percent, object_from_params)
+    memoize_property, flatten, object_from_params,
+    Change, Table, Percent, unknown, format_shape)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
 from mayo.session.checkpoint import CheckpointHandler
@@ -199,17 +200,19 @@ class SessionBase(object, metaclass=SessionMeta):
         stats = self.estimator.get_estimates(net)
         if plumbing:
             layer_info = {}
-            for node, stat in stats.items():
-                stat['shape'] = list(net.shapes[node])
+            for node, shape in net.shapes.items():
+                stat = stats.get(node, {})
+                stat['shape'] = list(shape)
                 layer_info[node.formatted_name()] = stat
             info_dict['layers'] = layer_info
         else:
             keys = list({k for v in stats.values() for k in v})
             layer_info = Table(['layer', 'shape'] + keys)
-            for node, values in stats.items():
-                values = tuple(values.get(k, 0) for k in keys)
-                layer_info.add_row(
-                    (node.formatted_name(), net.shapes[node]) + values)
+            for node, shape in net.shapes.items():
+                values = stats.get(node, {})
+                values = tuple(values.get(k, unknown) for k in keys)
+                shape = format_shape(shape)
+                layer_info.add_row((node.formatted_name(), shape) + values)
             formatted_footers = [
                 sum(layer_info.get_column(k)) for k in keys]
             layer_info.set_footer(['', '    total:'] + formatted_footers)

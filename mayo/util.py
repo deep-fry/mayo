@@ -180,6 +180,18 @@ class Percent(float):
         return '{:.2f}%'.format(self * 100)
 
 
+class Unknown(object):
+    def __add__(self, other):
+        return other
+    __radd__ = __add__
+
+    def __str__(self):
+        return '?'
+
+
+unknown = Unknown()
+
+
 class Table(collections.Sequence):
     def __init__(self, headers, formatters=None):
         super().__init__()
