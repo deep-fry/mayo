@@ -33,7 +33,10 @@ class ImageDetectTaskBase(ImageTaskBase):
                         (pred_box_i[index[:], :],
                          pred_score_i[:, index[:]].T), axis=1)
                 index = truth_class[i, :] == label
-                annotations[i][label] = truth_box_i[index, :]
+                if truth_count[i] == 0 or (not any(index)):
+                    annotations[i][label] = []
+                else:
+                    annotations[i][label] = truth_box_i[index, :]
         # compute mean_aps
         avg_precisions = np.zeros((num_classes, 1))
         for label in range(num_classes):
@@ -42,16 +45,18 @@ class ImageDetectTaskBase(ImageTaskBase):
             for i in range(num_imgs):
                 ds = detections[i][label]
                 ans = annotations[i][label]
-                num_annotations += ans.shape[0]
+                num_annotations += ans.shape[0] if ans != [] else 0
                 detected_ans = []
                 for d in ds:
                     scores = np.append(scores, d[4])
-                    if ans.shape[0] == 0:
+                    if ans == [] or ans.shape[0] == 0:
                         false_pos = np.append(false_pos, 1)
                         true_pos = np.append(true_pos, 0)
                         continue
-                    import pdb; pdb.set_trace()
-                    overlaps = util.np_iou(np.expand_dims(d[:4], axis=0), ans)
+                    overlaps, iw, ih, intersection = util.np_iou(np.expand_dims(d[:4], axis=0), ans)
+                    tmp = np.expand_dims(d[:4], axis=0)
+                    print(tmp, ans)
+                    print(iw, ih, intersection)
                     assigned_ans = np.argmax(overlaps, axis=1)
                     max_overlap = overlaps[0, assigned_ans]
                     if max_overlap >= self.iou_threshold \

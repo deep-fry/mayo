@@ -134,7 +134,7 @@ def np_iou(a, b):
     ua = np.maximum(ua, np.finfo(float).eps)
 
     intersection = iw * ih
-    return intersection / ua
+    return (intersection / ua, iw, ih, intersection)
 
 
 def np_average_precision(recall, precision):
