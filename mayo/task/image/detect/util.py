@@ -117,17 +117,14 @@ def np_iou(a, b):
     """
     A re-implementation of iou() for numpy...
 
-    a: a (N, 4) numpy array of float.
+    a: a (N, 4) numpy array of float: y, x, h, w
     b: a (K, 4) numpy array of float.
     returns: a (N, K) ndarray of IOU between boxes and query_boxes.
 
     reference: https://github.com/rbgirshick/py-faster-rcnn.
     """
-    iw = np.minimum(
-        np.expand_dims(a[:, 2], axis=1), b[:, 2]) - np.maximum(
-            np.expand_dims(a[:, 0], 1), b[:, 0])
-    ih = np.minimum(np.expand_dims(a[:, 3], axis=1), b[:, 3]) - np.maximum(
-        np.expand_dims(a[:, 1], 1), b[:, 1])
+    iw = np.minimum(a[:, 3], b[:, 3]) - np.maximum(a[:, 1], b[:, 1])
+    ih = np.minimum(a[:, 2], b[:, 2]) - np.maximum(a[:, 0], b[:, 0])
     iw = np.maximum(iw, 0)
     ih = np.maximum(ih, 0)
 

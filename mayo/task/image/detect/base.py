@@ -50,7 +50,7 @@ class ImageDetectTaskBase(ImageTaskBase):
                         false_pos = np.append(false_pos, 1)
                         true_pos = np.append(true_pos, 0)
                         continue
-                    overlaps = util.np_iou(np.expand_dims(d, axis=0), ans)
+                    overlaps = util.np_iou(np.expand_dims(d[:4], axis=0), ans)
                     assigned_ans = np.argmax(overlaps, axis=1)
                     max_overlap = overlaps[0, assigned_ans]
                     if max_overlap >= self.iou_threshold \
