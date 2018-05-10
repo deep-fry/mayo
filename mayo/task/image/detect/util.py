@@ -113,46 +113,42 @@ def iou(boxes1, boxes2, anchors=False):
     return area_intersect / (area1 + area2 - area_intersect)
 
 
-def compute_overlap(a, b):
+def np_iou(a, b):
     """
-    Code originally from https://github.com/rbgirshick/py-faster-rcnn.
-    Parameters
-    ----------
-    a: (N, 4) ndarray of float
-    b: (K, 4) ndarray of float
-    Returns
-    -------
-    overlaps: (N, K) ndarray of overlap between boxes and query_boxes
-    """
-    area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+    A re-implementation of iou() for numpy...
 
+    a: a (N, 4) numpy array of float.
+    b: a (K, 4) numpy array of float.
+    returns: a (N, K) ndarray of IOU between boxes and query_boxes.
+
+    reference: https://github.com/rbgirshick/py-faster-rcnn.
+    """
     iw = np.minimum(
         np.expand_dims(a[:, 2], axis=1), b[:, 2]) - np.maximum(
             np.expand_dims(a[:, 0], 1), b[:, 0])
     ih = np.minimum(np.expand_dims(a[:, 3], axis=1), b[:, 3]) - np.maximum(
         np.expand_dims(a[:, 1], 1), b[:, 1])
-
     iw = np.maximum(iw, 0)
     ih = np.maximum(ih, 0)
 
+    area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
     ua = np.expand_dims(
         (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), axis=1) + area - iw * ih
-
     ua = np.maximum(ua, np.finfo(float).eps)
 
     intersection = iw * ih
-
     return intersection / ua
 
 
-def compute_ap(recall, precision):
-    """ Compute the average precision, given the recall and precision curves.
-    Code originally from https://github.com/rbgirshick/py-faster-rcnn.
-    # Arguments
-        recall:    The recall curve (list).
-        precision: The precision curve (list).
-    # Returns
-        The average precision as computed in py-faster-rcnn.
+def np_average_precision(recall, precision):
+    """
+    Compute the average precision, given the recall and precision curves.
+
+    recall: the recall curve (list).
+    precision: the precision curve (list).
+    returns: the average precision.
+
+    reference: https://github.com/rbgirshick/py-faster-rcnn.
     """
     # correct AP calculation
     # first append sentinel values at the end
@@ -168,5 +164,4 @@ def compute_ap(recall, precision):
     i = np.where(mrec[1:] != mrec[:-1])[0]
 
     # and sum (\Delta recall) * prec
-    ap = np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])
-    return ap
+    return np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])

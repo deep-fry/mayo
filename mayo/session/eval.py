@@ -31,6 +31,7 @@ class Evaluate(SessionBase):
         else:
             log.info('Evaluation complete.')
         stats = {}
+        # FIXME generalize this to detectors
         for name in ('top1', 'top5'):
             topn = []
             for each in self.estimator.get_history(name):

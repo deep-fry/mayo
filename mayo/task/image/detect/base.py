@@ -10,8 +10,9 @@ class ImageDetectTaskBase(ImageTaskBase):
     """
     This base class implements mAP evaluation for all detection algorithms.
     """
-    def _mean_avg_precisions(self, pred_box, pred_class, pred_score, pred_cnt,
-                             truth_box, truth_class, truth_cnt):
+    def _mean_avg_precisions(
+            self, pred_box, pred_class, pred_score, pred_count,
+            truth_box, truth_class, truth_count):
         num_imgs, num_classes = self.batch_size, self.num_classes
         detections = [[None for i in range(num_classes)] for j in
                       range(num_imgs)]
@@ -25,7 +26,7 @@ class ImageDetectTaskBase(ImageTaskBase):
             pred_class_i = pred_class[i, :]
             for label in range(num_classes):
                 index = pred_class_i == label
-                if pred_cnt[i] == 0 or (not any(index)):
+                if pred_count[i] == 0 or (not any(index)):
                     detections[i][label] = []
                 else:
                     detections[i][label] = np.concatenate(
@@ -33,7 +34,7 @@ class ImageDetectTaskBase(ImageTaskBase):
                          pred_score_i[:, index[:]].T), axis=1)
                 index = truth_class[i, :] == label
                 annotations[i][label] = truth_box_i[index, :]
-        # compute mAPs
+        # compute mean_aps
         avg_precisions = np.zeros((num_classes, 1))
         for label in range(num_classes):
             false_pos = true_pos = scores = np.zeros((0,))
@@ -49,8 +50,7 @@ class ImageDetectTaskBase(ImageTaskBase):
                         false_pos = np.append(false_pos, 1)
                         true_pos = np.append(true_pos, 0)
                         continue
-                    overlaps = util.compute_overlap(
-                        np.expand_dims(d, axis=0), ans)
+                    overlaps = util.np_iou(np.expand_dims(d, axis=0), ans)
                     assigned_ans = np.argmax(overlaps, axis=1)
                     max_overlap = overlaps[0, assigned_ans]
                     if max_overlap >= self.iou_threshold \
@@ -80,8 +80,8 @@ class ImageDetectTaskBase(ImageTaskBase):
                 true_pos + false_pos, np.finfo(np.float64).eps)
 
             # compute average precision
-            average_precision = util.compute_ap(recall, precision)
-            avg_precisions[label] = average_precision
+            ap = util.np_average_precision(recall, precision)
+            avg_precisions[label] = ap
         return avg_precisions.astype(np.float32)
 
     def eval(self, net, prediction, truth):
@@ -89,7 +89,12 @@ class ImageDetectTaskBase(ImageTaskBase):
             detections: the prediciton of object class
             annotations: positions of the objects
         """
-        mAPs_inputs = [
+        # forced dummy test
+        # fakes = []
+        # for item in mean_aps_inputs:
+        #     fakes.append(np.random.randint(10, size=item.shape))
+        # dummy = self._mean_avg_precisions(*fakes)
+        inputs = [
             prediction['test']['box'],
             prediction['test']['class'],
             prediction['test']['score'],
@@ -98,16 +103,9 @@ class ImageDetectTaskBase(ImageTaskBase):
             truth['rawclass'],
             truth['count'],
         ]
-        avg_precisions = tf.py_func(
-            self._mean_avg_precisions, mAPs_inputs, tf.float32)
-        MAPs_formatter = lambda e: \
-            'MAPs accuracy: {}'.format(Percent(e.get_mean('accuracy')))
-        MAPs = tf.reduce_sum(
-            avg_precisions) / tf.cast(tf.size(avg_precisions), tf.float32)
-        self.estimator.register(
-            MAPs, 'accuracy', formatter=MAPs_formatter)
-        # forced dummy test
-        # fakes = []
-        # for item in mAPs_inputs:
-        #     fakes.append(np.random.randint(10, size=item.shape))
-        # dummy = self._mean_avg_precisions(*fakes)
+        tensor = tf.py_func(self._mean_avg_precisions, inputs, tf.float32)
+        tensor = tf.reduce_sum(tensor)
+        tensor /= tf.cast(tf.size(tensor), tf.float32)
+        formatter = lambda e: 'mAP accuracy: {}'.format(
+            Percent(e.get_mean('accuracy')))
+        self.estimator.register(tensor, 'accuracy', formatter=formatter)
