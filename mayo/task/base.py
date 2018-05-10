@@ -73,7 +73,8 @@ class TFTaskBase(object):
         def register(root, mapping):
             history = 'infinite' if self.mode == 'validate' else None
             if not isinstance(mapping, collections.Mapping):
-                self.estimator.register(mapping, root, history=history)
+                if mapping is not None:
+                    self.estimator.register(mapping, root, history=history)
                 return
             for key, value in mapping.items():
                 register('{}.{}'.format(root, key), value)
