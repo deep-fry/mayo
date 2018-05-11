@@ -5,12 +5,12 @@
 # 1. Clone `https://github.com/admk/pytorch-yolo2.git` and `cd` into it.
 # 2. Run darknet .weights to .pth conversion:
 #    ```
-#    curl -O https://pjreddie.com/media/files/yolov2.weights
-#    python convert.py cfg/yolo.cfg yolov2.weights yolo2.pth
+#    curl -O https://pjreddie.com/media/files/yolov2-tiny-voc.weights
+#    python convert.py cfg/yolo.cfg yolov2-tiny-voc.weights tiny-yolo.pth
 #    ```
 # 3. Run mayo conversion:
 #    ```
-#    external/convert yolo2.pth to yolo2 --rules=<this file>
+#    external/convert tiny-yolo.pth to tiny-yolo --rules=<this file>
 #    ```
 ---
 permute:
