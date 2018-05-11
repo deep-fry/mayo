@@ -8,7 +8,8 @@ _gate:
     pool: avg
     regularizer:
         # l1: 0.00000001
-        moe: 0.01
+        # moe: 0.01
+        null
     threshold: online
     trainable: true
 model:
