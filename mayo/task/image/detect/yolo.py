@@ -245,6 +245,7 @@ class YOLOv2(ImageDetectTaskBase):
         # the original box and label values from the dataset
         if truth:
             rawlabel, truebox, count = truth
+            truebox = util.corners_to_box(truebox)
             obj, box, label = tf.map_fn(
                 self._truth_to_cell, (truebox, rawlabel, count),
                 dtype=(tf.float32, tf.float32, tf.int32))
@@ -254,7 +255,7 @@ class YOLOv2(ImageDetectTaskBase):
                 'box': box,
                 'class': slim.one_hot_encoding(label, self.num_classes),
                 'count': count,
-                'rawbox': util.corners_to_box(truebox),
+                'rawbox': truebox,
                 'rawclass': rawlabel,
             }
         return data['input'], prediction, truth
