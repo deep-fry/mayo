@@ -29,7 +29,7 @@ def corners_to_box(corners, unstack=True, stack=True):
     return box
 
 
-def area(y_max, x_max, y_min, x_min):
+def area(y_min, x_min, y_max, x_max):
     return (y_max - y_min) * (x_max - x_min)
 
 
@@ -73,11 +73,11 @@ def iou(boxes1, boxes2, anchors=False):
 
     boxes1, boxes2:
         a (... x 4) tensor, where the last dimension contains the
-        coordinates (x, y, w, h), respectively denote the center of the
-        box and its width and height.
+        coordinates (y, x, h, w), respectively denote the center of the
+        box and its height and width.
     anchors:
         boxes1 and 2 to be (... x 2) tensors containing only
-        widths and heights, treating the origin as the centers.
+        heights and widths, treating the origin as the centers.
 
     returns: a (...) tensor of IOU values.
     """
@@ -99,17 +99,17 @@ def iou(boxes1, boxes2, anchors=False):
         y2_max, x2_max = h2 / 2, w2 / 2
         y1_min, x1_min, y2_min, x2_min = -y1_max, -x1_max, -y2_max, -x2_max
     else:
-        y1_max, x1_max, y1_min, x1_min = box_to_corners(boxes1, stack=False)
-        y2_max, x2_max, y2_min, x2_min = box_to_corners(boxes2, stack=False)
+        y1_min, x1_min, y1_max, x1_max = box_to_corners(boxes1, stack=False)
+        y2_min, x2_min, y2_max, x2_max = box_to_corners(boxes2, stack=False)
     # intersect corners
     yi_max = tf.minimum(y1_max, y2_max)
     xi_max = tf.minimum(x1_max, x2_max)
     yi_min = tf.maximum(y1_min, y2_min)
     xi_min = tf.maximum(x1_min, x2_min)
     # areas
-    area_intersect = area(yi_max, xi_max, yi_min, xi_min)
-    area1 = area(y1_max, x1_max, y1_min, x1_min)
-    area2 = area(y2_max, x2_max, y2_min, x2_min)
+    area_intersect = area(yi_min, xi_min, yi_max, xi_max)
+    area1 = area(y1_min, x1_min, y1_max, x1_max)
+    area2 = area(y2_min, x2_min, y2_max, x2_max)
     return area_intersect / (area1 + area2 - area_intersect)
 
 
