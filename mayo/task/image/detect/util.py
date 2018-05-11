@@ -123,18 +123,24 @@ def np_iou(a, b):
 
     reference: https://github.com/rbgirshick/py-faster-rcnn.
     """
-    iw = np.minimum(a[:, 3], b[:, 3]) - np.maximum(a[:, 1], b[:, 1])
-    ih = np.minimum(a[:, 2], b[:, 2]) - np.maximum(a[:, 0], b[:, 0])
+    # iw = np.minimum(a[:, 3], b[:, 3]) - np.maximum(a[:, 1], b[:, 1])
+    # ih = np.minimum(a[:, 2], b[:, 2]) - np.maximum(a[:, 0], b[:, 0])
+    ay, ax, ah, aw = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
+    by, bx, bh, bw = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
+    iw = (ax >= bx) * ((bx + bw / 2) - (ax - aw / 2)) + \
+        (ax < bx) * ((ax + aw / 2) - (bx - bw / 2))
+    ih = (ax >= bx) * ((by + bh / 2) - (ay - ah / 2)) + \
+        (ax < bx) * ((ay + ah / 2) - (by - bh / 2))
     iw = np.maximum(iw, 0)
     ih = np.maximum(ih, 0)
 
-    area = (b[:, 2] - b[:, 0]) * (b[:, 3] - b[:, 1])
+    area = bh * bw
     ua = np.expand_dims(
-        (a[:, 2] - a[:, 0]) * (a[:, 3] - a[:, 1]), axis=1) + area - iw * ih
+        (ah * aw), axis=1) + area - iw * ih
     ua = np.maximum(ua, np.finfo(float).eps)
 
     intersection = iw * ih
-    return (intersection / ua, iw, ih, intersection)
+    return (intersection / ua, iw, ih, intersection, ua)
 
 
 def np_average_precision(recall, precision):
