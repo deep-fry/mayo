@@ -111,7 +111,7 @@ class YOLOv2(ImageDetectTaskBase):
 
         box:
             a (num_truths x 4) tensor where each row is a
-            boudning box denoted by [y, x, h, w].
+            bounding box denoted by [y, x, h, w].
         label: a (num_truths) tensor of labels.
         count: num_truths.
         returns:
