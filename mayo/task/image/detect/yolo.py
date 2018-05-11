@@ -30,8 +30,8 @@ class YOLOv2(ImageDetectTaskBase):
     }
 
     def __init__(
-            self, session, preprocess, num_classes, shape,
-            anchors, scales, moment=None, num_cells=13,
+            self, session, preprocess, num_classes, background_class,
+            shape, anchors, scales, moment=None, num_cells=13,
             iou_threshold=0.6, score_threshold=0.6,
             nms_iou_threshold=0.4, nms_max_boxes=10):
         """
@@ -70,7 +70,8 @@ class YOLOv2(ImageDetectTaskBase):
         self.nms_iou_threshold = nms_iou_threshold
         self.nms_max_boxes = nms_max_boxes
 
-        super().__init__(session, preprocess, shape, moment)
+        super().__init__(
+            session, preprocess, num_classes, background_class, shape, moment)
 
     @memoize_property
     def anchors(self):
@@ -245,6 +246,7 @@ class YOLOv2(ImageDetectTaskBase):
         # the original box and label values from the dataset
         if truth:
             rawlabel, truebox, count = truth
+            rawlabel += self.label_offset
             truebox = util.corners_to_box(truebox)
             obj, box, label = tf.map_fn(
                 self._truth_to_cell, (truebox, rawlabel, count),
