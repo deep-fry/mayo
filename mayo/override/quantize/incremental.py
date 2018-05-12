@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from mayo.util import object_from_params
 from mayo.override import util
@@ -45,7 +46,8 @@ class IncrementalQuantizer(OverriderBase):
         if self.count_zero:
             th_arg = util.cast(util.count(value) * interval, int)
         else:
-            tmp = util.count(value) - util.sum(value != 0)
+            tmp = util.count(value[value != 0])
+            flat_value_arg = util.where(value.flatten() != 0)
             th_arg = util.cast(tmp * interval, int)
         if th_arg < 0:
             raise ValueError(
@@ -58,7 +60,10 @@ class IncrementalQuantizer(OverriderBase):
         if interval >= 1.0:
             th = flat_value.max() + 1.0
         else:
-                th = util.top_k(util.abs(flat_value[flat_value != 0.0]), th_arg)
+            if self.count_zero:
+                th = util.top_k(util.abs(flat_value), th_arg)
+            else:
+                th = util.top_k(util.abs(flat_value[flat_value_arg]), th_arg)
         th = util.cast(th, float)
         new_mask = util.logical_not(util.greater_equal(util.abs(metric), th))
         return util.logical_or(new_mask, previous_mask)
