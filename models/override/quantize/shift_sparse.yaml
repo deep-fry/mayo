@@ -1,0 +1,23 @@
+---
+_import: ../_global.yaml
+_overrider:
+    pruner:
+        type: mayo.override.DynamicNetworkSurgeryPruner
+        should_update: false
+        _priority: 100
+    quantizer: &incrementalshift
+        type: mayo.override.IncrementalQuantizer
+        interval: 0.8
+        _priority: 80
+        quantizer:
+            type: mayo.override.ShiftQuantizer
+            width: 8
+            bias: 200
+            overflow_rate: 0.0
+            should_update: true
+            stochastic: false
+    weights: &quantizer
+        dns: $(_overrider.pruner)
+        shift: $(_overrider.quantizer)
+    biases:
+        shift: $(_overrider.quantizer)
