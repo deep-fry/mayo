@@ -7,8 +7,9 @@ _overrider:
         _priority: 100
     quantizer: &incrementalshift
         type: mayo.override.IncrementalQuantizer
-        interval: 0.8
+        interval: 0.25
         _priority: 80
+        count_zero: false
         quantizer:
             type: mayo.override.ShiftQuantizer
             width: 8

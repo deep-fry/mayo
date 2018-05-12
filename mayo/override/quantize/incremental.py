@@ -58,7 +58,7 @@ class IncrementalQuantizer(OverriderBase):
         if interval >= 1.0:
             th = flat_value.max() + 1.0
         else:
-            th = util.top_k(util.abs(flat_value), th_arg)
+                th = util.top_k(util.abs(flat_value[flat_value != 0.0]), th_arg)
         th = util.cast(th, float)
         new_mask = util.logical_not(util.greater_equal(util.abs(metric), th))
         return util.logical_or(new_mask, previous_mask)
