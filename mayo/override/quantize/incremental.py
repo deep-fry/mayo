@@ -12,10 +12,12 @@ class IncrementalQuantizer(OverriderBase):
     interval = Parameter('interval', 0.1, [], 'float')
     mask = Parameter('mask', None, None, 'bool')
 
-    def __init__(self, session, quantizer, interval, should_update=True):
+    def __init__(self, session, quantizer, interval, count_zero=True,
+                 should_update=True):
         super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(session, **params)
+        self.count_zero = count_zero
         if interval is not None:
             self.interval_val = interval
 
@@ -40,7 +42,11 @@ class IncrementalQuantizer(OverriderBase):
 
     def _policy(self, value, quantized, previous_mask, interval):
         previous_pruned = util.sum(previous_mask)
-        th_arg = util.cast(util.count(value) * interval, int)
+        if self.count_zero:
+            th_arg = util.cast(util.count(value) * interval, int)
+        else:
+            tmp = util.count(value) - util.sum(value != 0)
+            th_arg = util.cast(tmp * interval, int)
         if th_arg < 0:
             raise ValueError(
                 'mask has {} elements, interval is {}'.format(

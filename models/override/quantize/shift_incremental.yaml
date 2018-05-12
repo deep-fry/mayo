@@ -4,7 +4,7 @@ _overrider:
     weights: &weights
         incremental: &incrementalshift
             type: mayo.override.IncrementalQuantizer
-            interval: 0.8
+            interval: 0.2
             quantizer:
                 type: mayo.override.ShiftQuantizer
                 width: 8
@@ -12,4 +12,5 @@ _overrider:
                 overflow_rate: 0.0
                 should_update: true
                 stochastic: false
+                count_zero: false
     biases: {<<: *weights}
