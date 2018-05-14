@@ -143,7 +143,7 @@ class LayerwiseRetrain(RetrainBase):
             return int(old_scale * factor)
         return old_scale * factor
 
-    def retrain_simple(self):
+    def retrain_one_shot(self):
         session = self.task.session
         overriders = self.task.nets[0].overriders
         targets = self.config.retrain.parameters.target

@@ -10,6 +10,8 @@ from mayo.session.train import Train
 
 
 class RetrainBase(Train):
+    modes = ['one_shot', 'one_epoch', 'fine_tune']
+
     def retrain(self):
         log.debug('Retraining starts.')
         try:
@@ -28,6 +30,9 @@ class RetrainBase(Train):
 
     def _init_retrain(self):
         self.retrain_mode = self.config.retrain.retrain_mode
+        if not (self.retrain_mode in self.modes):
+            raise ValueError('Retrain model {} is not one of {}'.format(
+                self.retrain_mode, self.modes))
         retrain_func = getattr(self, 'retrain_' + self.retrain_mode)
         return retrain_func
 
@@ -278,3 +283,7 @@ class RetrainBase(Train):
             else:
                 if acc > self.acc_base:
                     self.log[self.target_layer] = (value, loss, acc)
+
+    def flush_quantize_loss(self, overriders):
+        for o in overriders:
+            self.estimator.flush('activation' + o.name)

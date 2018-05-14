@@ -9,12 +9,14 @@ from mayo.session.train import Train
 class Profile(Train):
     def __init__(self, config):
         super().__init__(config)
-        self.net = self.nets[0]
+        self.net = self.task.nets[0]
 
-    def profile(self):
+    def profile(self, overriders=None):
         log.info('Start profiling for one epoch...')
         if self.config.system.profile.activations:
             self._register_activations()
+        if overriders:
+            self._register_quantize_loss(overriders)
         # disable checkpoint saving and train_op
         self.config.system.checkpoint.save = False
         self._run_train_ops = False
@@ -26,6 +28,12 @@ class Profile(Train):
         # save profiling results
         self.info()
         self.save()
+
+    def _register_quantize_loss(self, overriders):
+        for o in overriders:
+            loss = tf.reduce_sum(tf.abs(o.after - o.before))
+            self.estimator.register(
+                loss, 'activation' + o.name)
 
     def _register_activations(self):
         history = self.config.dataset.num_examples_per_epoch.get(self.mode)

@@ -7,6 +7,7 @@ from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
 from mayo.override.quantize import ShiftQuantizer
 from mayo.session.retrain.base import RetrainBase
 from mayo.log import log
+from mayo.session.profile import Profile
 
 
 class GlobalRetrain(RetrainBase):
@@ -198,7 +199,7 @@ class GlobalRetrain(RetrainBase):
             self.allocate_exp_mantissa(w)
         self.overriders_update()
 
-    def retrain_simple(self):
+    def retrain_one_shot(self):
         session = self.task.session
         overriders = self.task.nets[0].overriders
         targets = self.config.retrain.parameters.target
@@ -221,6 +222,14 @@ class GlobalRetrain(RetrainBase):
             items.append(item)
         self.present(overriders, items, q_losses)
         return False
+
+    def retrain_one_epoch(self):
+        overriders = self.task.nets[0].overriders
+        profiler = Profile(self.config)
+        self.config.system.profile.activations = True
+        # self.flush_quantize_loss(overriders)
+        profiler.profile(overriders)
+        import pdb; pdb.set_trace()
 
     def present(self, overriders, items, losses):
         sel_loss = np.min(np.array(losses))
