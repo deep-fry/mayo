@@ -1,0 +1,11 @@
+retrain:
+    iter_max_epoch: 10
+    tolerance: 0.001
+    retrain_mode: simple
+    update: true
+    run_status: normal
+    parameters:
+        type: mayo.override.DGQuantizer
+        target: [width, point]
+        range: [{from: 8, to: 1, scale: -1}, {from: 4, to: -4, scale: -1}]
+        # link_width: [0, 1]
