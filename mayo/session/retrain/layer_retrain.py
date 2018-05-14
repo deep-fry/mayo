@@ -1,4 +1,5 @@
 import yaml
+import numpy as np
 
 from itertools import product
 from mayo.session.retrain.base import RetrainBase
@@ -149,7 +150,7 @@ class LayerwiseRetrain(RetrainBase):
         ranges = self.config.retrain.parameters.range
         link_width = self.config.retrain.parameters.pop('link_width', None)
         if len(ranges) == 1:
-            ranges = len(targets) * [ranges]
+            ranges = len(targets) * ranges
         ranges = [self.parse_range(r) for r in ranges]
         q_losses = {}
         items = {}
@@ -165,14 +166,15 @@ class LayerwiseRetrain(RetrainBase):
                 q_loss = self.quantization_loss(before, after)
                 q_losses[o.name].append(q_loss)
                 items[o.name].append(item)
-        self.present(overriders, items, q_losses)
+        self.present(overriders, items, q_losses, targets)
+        return False
 
-    def present(self, overriders, items, losses):
+    def present(self, overriders, items, losses, targets):
         for o in overriders:
             sel_loss = np.min(np.array(losses[o.name]))
             sel_arg = np.argmin(np.array(losses[o.name]))
             formatter = ('overrider: {}, suggested bitwidths: {} for {}, '
-                'quantize loss: {}'.
-            log.info('overrider: {}, bitwidths: {}, quantize loss:{}'.format(
-                o.name, items[o.name][sel_arg], sel_loss))
+                'quantize loss: {}')
+            log.info(formatter.format(
+                o.name, items[o.name][sel_arg], targets, sel_loss))
         return

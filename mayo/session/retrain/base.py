@@ -13,9 +13,11 @@ class RetrainBase(Train):
     def retrain(self):
         log.debug('Retraining starts.')
         try:
-            self._init_retrain()
-            while self._retrain_iteration():
-                pass
+            retrain_func = self._init_retrain()
+            run = retrain_func()
+            if run:
+                while self._retrain_iteration():
+                    pass
         except KeyboardInterrupt:
             log.info('Stopped.')
             save = self.config.system.checkpoint.get('save', {})
@@ -26,8 +28,8 @@ class RetrainBase(Train):
 
     def _init_retrain(self):
         self.retrain_mode = self.config.retrain.retrain_mode
-        func = getattr(self, 'retrain_' + self.retrain_mode)
-        func()
+        retrain_func = getattr(self, 'retrain_' + self.retrain_mode)
+        return retrain_func
 
     def assign_targets(self, overrider, targets, values):
         for target, value in zip(targets, values):
@@ -52,6 +54,7 @@ class RetrainBase(Train):
         for variable in self.targets.members:
             self.variable_init(variable)
         self.overriders_update()
+        return True
 
     def _retrain_iteration(self):
         system = self.config.system

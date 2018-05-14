@@ -1,5 +1,6 @@
 import numpy as np
 import math
+from itertools import product
 
 from mayo.override.base import OverriderBase
 from mayo.override.quantize import Recentralizer, FloatingPointQuantizer
@@ -196,3 +197,34 @@ class GlobalRetrain(RetrainBase):
             w = self.targets.members[0].thresholds[0]
             self.allocate_exp_mantissa(w)
         self.overriders_update()
+
+    def retrain_simple(self):
+        session = self.task.session
+        overriders = self.task.nets[0].overriders
+        targets = self.config.retrain.parameters.target
+        ranges = self.config.retrain.parameters.range
+        link_width = self.config.retrain.parameters.pop('link_width', None)
+        if len(ranges) == 1:
+            ranges = len(targets) * ranges
+        ranges = [self.parse_range(r) for r in ranges]
+        q_losses = []
+        items = []
+        for item in product(*ranges):
+            if link_width and item[link_width[0]] > item[link_width[1]]:
+                continue
+            q_loss = 0
+            for o in overriders:
+                self.assign_targets(o, targets, item)
+                before, after = session.run([o.before, o.after])
+                q_loss += self.quantization_loss(before, after)
+            q_losses.append(q_loss)
+            items.append(item)
+        self.present(overriders, items, q_losses)
+        return False
+
+    def present(self, overriders, items, losses):
+        sel_loss = np.min(np.array(losses))
+        sel_arg = np.argmin(np.array(losses))
+        formatter = ('suggested bitwidths: {}, quantize loss: {}')
+        log.info(formatter.format(items[sel_arg], sel_loss))
+        return

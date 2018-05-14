@@ -6,6 +6,6 @@ retrain:
     run_status: normal
     parameters:
         type: mayo.override.DGQuantizer
-        target: [width, point]
-        range: [{from: 8, to: 1, scale: -1}, {from: 4, to: -4, scale: -1}]
+        target: [point]
+        range: [{from: 4, to: -4, scale: -1}]
         # link_width: [0, 1]
