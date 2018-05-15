@@ -3,8 +3,8 @@ from contextlib import contextmanager
 
 import tensorflow as tf
 
+from mayo import error
 from mayo.log import log
-from mayo.error import NotImplementedError
 from mayo.net.tf import TFNet
 from mayo.session.test import Test
 
@@ -85,24 +85,24 @@ class TFTaskBase(object):
         return data, prediction, truth
 
     def generate(self):
-        raise NotImplementedError(
+        raise error.NotImplementedError(
             'Please implement .generate() which produces training/validation '
             'samples and the expected truth results.')
 
     def augment(self, serialized):
-        raise NotImplementedError(
+        raise error.NotImplementedError(
             'Please implement .augment() which augments input tensors.')
 
     def train(self, net, prediction, truth):
-        raise NotImplementedError(
+        raise error.NotImplementedError(
             'Please implement .train() which returns the loss tensor.')
 
     def eval(self, net, prediction, truth):
-        raise NotImplementedError(
+        raise error.NotImplementedError(
             'Please implement .eval() which returns the evaluation metrics.')
 
     def test(self, name, inputs, prediction):
-        raise NotImplementedError(
+        raise error.NotImplementedError(
             'Please implement .test() which produces human-readable output '
             'for a given input.')
 

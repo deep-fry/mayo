@@ -5,7 +5,7 @@ class MayoError(Exception):
     """The all-encompassing Mayo exception.  """
 
 
-class NotImplementedError(MayoError, NotImplementedError):
+class NotImplementedError(MayoError, builtins.NotImplementedError):
     """Missing implementation.  """
 
 

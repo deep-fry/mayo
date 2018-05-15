@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from mayo.error import ShapeError
+from mayo import error
 
 
 def box_to_corners(box, unstack=True, stack=True):
@@ -53,7 +53,7 @@ def cartesian(tensor1, tensor2):
     *shape1, last1 = shape(tensor1)
     *shape2, last2 = shape(tensor2)
     if last1 != last2:
-        raise ShapeError(
+        raise error.ShapeError(
             'The last dimension of both tensors should be constant '
             'and should match.')
     ndims1 = len(shape1)
@@ -83,7 +83,7 @@ def iou(boxes1, boxes2, anchors=False):
     """
     expected_size = 2 if anchors else 4
     if boxes1.shape[-1] != expected_size or boxes2.shape[-1] != expected_size:
-        raise ShapeError(
+        raise error.ShapeError(
             'The number of values representing the bounding box should be {}.'
             .format(expected_size))
     shape1 = tf.shape(boxes1)
