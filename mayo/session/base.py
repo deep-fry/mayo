@@ -5,7 +5,8 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_property, flatten, Change, Table, Percent, object_from_params)
+    memoize_property, flatten, object_from_params,
+    Change, Table, Percent, unknown, format_shape)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
 from mayo.session.checkpoint import CheckpointHandler
@@ -71,9 +72,9 @@ class SessionBase(object, metaclass=SessionMeta):
         self.tf_graph = tf.Graph()
         self.initialized_variables = []
         self._assign_operators = {}
-        self.tf_session = tf.Session(
-            graph=self.tf_graph,
-            config=tf.ConfigProto(allow_soft_placement=True))
+        tf_config = tf.ConfigProto(allow_soft_placement=True)
+        tf_config.gpu_options.allow_growth = True
+        self.tf_session = tf.Session(graph=self.tf_graph, config=tf_config)
         self.tf_session.mayo_session = self
         self.checkpoint = CheckpointHandler(
             self.tf_session, config.system.search_path.checkpoint)
@@ -123,8 +124,12 @@ class SessionBase(object, metaclass=SessionMeta):
         return self.config.system.num_gpus
 
     def _tf_scalar(self, name, dtype=tf.int64):
+        if dtype in [tf.int32, tf.int64, tf.float32, tf.float64, tf.bool]:
+            initializer = tf.zeros_initializer()
+        elif dtype is tf.string:
+            initializer = tf.constant_initializer('')
         return tf.get_variable(
-            name, [], initializer=tf.constant_initializer(0),
+            name, [], initializer=initializer,
             trainable=False, dtype=dtype)
 
     @memoize_property
@@ -189,7 +194,15 @@ class SessionBase(object, metaclass=SessionMeta):
             if v not in self.initialized_variables:
                 self.initialized_variables.append(v)
 
+    @memoize_property
+    def _config_var(self):
+        return self._tf_scalar('mayo/config', dtype=tf.string)
+
     def save_checkpoint(self, name):
+        # dump configuration to ensure we always know how
+        # this checkpoint is trained
+        __import__('ipdb').set_trace()
+        self.assign(self._config_var, self.config.to_yaml())
         self.checkpoint.save(name)
 
     def info(self, plumbing=False):
@@ -199,17 +212,19 @@ class SessionBase(object, metaclass=SessionMeta):
         stats = self.estimator.get_estimates(net)
         if plumbing:
             layer_info = {}
-            for node, stat in stats.items():
-                stat['shape'] = list(net.shapes[node])
+            for node, shape in net.shapes.items():
+                stat = stats.get(node, {})
+                stat['shape'] = list(shape)
                 layer_info[node.formatted_name()] = stat
             info_dict['layers'] = layer_info
         else:
             keys = list({k for v in stats.values() for k in v})
             layer_info = Table(['layer', 'shape'] + keys)
-            for node, values in stats.items():
-                values = tuple(values.get(k, 0) for k in keys)
-                layer_info.add_row(
-                    (node.formatted_name(), net.shapes[node]) + values)
+            for node, shape in net.shapes.items():
+                values = stats.get(node, {})
+                values = tuple(values.get(k, unknown) for k in keys)
+                shape = format_shape(shape)
+                layer_info.add_row((node.formatted_name(), shape) + values)
             formatted_footers = [
                 sum(layer_info.get_column(k)) for k in keys]
             layer_info.set_footer(['', '    total:'] + formatted_footers)
@@ -307,6 +322,8 @@ class SessionBase(object, metaclass=SessionMeta):
     def _instantiate_task(self):
         task_cls, task_params = self._task_constructor
         self.task = task_cls(self, **task_params)
+        # ensure configuration variable is instantiated
+        self._config_var
 
     def interact(self):
         from IPython import embed

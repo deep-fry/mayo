@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from mayo.error import ShapeError
 
@@ -28,7 +29,7 @@ def corners_to_box(corners, unstack=True, stack=True):
     return box
 
 
-def area(y_max, x_max, y_min, x_min):
+def area(y_min, x_min, y_max, x_max):
     return (y_max - y_min) * (x_max - x_min)
 
 
@@ -72,11 +73,11 @@ def iou(boxes1, boxes2, anchors=False):
 
     boxes1, boxes2:
         a (... x 4) tensor, where the last dimension contains the
-        coordinates (x, y, w, h), respectively denote the center of the
-        box and its width and height.
+        coordinates (y, x, h, w), respectively denote the center of the
+        box and its height and width.
     anchors:
         boxes1 and 2 to be (... x 2) tensors containing only
-        widths and heights, treating the origin as the centers.
+        heights and widths, treating the origin as the centers.
 
     returns: a (...) tensor of IOU values.
     """
@@ -98,15 +99,72 @@ def iou(boxes1, boxes2, anchors=False):
         y2_max, x2_max = h2 / 2, w2 / 2
         y1_min, x1_min, y2_min, x2_min = -y1_max, -x1_max, -y2_max, -x2_max
     else:
-        y1_max, x1_max, y1_min, x1_min = box_to_corners(boxes1, stack=False)
-        y2_max, x2_max, y2_min, x2_min = box_to_corners(boxes2, stack=False)
+        y1_min, x1_min, y1_max, x1_max = box_to_corners(boxes1, stack=False)
+        y2_min, x2_min, y2_max, x2_max = box_to_corners(boxes2, stack=False)
     # intersect corners
     yi_max = tf.minimum(y1_max, y2_max)
     xi_max = tf.minimum(x1_max, x2_max)
     yi_min = tf.maximum(y1_min, y2_min)
     xi_min = tf.maximum(x1_min, x2_min)
     # areas
-    area_intersect = area(yi_max, xi_max, yi_min, xi_min)
-    area1 = area(y1_max, x1_max, y1_min, x1_min)
-    area2 = area(y2_max, x2_max, y2_min, x2_min)
+    area_intersect = area(yi_min, xi_min, yi_max, xi_max)
+    area1 = area(y1_min, x1_min, y1_max, x1_max)
+    area2 = area(y2_min, x2_min, y2_max, x2_max)
     return area_intersect / (area1 + area2 - area_intersect)
+
+
+def np_iou(a, b):
+    """
+    A re-implementation of iou() for numpy...
+
+    a: a box, (N, 4) numpy array of float: y, x, h, w
+    b: corner vertices,  (K, 4) numpy array of float.
+    returns: a (N, K) ndarray of IOU between boxes and query_boxes.
+
+    reference: https://github.com/rbgirshick/py-faster-rcnn.
+    """
+    # iw = np.minimum(a[:, 3], b[:, 3]) - np.maximum(a[:, 1], b[:, 1])
+    # ih = np.minimum(a[:, 2], b[:, 2]) - np.maximum(a[:, 0], b[:, 0])
+    ay, ax, ah, aw = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
+    by, bx, bh, bw = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
+    iw = (ax >= bx) * ((bx + bw / 2) - (ax - aw / 2)) + \
+        (ax < bx) * ((ax + aw / 2) - (bx - bw / 2))
+    ih = (ax >= bx) * ((by + bh / 2) - (ay - ah / 2)) + \
+        (ax < bx) * ((ay + ah / 2) - (by - bh / 2))
+    iw = np.maximum(iw, 0)
+    ih = np.maximum(ih, 0)
+
+    area = bh * bw
+    ua = np.expand_dims(
+        (ah * aw), axis=1) + area - iw * ih
+    ua = np.maximum(ua, np.finfo(float).eps)
+
+    intersection = iw * ih
+    return (intersection / ua, iw, ih, intersection, ua)
+
+
+def np_average_precision(recall, precision):
+    """
+    Compute the average precision, given the recall and precision curves.
+
+    recall: the recall curve (list).
+    precision: the precision curve (list).
+    returns: the average precision.
+
+    reference: https://github.com/rbgirshick/py-faster-rcnn.
+    """
+    # correct AP calculation
+    # first append sentinel values at the end
+    mrec = np.concatenate(([0.], recall, [1.]))
+    mpre = np.concatenate(([0.], precision, [0.]))
+
+    # compute the precision envelope
+    for i in range(mpre.size - 1, 0, -1):
+        mpre[i - 1] = np.maximum(mpre[i - 1], mpre[i])
+
+    # to calculate area under PR curve, look for points
+    # where X axis (recall) changes value
+    i = np.where(mrec[1:] != mrec[:-1])[0]
+
+    # and sum (\Delta recall) * prec
+    return np.sum((mrec[i + 1] - mrec[i]) * mpre[i + 1])

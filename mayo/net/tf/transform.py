@@ -25,7 +25,7 @@ class ParameterTransformer(object):
         self.overriders = []
         self.variables = {}
 
-    def _create_hyperobjects(self, params):
+    def _create_hyperobjects(self, layer_node, params):
         suffixes = ['regularizer', 'initializer']
         for key, p in params.items():
             if not any(key.endswith(s) for s in suffixes):
@@ -35,6 +35,11 @@ class ParameterTransformer(object):
             params[key] = cls(**p)
 
         def create_overrider(overriders):
+            if all(not p.get('_priority') for p in overriders.values()):
+                log.warn(
+                    'Priority not specified for a sequence of overriders '
+                    'in layer {!r}, which may result in unexpected ordering.'
+                    .format(layer_node.formatted_name()))
             overriders = list(reversed(sorted(
                 overriders.values(), key=lambda p: p.get('_priority', 0))))
             overriders = [
@@ -175,7 +180,7 @@ class ParameterTransformer(object):
     def transform(self, layer_node, params):
         params = copy.deepcopy(params)
         # weight and bias hyperparams
-        self._create_hyperobjects(params)
+        self._create_hyperobjects(layer_node, params)
         # layer configs
         self._config_layer(layer_node, params)
         # nested scopes

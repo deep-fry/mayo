@@ -2,6 +2,7 @@ import time
 import collections
 
 import numpy as np
+import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import object_from_params, Change
@@ -47,6 +48,8 @@ class ResourceEstimator(object):
         formatter: calls .register_print with `formatter`.
         debugger: function to print extra debug info.
         """
+        if not isinstance(tensor, (tf.Tensor, tf.Variable)):
+            raise TypeError('We expect {!r} to be a Tensor'.format(tensor))
         history = self.default_history if history is None else history
         node = 'global' if node is None else node
         layer = self.operations.setdefault(node, {})

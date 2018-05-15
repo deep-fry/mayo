@@ -20,7 +20,7 @@ rename:
     \.: /
     bias: biases
     weight: weights
-    models/\d+/: yolo2
+    models/\d+/: yolo2/
     bn(\d): conv\1/BatchNorm
     BatchNorm/weights: BatchNorm/gamma
     BatchNorm/biases: BatchNorm/beta

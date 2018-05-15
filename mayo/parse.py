@@ -270,6 +270,8 @@ class _DotDict(collections.MutableMapping):
 
     def __setitem__(self, key, value):
         obj, key = self._dot_path(key, self._mapping, setdefault=True)
+        if isinstance(value, _DotDict):
+            value = value._mapping
         obj[key] = value
     __setattr__ = __setitem__
 

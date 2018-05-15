@@ -1,4 +1,5 @@
 import tensorflow as tf
+import numpy as np
 
 from mayo.util import object_from_params
 from mayo.override import util
@@ -12,14 +13,14 @@ class IncrementalQuantizer(OverriderBase):
     interval = Parameter('interval', 0.1, [], 'float')
     mask = Parameter('mask', None, None, 'bool')
 
-    def __init__(self, session, quantizer, intervals, should_update=True):
+    def __init__(self, session, quantizer, interval, count_zero=True,
+                 should_update=True):
         super().__init__(session, should_update)
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(session, **params)
-        if intervals is not None:
-            self.intervals = intervals
-            self.interval = intervals[0]
-            self.interval_index = 0
+        self.count_zero = count_zero
+        if interval is not None:
+            self.interval_val = interval
 
     def _quantize(self, value, mean_quantizer=False):
         quantizer = self.quantizer
@@ -42,7 +43,12 @@ class IncrementalQuantizer(OverriderBase):
 
     def _policy(self, value, quantized, previous_mask, interval):
         previous_pruned = util.sum(previous_mask)
-        th_arg = util.cast(util.count(value) * interval, int)
+        if self.count_zero:
+            th_arg = util.cast(util.count(value) * interval, int)
+        else:
+            tmp = util.count(value[value != 0])
+            flat_value_arg = util.where(value.flatten() != 0)
+            th_arg = util.cast(tmp * interval, int)
         if th_arg < 0:
             raise ValueError(
                 'mask has {} elements, interval is {}'.format(
@@ -50,12 +56,14 @@ class IncrementalQuantizer(OverriderBase):
         off_mask = util.cast(
             util.logical_not(util.cast(previous_mask, bool)), float)
         metric = value - quantized
-        flat_value = metric * off_mask
-        flat_value = flat_value.flatten()
+        flat_value = (metric * off_mask).flatten()
         if interval >= 1.0:
             th = flat_value.max() + 1.0
         else:
-            th = util.top_k(util.abs(flat_value), th_arg)
+            if self.count_zero:
+                th = util.top_k(util.abs(flat_value), th_arg)
+            else:
+                th = util.top_k(util.abs(flat_value[flat_value_arg]), th_arg)
         th = util.cast(th, float)
         new_mask = util.logical_not(util.greater_equal(util.abs(metric), th))
         return util.logical_or(new_mask, previous_mask)
@@ -66,10 +74,9 @@ class IncrementalQuantizer(OverriderBase):
         self.quantizer.assign_parameters()
 
     def update_interval(self):
-        if self.intervals == []:
+        if not hasattr(self, 'interval_val'):
             return False
-        self.session.assign(self.interval, self.intervals[self.interval_index])
-        self.interval_index += 1
+        self.session.assign(self.interval, self.interval_val)
         return True
 
     def _update(self):

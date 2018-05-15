@@ -3,7 +3,8 @@ dataset:
     name: voc
     task:
         type: mayo.task.image.YOLOv2
-        num_classes: 20
+        num_classes: 21
+        background_class: {has: true}
         anchors:
             - [1.08, 1.19]
             - [3.42, 4.41]

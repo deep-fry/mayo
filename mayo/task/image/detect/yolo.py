@@ -8,11 +8,11 @@ from PIL import Image, ImageDraw, ImageFont
 
 from mayo.log import log
 from mayo.util import memoize_property, pad_to_shape
-from mayo.task.image.base import ImageTaskBase
 from mayo.task.image.detect import util
+from mayo.task.image.detect.base import ImageDetectTaskBase
 
 
-class YOLOv2(ImageTaskBase):
+class YOLOv2(ImageDetectTaskBase):
     """
     YOLOv2 image detection algorithm.
 
@@ -30,8 +30,8 @@ class YOLOv2(ImageTaskBase):
     }
 
     def __init__(
-            self, session, preprocess, num_classes, shape,
-            anchors, scales, moment=None, num_cells=13,
+            self, session, preprocess, num_classes, background_class,
+            shape, anchors, scales, moment=None, num_cells=13,
             iou_threshold=0.6, score_threshold=0.6,
             nms_iou_threshold=0.4, nms_max_boxes=10):
         """
@@ -70,7 +70,8 @@ class YOLOv2(ImageTaskBase):
         self.nms_iou_threshold = nms_iou_threshold
         self.nms_max_boxes = nms_max_boxes
 
-        super().__init__(session, preprocess, shape, moment)
+        super().__init__(
+            session, preprocess, num_classes, background_class, shape, moment)
 
     @memoize_property
     def anchors(self):
@@ -111,7 +112,7 @@ class YOLOv2(ImageTaskBase):
 
         box:
             a (num_truths x 4) tensor where each row is a
-            boudning box denoted by [y, x, h, w].
+            bounding box denoted by [y, x, h, w].
         label: a (num_truths) tensor of labels.
         count: num_truths.
         returns:
@@ -122,7 +123,6 @@ class YOLOv2(ImageTaskBase):
             - a (num_cells x num_cells x num_anchors) tensor of labels.
         """
         box, label, count = each
-        count = 3
         with tf.control_dependencies([tf.assert_greater(count, 0)]):
             box = box[:count, :]
             label = label[:count]
@@ -245,17 +245,20 @@ class YOLOv2(ImageTaskBase):
         }
         # the original box and label values from the dataset
         if truth:
-            label, truebox, count = truth
+            rawlabel, truebox, count = truth
+            rawlabel += self.label_offset
+            truebox = util.corners_to_box(truebox)
             obj, box, label = tf.map_fn(
-                self._truth_to_cell, (truebox, label, count),
+                self._truth_to_cell, (truebox, rawlabel, count),
                 dtype=(tf.float32, tf.float32, tf.int32))
             truth = {
                 'object': obj,
                 'object_mask': tf.expand_dims(obj, -1),
                 'box': box,
-                'rawbox': truebox,
                 'class': slim.one_hot_encoding(label, self.num_classes),
                 'count': count,
+                'rawbox': truebox,
+                'rawclass': rawlabel,
             }
         return data['input'], prediction, truth
 
@@ -316,8 +319,15 @@ class YOLOv2(ImageTaskBase):
         for args in zip(names, images, boxes, scores, classes, count):
             self._test(*args)
 
-    def eval(self, net, prediction, truth):
-        ...
+    def _iou_score(self, pred_box, truth_box, num_objects):
+        shape = [
+            self.batch_size, self.num_cells, self.num_cells,
+            self.num_anchors, 1, 4]
+        outbox_p = tf.reshape(pred_box, shape)
+        shape = [self.batch_size, 1, 1, 1, num_objects, 4]
+        outbox = tf.reshape(truth_box, shape)
+        iou_score = util.iou(outbox_p, outbox)
+        return tf.reduce_max(iou_score, axis=4, keepdims=True)
 
     def train(self, net, prediction, truth):
         """Training loss.  """
@@ -341,14 +351,8 @@ class YOLOv2(ImageTaskBase):
         # no-object loss
         # match shape
         # (batch x num_cells x num_cells x num_anchors x num_objects x 4)
-        shape = [
-            self.batch_size, self.num_cells, self.num_cells,
-            self.num_anchors, 1, 4]
-        outbox_p = tf.reshape(prediction['outbox'], shape)
-        shape = [self.batch_size, 1, 1, 1, num_objects, 4]
-        outbox = tf.reshape(truth['rawbox'], shape)
-        iou_score = util.iou(outbox_p, outbox)
-        iou_score = tf.reduce_max(iou_score, axis=4, keepdims=True)
+        iou_score = self._iou_score(
+            prediction['outbox'], truth['rawbox'], num_objects)
         is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.float32)
         noobj_loss = (1 - truth['object_mask']) * is_obj_absent
         noobj_loss *= prediction['object_mask'] ** 2
