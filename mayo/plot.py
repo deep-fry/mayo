@@ -3,8 +3,8 @@ import math
 import numpy as np
 from PIL import Image
 
+from mayo import error
 from mayo.log import log
-from mayo.error import ValueError, TypeError, KeyError
 from mayo.task.image.classify import Classify
 
 
@@ -21,7 +21,8 @@ class Plot(object):
         self.task = session.task
         self.net = session.task.nets[0]
         if not isinstance(session.task, Classify):
-            raise TypeError('We only support classification task for now.')
+            raise error.TypeError(
+                'We only support classification task for now.')
 
     @property
     def _path(self):
@@ -83,7 +84,7 @@ class Plot(object):
 
     def _plot_images(self, value, path):
         if len(value.shape) != 3:
-            raise ValueError(
+            raise error.ShapeError(
                 'We expect number of dimensions to be 4 for image plotting.')
         height, width, channels = value.shape
         max_value = float(np.max(value))
@@ -165,7 +166,11 @@ class Plot(object):
             values = []
             for label in range(len(label_keys)):
                 # labels will be continuous
-                values.append(np.mean(lmap[label], axis=0))
+                try:
+                    mean = np.mean(lmap[label], axis=0)
+                except KeyError:
+                    mean = np.zeros(self.net.shapes[node][-1])
+                values.append(mean)
             hmap[node] = np.stack(values, axis=0)
         return hmap
 
@@ -175,7 +180,7 @@ class Plot(object):
         if vmax is None:
             vmax = np.max(heatmap)
         if vmin >= vmax:
-            raise ValueError(
+            raise error.ValueError(
                 'The minimum value is not less than the maximum value.')
         heatmap = np.uint8((heatmap - vmin) / (vmax - vmin) * 255.0)
         image = Image.fromarray(heatmap)
