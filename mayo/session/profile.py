@@ -31,7 +31,7 @@ class Profile(Train):
 
     def _register_quantize_loss(self, overriders):
         for o in overriders:
-            loss = tf.reduce_sum(tf.abs(o.after - o.before))
+            loss = o.quantize_loss()
             self.estimator.register(
                 loss, 'activation' + o.name)
 
