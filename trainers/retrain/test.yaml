@@ -1,7 +1,7 @@
-retrain:
+search:
     iter_max_epoch: 10
     tolerance: 0.001
-    retrain_mode: one_epoch 
+    search_mode: one_epoch
     update: true
     run_status: normal
     parameters:

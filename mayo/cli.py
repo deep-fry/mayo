@@ -10,7 +10,7 @@ from docopt import docopt
 from mayo.log import log
 from mayo.config import Config
 from mayo.session import (
-    Test, Evaluate, Train, LayerwiseRetrain, GlobalRetrain, Profile)
+    Test, Evaluate, Train, LayerwiseSearch, GlobalSearch, Profile)
 
 _root = os.path.dirname(__file__)
 
@@ -131,16 +131,16 @@ Arguments:
     _session_map = {
         'train': Train,
         'profile': Profile,
-        'retrain-layer': LayerwiseRetrain,
-        'retrain-global': GlobalRetrain,
+        'search-layer': LayerwiseSearch,
+        'search-global': GlobalSearch,
         'test': Test,
         'validate': Evaluate,
     }
     _keys_map = {
         'train': _train_keys,
         'profile': _train_keys,
-        'retrain-layer': _train_keys,
-        'retrain-global': _train_keys,
+        'search-layer': _train_keys,
+        'search-global': _train_keys,
         'test': _test_keys,
         'validate': _validate_keys,
     }
@@ -201,13 +201,13 @@ Arguments:
         """Performs training.  """
         return self._get_session('train').train()
 
-    def cli_retrain_layer(self):
-        """Performs retraining.  """
-        return self._get_session('retrain-layer').retrain()
+    def cli_search_layer(self):
+        """Performs searching.  """
+        return self._get_session('search-layer').search()
 
-    def cli_retrain_global(self):
-        """Performs retraining.  """
-        return self._get_session('retrain-global').retrain()
+    def cli_search_global(self):
+        """Performs searching.  """
+        return self._get_session('search-global').search()
 
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """
