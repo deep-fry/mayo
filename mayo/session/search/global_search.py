@@ -199,11 +199,14 @@ class GlobalSearch(SearchBase, Profile):
             self.allocate_exp_mantissa(w)
         self.overriders_update()
 
-    def search_one_shot(self):
+    def search(self):
+        config = self.config.search
         session = self.task.session
         overriders = self.task.nets[0].overriders
-        targets = self.config.search.parameters.target
-        ranges = self.config.search.parameters.range
+        targets = config.parameters.target
+        ranges = config.parameters.range
+        num_epochs = config.pop('num_epochs', 'one_shot')
+        training = config.pop('training', False)
         link_width = self.config.search.parameters.pop('link_width', None)
         if len(ranges) == 1:
             ranges = len(targets) * ranges
@@ -211,25 +214,48 @@ class GlobalSearch(SearchBase, Profile):
         q_losses = []
         items = []
         for item in product(*ranges):
+            log.info('Profile {} configuration for {}'.format(item, targets))
             if link_width and item[link_width[0]] > item[link_width[1]]:
                 continue
             q_loss = 0
-            for o in overriders:
-                self.assign_targets(o, targets, item)
-                before, after = session.run([o.before, o.after])
-                q_loss += self.quantization_loss(before, after)
+            if num_epochs == 'one_shot':
+                for o in overriders:
+                    self.assign_targets(o, targets, item)
+                    before, after = session.run([o.before, o.after])
+                    # FIXME: this is redundant, could use o.quantize_loss()
+                    # but it reports a graph finalize error
+                    q_loss += self.np_quantize_loss(before, after)
+            else:
+                q_loss = self.profiled_search(
+                    training, num_epochs, overriders, targets, item)
+            log.info('Profiled quantization loss is {}'.format(q_loss))
             q_losses.append(q_loss)
             items.append(item)
-        self.present(overriders, items, q_losses)
+        self.present(overriders, items, q_losses, targets)
         return False
 
-    def search_one_epoch(self):
-        overriders = self.task.nets[0].overriders
-        import pdb; pdb.set_trace()
+    def np_quantize_loss(self, before, after):
+        return np.sum(np.abs(after - before))
 
-    def present(self, overriders, items, losses):
+    def profiled_search(
+            self, training, num_epochs, overriders, targets, item):
+        self.flush_quantize_loss(overriders)
+        # decide to train or not
+        self._run_train_ops = training
+        if isinstance(num_epochs, (int, float)):
+            self.config.system.max_epochs = num_epochs
+        for o in overriders:
+            self.assign_targets(o, targets, item)
+        # registered quantization loss
+        self.profile(overriders)
+        q_loss = 0
+        for o in overriders:
+            q_loss += self.estimator.get_value(o.name)[0]
+        return q_loss
+
+    def present(self, overriders, items, losses, targets):
         sel_loss = np.min(np.array(losses))
         sel_arg = np.argmin(np.array(losses))
-        formatter = ('suggested bitwidths: {}, quantize loss: {}')
-        log.info(formatter.format(items[sel_arg], sel_loss))
+        formatter = ('suggested {} for {}, quantize loss: {}')
+        log.info(formatter.format(items[sel_arg], targets, sel_loss))
         return

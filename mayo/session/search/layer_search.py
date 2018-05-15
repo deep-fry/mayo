@@ -144,11 +144,14 @@ class LayerwiseSearch(SearchBase, Profile):
             return int(old_scale * factor)
         return old_scale * factor
 
-    def search_one_shot(self):
+    def search(self):
+        config = self.config.search
         session = self.task.session
         overriders = self.task.nets[0].overriders
-        targets = self.config.search.parameters.target
-        ranges = self.config.search.parameters.range
+        targets = config.parameters.target
+        ranges = config.parameters.range
+        num_epochs = config.pop('num_epochs', 'one_shot')
+        training = config.pop('training', False)
         link_width = self.config.search.parameters.pop('link_width', None)
         if len(ranges) == 1:
             ranges = len(targets) * ranges
@@ -163,12 +166,30 @@ class LayerwiseSearch(SearchBase, Profile):
                 if link_width and item[link_width[0]] > item[link_width[1]]:
                     continue
                 self.assign_targets(o, targets, item)
-                before, after = session.run([o.before, o.after])
-                q_loss = self.quantization_loss(before, after)
+                if num_epochs == 'one_shot':
+                    before, after = session.run([o.before, o.after])
+                    q_loss = self.quantization_loss(before, after)
+                else:
+                    q_loss = self.profiled_search(
+                        training, num_epochs, o, targets, item)
                 q_losses[o.name].append(q_loss)
                 items[o.name].append(item)
         self.present(overriders, items, q_losses, targets)
         return False
+
+    def profiled_search(
+            self, training, num_epochs, overrider, targets, item):
+        overriders = self.task.nets[0].overriders
+        self.flush_quantize_loss(overriders)
+        # decide to train or not
+        self._run_train_ops = training
+        if isinstance(num_epochs, (int, float)):
+            self.config.system.max_epochs = num_epochs
+        self.assign_targets(overrider, targets, item)
+        # registered quantization loss
+        self.profile(overriders)
+        return self.estimator.get_value(overrider.name)[0]
+
 
     def present(self, overriders, items, losses, targets):
         for o in overriders:

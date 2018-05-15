@@ -33,7 +33,7 @@ class SearchBase(Train):
         if not (self.search_mode in self.modes):
             raise ValueError('search model {} is not one of {}'.format(
                 self.search_mode, self.modes))
-        search_func = getattr(self, 'search_' + self.search_mode)
+        search_func = getattr(self, self.search_mode)
         return search_func
 
     def assign_targets(self, overrider, targets, values):
@@ -43,9 +43,6 @@ class SearchBase(Train):
 
     def parse_range(self, r):
         return [i for i in range(r['from'], r['to'] + r['scale'], r['scale'])]
-
-    def quantization_loss(self, before, after):
-        return np.sum(np.abs(after - before))
 
     def search_overriders(self):
         self._init_scales()
@@ -63,12 +60,12 @@ class SearchBase(Train):
 
     def _search_iteration(self):
         system = self.config.system
-        loss, acc, epoch = self.once()
-        self._update_stats(loss, acc)
+        loss, epoch = self.once()
+        self._update_stats(loss)
         summary_delta = self.change.delta('summary.epoch', epoch)
 
-        if not hasattr(self, 'start_acc') or self.start_acc is None:
-            self.start_acc = acc
+        if not hasattr(self, 'start_loss') or self.start_acc is None:
+            self.start_loss = loss
 
         if system.summary.save and summary_delta >= 0.1:
             self._save_summary(epoch)
@@ -154,15 +151,16 @@ class SearchBase(Train):
         #     info, self.tf_session, self.targets.show_targets(), run_status)
 
     def once(self):
-        train_op = self._train_op
+        train_op = self._train_op if self._run_train_ops else []
         if self.config.search.get('eval_only', False):
             # do not run training operations when `search.eval_only` is set
             train_op = train_op['imgs_seen']
-        tasks = [train_op, self.loss, self.accuracy, self.num_epochs]
-        noop, loss, acc, num_epochs = self.run(tasks, batch=True)
+        tasks = [train_op, self._mean_loss, self.num_epochs]
+        noop, loss, num_epochs = self.run(tasks, batch=True)
+        self.running_loss = loss
         if math.isnan(loss):
             raise ValueError('Model diverged with a nan-valued loss.')
-        return (loss, acc, num_epochs)
+        return num_epochs
 
     def backward_policy(self):
         raise NotImplementedError(
@@ -247,15 +245,13 @@ class SearchBase(Train):
         self.acc_avg = self.acc_total / float(self.step)
         self._reset_stats()
 
-    def _update_stats(self, loss, acc):
+    def _update_stats(self, loss):
         self.step += 1
         self.loss_total += loss
-        self.acc_total += acc
 
     def _reset_stats(self):
         self.step = 0
         self.loss_total = 0
-        self.acc_total = 0
 
     def variables_refresh(self):
         raise NotImplementedError(
@@ -286,4 +282,4 @@ class SearchBase(Train):
 
     def flush_quantize_loss(self, overriders):
         for o in overriders:
-            self.estimator.flush('activation' + o.name)
+            self.estimator.flush(o.name)
