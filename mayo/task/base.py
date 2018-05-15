@@ -5,7 +5,6 @@ from contextlib import contextmanager
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import memoize_property
 from mayo.net.tf import TFNet
 from mayo.session.test import Test
 
@@ -98,6 +97,10 @@ class TFTaskBase(object):
         raise NotImplementedError(
             'Please implement .generate() which produces training/validation '
             'samples and the expected truth results.')
+
+    def augment(self, serialized):
+        raise NotImplementedError(
+            'Please implement .augment() which augments input tensors.')
 
     def train(self, net, prediction, truth):
         raise NotImplementedError(
