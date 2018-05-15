@@ -234,9 +234,6 @@ class GlobalSearch(SearchBase, Profile):
         self.present(overriders, items, q_losses, targets)
         return False
 
-    def np_quantize_loss(self, before, after):
-        return np.sum(np.abs(after - before))
-
     def profiled_search(
             self, training, num_epochs, overriders, targets, item):
         self.flush_quantize_loss(overriders)

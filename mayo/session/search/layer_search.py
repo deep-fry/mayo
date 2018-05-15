@@ -163,15 +163,19 @@ class LayerwiseSearch(SearchBase, Profile):
             q_losses[o.name] = []
             items[o.name] = []
             for item in product(*ranges):
+                log.info(
+                    'Profile {} configuration for {} in overrider {}'.format(
+                        item, targets, o.name))
                 if link_width and item[link_width[0]] > item[link_width[1]]:
                     continue
                 self.assign_targets(o, targets, item)
                 if num_epochs == 'one_shot':
                     before, after = session.run([o.before, o.after])
-                    q_loss = self.quantization_loss(before, after)
+                    q_loss = self.np_quantize_loss(before, after)
                 else:
                     q_loss = self.profiled_search(
                         training, num_epochs, o, targets, item)
+                log.info('Profiled quantization loss is {}'.format(q_loss))
                 q_losses[o.name].append(q_loss)
                 items[o.name].append(item)
         self.present(overriders, items, q_losses, targets)
@@ -189,7 +193,6 @@ class LayerwiseSearch(SearchBase, Profile):
         # registered quantization loss
         self.profile(overriders)
         return self.estimator.get_value(overrider.name)[0]
-
 
     def present(self, overriders, items, losses, targets):
         for o in overriders:

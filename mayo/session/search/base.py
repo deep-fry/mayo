@@ -280,6 +280,9 @@ class SearchBase(Train):
                 if acc > self.acc_base:
                     self.log[self.target_layer] = (value, loss, acc)
 
+    def np_quantize_loss(self, before, after):
+        return np.sum(np.abs(after - before))
+
     def flush_quantize_loss(self, overriders):
         for o in overriders:
             self.estimator.flush(o.name)

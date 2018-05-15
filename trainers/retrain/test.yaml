@@ -2,7 +2,7 @@ search:
     iter_max_epoch: 10
     tolerance: 0.001
     search_mode: search
-    num_epochs: 1
+    num_epochs: 1.0
     update: true
     training: false
     run_status: normal
