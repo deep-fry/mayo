@@ -10,7 +10,13 @@ from mayo.task.image.generate import Preprocess
 class ImageTaskBase(TFTaskBase):
     _truth_keys = NotImplemented
 
-    def __init__(self, session, preprocess, shape, moment=None):
+    def __init__(
+            self, session, preprocess, num_classes, background_class,
+            shape, moment=None):
+        bg = background_class
+        self.label_offset = int(bg.get('use', 0)) - int(bg.get('has', 0))
+        self.num_classes = num_classes + self.label_offset
+        session.config.dataset.task.num_classes = self.num_classes
         system = session.config.system
         mode = session.mode
         files = session.config.data_files(mode)

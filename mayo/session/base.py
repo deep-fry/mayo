@@ -134,8 +134,12 @@ class SessionBase(object, metaclass=SessionMeta):
         return self.config.system.num_gpus
 
     def _tf_scalar(self, name, dtype=tf.int64):
+        if dtype in [tf.int32, tf.int64, tf.float32, tf.float64, tf.bool]:
+            initializer = tf.zeros_initializer()
+        elif dtype is tf.string:
+            initializer = tf.constant_initializer('')
         return tf.get_variable(
-            name, [], initializer=tf.constant_initializer(0),
+            name, [], initializer=initializer,
             trainable=False, dtype=dtype)
 
     @memoize_property
@@ -200,7 +204,15 @@ class SessionBase(object, metaclass=SessionMeta):
             if v not in self.initialized_variables:
                 self.initialized_variables.append(v)
 
+    @memoize_property
+    def _config_var(self):
+        return self._tf_scalar('mayo/config', dtype=tf.string)
+
     def save_checkpoint(self, name):
+        # dump configuration to ensure we always know how
+        # this checkpoint is trained
+        __import__('ipdb').set_trace()
+        self.assign(self._config_var, self.config.to_yaml())
         self.checkpoint.save(name)
 
     def info(self, plumbing=False):

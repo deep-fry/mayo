@@ -27,7 +27,5 @@ _overrider:
             mean_quantizer: $(_overrider.mean_quantizer)
             reg: 0.00001
     biases:
-        dns:
-            $(_overrider.pruner)
         float:
             $(_overrider.quantizer)

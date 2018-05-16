@@ -9,7 +9,7 @@ from mayo.session.train import Train
 class Profile(Train):
     def __init__(self, config):
         super().__init__(config)
-        self.net = self.nets[0]
+        self.net = self.task.nets[0]
 
     def profile(self):
         log.info('Start profiling for one epoch...')
