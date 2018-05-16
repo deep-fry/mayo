@@ -289,6 +289,10 @@ class _DotDict(collections.MutableMapping):
         return len(self._mapping)
 
 
+yaml.add_representer(
+    _DotDict, yaml.representer.SafeRepresenter.represent_dict)
+
+
 class ConfigBase(_DotDict):
     def __init__(self, merge_hook=None):
         super().__init__({})

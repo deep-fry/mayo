@@ -54,6 +54,7 @@ class Config(ConfigBase):
         merge_hook = {
             'system.log': self._setup_log_level,
             'system.num_gpus': self._setup_gpus,
+            'system.visible_gpus': self._setup_gpus,
         }
         super().__init__(merge_hook)
         self._setup_excepthook()

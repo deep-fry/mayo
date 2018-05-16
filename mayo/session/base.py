@@ -100,6 +100,16 @@ class SessionBase(object, metaclass=SessionMeta):
             self.imgs_seen_op, 'imgs_seen',
             history=1, formatter=progress_formatter)
 
+    @property
+    def _task_constructor(self):
+        return object_from_params(self.config.dataset.task)
+
+    def _instantiate_task(self):
+        task_cls, task_params = self._task_constructor
+        self.task = task_cls(self, **task_params)
+        # ensure configuration variable is instantiated
+        self._config_var
+
     def _finalize(self):
         for name, finalizer in self.finalizers.items():
             log.debug(
@@ -302,14 +312,6 @@ class SessionBase(object, metaclass=SessionMeta):
         else:
             results = self.raw_run(ops, **kwargs)
         return results
-
-    @property
-    def _task_constructor(self):
-        return object_from_params(self.config.dataset.task)
-
-    def _instantiate_task(self):
-        task_cls, task_params = self._task_constructor
-        self.task = task_cls(self, **task_params)
 
     def interact(self):
         from IPython import embed
