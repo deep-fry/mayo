@@ -201,7 +201,6 @@ class SessionBase(object, metaclass=SessionMeta):
     def save_checkpoint(self, name):
         # dump configuration to ensure we always know how
         # this checkpoint is trained
-        __import__('ipdb').set_trace()
         self.assign(self._config_var, self.config.to_yaml())
         self.checkpoint.save(name)
 
