@@ -4,6 +4,8 @@ import numpy as np
 from PIL import Image
 
 from mayo.log import log
+from mayo.error import ValueError, TypeError, KeyError
+from mayo.task.image.classify import Classify
 
 
 class Plot(object):
@@ -16,15 +18,18 @@ class Plot(object):
         self.pyplot = pyplot
         self.session = session
         self.config = config
-        self.net = session.nets[0]
+        self.task = session.task
+        self.net = session.task.nets[0]
+        if not isinstance(session.task, Classify):
+            raise TypeError('We only support classification task for now.')
 
     @property
     def _path(self):
         return self.config.system.search_path.plot[0]
 
     def plot(self):
-        input_tensor = self.net.inputs()['input']
-        label_tensor = self.net.labels()
+        input_tensor = self.task.inputs[0]
+        label_tensor = self.task.truths[0]
         layer_tensors = self.net.layers()
         variable_tensors = self.net.variables
         input_image, label, layers, variables = self.session.run(
@@ -128,10 +133,9 @@ class Plot(object):
             path = 'gate/{}-{}'.format(key, node_name)
             return os.path.join(self._path, path)
 
-        try:
-            gammas = self.session.estimator.get_histories('gate.gamma')
-            actives = self.session.estimator.get_histories('gate.active')
-        except KeyError:
+        gammas = self.session.estimator.get_histories('gate.gamma')
+        actives = self.session.estimator.get_histories('gate.active')
+        if not gammas and not actives:
             return
         gamma_heatmaps = self._heatmaps(gammas)
         active_heatmaps = self._heatmaps(actives)
@@ -145,7 +149,7 @@ class Plot(object):
                 self._plot_heatmap(actives, active_path, vmin=0, vmax=1)
 
     def _heatmaps(self, histories):
-        labels_history = self.session.estimator.get_history('labels')
+        labels_history = self.session.estimator.get_history('truth')
         label_keys = set()
         # collect by node->label->history
         hmap = {}
