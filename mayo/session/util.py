@@ -137,7 +137,7 @@ class Targets(object):
         else:
             self.sort_layers(session)
             if start:
-                log.info('first time picking targets: {}'.format(
+                log.info('First time picking targets: {}'.format(
                     self.priority_list))
             return self.priority_list.pop()
 

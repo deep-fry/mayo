@@ -144,7 +144,7 @@ class LayerwiseSearch(SearchBase, Profile):
             return int(old_scale * factor)
         return old_scale * factor
 
-    def search(self):
+    def search_simple(self):
         config = self.config.search
         session = self.task.session
         overriders = self.task.nets[0].overriders

@@ -14,15 +14,15 @@ class GlobalSearch(SearchBase, Profile):
     def forward_policy(self, floor_epoch):
         self.best_ckpt = 'search-' + str(self.search_cnt) + '-' \
             + str(floor_epoch)
-        self.save_checkpoint(self.best_ckpt)
+        self.checkpoint.save(self.best_ckpt)
         self._cp_epoch = floor_epoch
         self.search_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
-        self.profile_associated_vars()
+        self.construct_targets()
         self.variables_refresh()
         self.reset_num_epochs()
         threshold = self.targets.members[0].thresholds[0]
-        log.info('update threshold to {}, working on {}'.format(
+        log.info('Move forward! Update threshold to {}, working on {}'.format(
             threshold, self.target_layer))
         return True
 
@@ -44,7 +44,7 @@ class GlobalSearch(SearchBase, Profile):
             self.load_checkpoint(self.best_ckpt)
             self._decrease_scale()
             log.info(
-                'Decreasing scale to {}, threshold is {}...'
+                'Move backward, decrease scale to {}, threshold is {}'
                 .format(self._fetch_scale(), tmp_tv.thresholds[0]))
             self.reset_num_epochs()
             return True
@@ -57,11 +57,11 @@ class GlobalSearch(SearchBase, Profile):
                 'All layers done, final threshold is {}'
                 .format(thresholds - scale))
             if not threshold_check:
-                log.info('threshold meets its minimum')
+                log.info('Threshold meets its minimum')
             if not scale_check:
-                log.info('scale meets its minimum')
+                log.info('Scale meets its minimum')
             log.info(
-                'Overrider is done, model stored at {}.'
+                'Fine-tuning finished, model stored at {}.'
                 .format(self.best_ckpt))
             self.reset_num_epochs()
             return False
@@ -199,7 +199,7 @@ class GlobalSearch(SearchBase, Profile):
             self.allocate_exp_mantissa(w)
         self.overriders_update()
 
-    def search(self):
+    def search_simple(self):
         config = self.config.search
         session = self.task.session
         overriders = self.task.nets[0].overriders

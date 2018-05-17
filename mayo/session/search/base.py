@@ -15,8 +15,7 @@ class SearchBase(Train):
     def search(self):
         log.debug('Searching starts.')
         try:
-            search_func = self._init_search()
-            run = search_func()
+            run = self._init_search()
             if run:
                 while self._search_iteration():
                     pass
@@ -30,11 +29,19 @@ class SearchBase(Train):
 
     def _init_search(self):
         self.search_mode = self.config.search.search_mode
+        self._reset_stats()
+        self.reset_num_epochs()
         if not (self.search_mode in self.modes):
             raise ValueError('search model {} is not one of {}'.format(
                 self.search_mode, self.modes))
-        search_func = getattr(self, self.search_mode)
-        return search_func
+        if self.search_mode == 'fine_tune':
+            # init hyper parameters for fine-tune search
+            self.acc_base = self.config.search.parameters.get('acc_base', 0.0)
+            self.search_overriders()
+            return True
+        search_func = getattr(self, 'search_simple')
+        search_func()
+        return False
 
     def assign_targets(self, overrider, targets, values):
         for target, value in zip(targets, values):
@@ -49,8 +56,7 @@ class SearchBase(Train):
         self._reset_stats()
         self.targets.init_targets(
             self, self.config.search.run_status == 'normal')
-
-        self.profile_associated_vars(start=True)
+        self.construct_targets(start=True)
         self.profile_for_one_epoch()
         # init all overriders
         for variable in self.targets.members:
@@ -60,32 +66,28 @@ class SearchBase(Train):
 
     def _search_iteration(self):
         system = self.config.system
-        loss, epoch = self.once()
-        self._update_stats(loss)
-        summary_delta = self.change.delta('summary.epoch', epoch)
-
-        if not hasattr(self, 'start_loss') or self.start_acc is None:
-            self.start_loss = loss
-
-        if system.summary.save and summary_delta >= 0.1:
-            self._save_summary(epoch)
+        epoch = self.once()
+        self._update_stats(self.estimator.get_value('accuracy'))
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
 
-        # if epoch > 0.1:
-        if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
+        # if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
+        if epoch > 0.1:
             self._avg_stats()
-            if self.acc_avg >= self.acc_base:
+            if self.acc_avg >= self.acc_base and not hasattr(self, 'force_to_go'):
+            # if self.acc_avg >= self.acc_base:
+                self.force_to_go = 1
                 self.start_acc = None
                 return self.forward_policy(floor_epoch)
 
-            iter_max_epoch = self.config.search.iter_max_epoch
+            iter_max_epoch = self.config.search.get('num_epochs', None)
+            if iter_max_epoch is None:
+                raise ValueError('num_epochs keyword is missing')
 
             # current setup exceeds max epoches, retrieve backwards
-            # if epoch > 0.11:
-            # if epoch >= iter_max_epoch and epoch > 0:
             early_stop = self.config.search.get('early_stop', False)
-            if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop):
+            # if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop):
+            if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop) or hasattr(self, 'force_to_go'):
                 self.search_cnt += 1
                 self.reset_num_epochs()
                 self.log_thresholds(self.loss_avg, self.acc_avg)
@@ -105,7 +107,7 @@ class SearchBase(Train):
 
     def _fetch_as_overriders(self, info):
         self.targets = Targets(info)
-        for o in self.nets[0].overriders:
+        for o in self.task.nets[0].overriders:
             self.targets.add_overrider(o)
 
     def _fetch_as_variables(self, info):
@@ -141,14 +143,12 @@ class SearchBase(Train):
         self.loss_avg = None
         self.best_ckpt = None
         info = self.config.search.parameters
+        mode = info.get('overriders', True)
         # define initial scale
-        if self.search_mode == 'overriders':
+        if mode:
             self._fetch_as_overriders(info)
         else:
             self._fetch_as_variables(info)
-        # run_status = self.config.search.run_status
-        # self.info = Info(
-        #     info, self.tf_session, self.targets.show_targets(), run_status)
 
     def once(self):
         train_op = self._train_op if self._run_train_ops else []
@@ -175,7 +175,7 @@ class SearchBase(Train):
             if item.name == self.target_layer.name:
                 return item.scale
 
-    def profile_associated_vars(self, start=False):
+    def construct_targets(self, start=False):
         '''
         1. profile the associated vars and determine a priority list
         2. produce a cont list to determine which targeting vars continues on
@@ -225,32 +225,35 @@ class SearchBase(Train):
 
         tolerance = self.config.search.tolerance
         log.info('profiling baseline')
-        tasks = [self.loss, self.accuracy, self.num_epochs]
-        while epoch < 1.0:
-            loss, acc, epoch = self.run(tasks, batch=True)
+        tasks = [self._mean_loss, self.num_epochs]
+        # while epoch < 1.0:
+        while epoch < 0.1:
+            loss, epoch = self.run(tasks, batch=True)
             self.loss_total += loss
-            self.acc_total += acc
+            self.acc_total += self.estimator.get_value('accuracy')
             self.step += 1
+
         self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
 
-        log.info('profiled baseline, loss is {}, acc is {}'.format(
+        log.info('Profiled loss is {}, accuracy is {}'.format(
             self.loss_base, self.acc_base))
         self._reset_stats()
         self.reset_num_epochs()
         self._prepare_yaml(True)
 
     def _avg_stats(self):
-        self.loss_avg = self.loss_total / float(self.step)
         self.acc_avg = self.acc_total / float(self.step)
-        self._reset_stats()
 
-    def _update_stats(self, loss):
+    def _update_stats(self, acc):
+        if not hasattr(self, 'start_acc') or self.start_acc is None:
+            self.start_acc = acc
         self.step += 1
-        self.loss_total += loss
+        self.acc_total += acc
 
     def _reset_stats(self):
         self.step = 0
+        self.acc_total = 0
         self.loss_total = 0
 
     def variables_refresh(self):
