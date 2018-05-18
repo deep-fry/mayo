@@ -18,7 +18,7 @@ class LayerwiseSearch(SearchBase, Profile):
         self._cp_epoch = floor_epoch
         self.search_cnt += 1
         self.log_thresholds(self.loss_avg, self.acc_avg)
-        self.profile_associated_vars()
+        self.construct_targets()
         self.variables_refresh()
         self.reset_num_epochs()
         for item in self.targets.members:
@@ -89,7 +89,7 @@ class LayerwiseSearch(SearchBase, Profile):
                 self.targets.cont = [tmp for tmp in self.targets.cont if
                                      tmp != self.target_layer.name]
                 # fetch a new layer to search
-                self.profile_associated_vars()
+                self.construct_targets()
                 self.variables_refresh()
                 self.reset_num_epochs()
                 if not threshold_check:

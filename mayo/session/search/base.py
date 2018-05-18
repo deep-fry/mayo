@@ -74,9 +74,7 @@ class SearchBase(Train):
         # if self.change.every('checkpoint.epoch', floor_epoch, cp_interval):
         if epoch > 0.1:
             self._avg_stats()
-            if self.acc_avg >= self.acc_base and not hasattr(self, 'force_to_go'):
-            # if self.acc_avg >= self.acc_base:
-                self.force_to_go = 1
+            if self.acc_avg >= self.acc_base:
                 self.start_acc = None
                 return self.forward_policy(floor_epoch)
 
@@ -87,7 +85,7 @@ class SearchBase(Train):
             # current setup exceeds max epoches, retrieve backwards
             early_stop = self.config.search.get('early_stop', False)
             # if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop):
-            if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop) or hasattr(self, 'force_to_go'):
+            if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop):
                 self.search_cnt += 1
                 self.reset_num_epochs()
                 self.log_thresholds(self.loss_avg, self.acc_avg)
@@ -96,12 +94,13 @@ class SearchBase(Train):
                 # return self.backward_policy()
         return True
 
-    def _exceed_max_epoch(self, epoch, max_epoch, early_stop=False):
+    def _exceed_max_epoch(self, epoch, max_epoch, early_stop=None):
         if early_stop:
             baseline = (self.acc_base - self.start_acc) / float(max_epoch)
             acc_grad = (self.acc_avg - self.start_acc) / float(epoch)
-            if acc_grad < (baseline * 0.7):
-                log.info('early stop activated')
+            # increasing grad but slower than expected
+            if acc_grad > 0 and acc_grad < (baseline * early_stop):
+                log.info('Early stop activated !')
                 return True
         return epoch >= max_epoch and epoch > 0
 
@@ -199,8 +198,7 @@ class SearchBase(Train):
             'trainers/{}_search_base.yaml'.format(name), 'w')
         self.dump_data = {
             'search': {
-                'train_acc_base': float(self.acc_base),
-                'loss_base': float(self.loss_base)}}
+                'acc_base': float(self.acc_base)}}
         if write:
             self.stream.write(yaml.dump(
                 self.dump_data,
@@ -212,19 +210,17 @@ class SearchBase(Train):
         self._reset_stats()
         self.reset_num_epochs()
 
-        if self.config.search.get('train_acc_base'):
-            # if acc is hand coded in yaml
-            self.acc_base = self.config.search.train_acc_base
+        self.acc_base = self.config.search.get('acc_base')
+        # if acc is hand coded in yaml
+        if self.acc_base:
             log.info(
                 'loaded profiled acc baseline, acc is {}'
                 .format(self.acc_base))
-            if self.config.search.get('loss_base'):
-                self.loss_base = self.config.search.loss_base
             self._prepare_yaml(False)
             return
 
         tolerance = self.config.search.tolerance
-        log.info('profiling baseline')
+        log.info('Profiling baseline')
         tasks = [self._mean_loss, self.num_epochs]
         # while epoch < 1.0:
         while epoch < 0.1:
@@ -233,11 +229,9 @@ class SearchBase(Train):
             self.acc_total += self.estimator.get_value('accuracy')
             self.step += 1
 
-        self.loss_base = self.loss_total / float(self.step) * (1 + tolerance)
         self.acc_base = self.acc_total / float(self.step) * (1 - tolerance)
 
-        log.info('Profiled loss is {}, accuracy is {}'.format(
-            self.loss_base, self.acc_base))
+        log.info('Profiled accuracy is {}'.format(self.acc_base))
         self._reset_stats()
         self.reset_num_epochs()
         self._prepare_yaml(True)

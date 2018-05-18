@@ -1,19 +1,19 @@
 search:
     iter_max_epoch: 10
+    acc_base: 99.9
     tolerance: 0.001
     search_mode: fine_tune
     num_epochs: 1.0
     update: true
     training: true
     run_status: normal
-    early_stop: true
+    early_stop: 0.7
     parameters:
         type: mayo.override.DGQuantizer
         # target: [point]
         # range: [{from: 2, to: -2, scale: -1}]
         # link_width: [0, 1]
         target: width
-        range: {from: 16, to: 1, scale: -1, min_scale: -1, scale_update_factor: 0.5}
+        range: {from: 8, to: 1, scale: -1, min_scale: -1, scale_update_factor: 0.5}
         overriders: true
         update: true
-        acc_base: 90.0
