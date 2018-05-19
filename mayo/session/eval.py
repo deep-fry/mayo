@@ -1,7 +1,7 @@
 import math
 
 from mayo.log import log
-from mayo.util import Percent, Table
+from mayo.util import Table
 from mayo.session.base import SessionBase
 
 
@@ -9,8 +9,8 @@ class Evaluate(SessionBase):
     mode = 'validate'
 
     def _finalize(self):
-        super()._finalize()
         self.task.map_eval()
+        super()._finalize()
 
     def eval(self, key=None, keyboard_interrupt=True):
         # load checkpoint
@@ -30,18 +30,7 @@ class Evaluate(SessionBase):
                 raise e
         else:
             log.info('Evaluation complete.')
-        stats = {}
-        # FIXME generalize this to detectors
-        for name in ('top1', 'top5'):
-            topn = []
-            for each in self.estimator.get_history(name):
-                topn += each.tolist()
-            topn = topn[:self.num_examples]
-            stats[name] = Percent(sum(topn) / len(topn))
-            self.estimator.flush(name)
-        log.info('    top1: {}, top5: {} [{} images]'.format(
-            stats['top1'], stats['top5'], self.num_examples))
-        return stats
+        return self.task.eval_final_stats()
 
     def _range(self, epochs):
         eval_range = self.config.get('eval.range', {})

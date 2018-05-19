@@ -5,6 +5,14 @@ import contextlib
 import tensorflow as tf
 
 
+def debug(tensors):
+    def wrapped(*args):
+        __import__('ipdb').set_trace()
+        return args
+    types = [t.dtype for t in tensors]
+    return tf.py_func(wrapped, tensors, types)
+
+
 def pad_to_shape(tensor, shape, default_value=0):
     # FIXME annoying hack for batching different sized shapes
     tensor_shape = tf.unstack(tf.shape(tensor))

@@ -107,10 +107,11 @@ class SessionBase(object, metaclass=SessionMeta):
     def _instantiate_task(self):
         task_cls, task_params = self._task_constructor
         self.task = task_cls(self, **task_params)
-        # ensure configuration variable is instantiated
-        self._config_var
 
     def _finalize(self):
+        # ensure configuration variable is instantiated
+        self._config_var
+        # invoke finalizers
         for name, finalizer in self.finalizers.items():
             log.debug(
                 'Finalizing session with finalizer {!r}: {!r}'
