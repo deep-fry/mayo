@@ -80,10 +80,13 @@ class GateLayers(object):
         out_channels = output_shape[-1]
         factor = params.get('factor', 0)
         if factor <= 0:
-            return in_channels * out_channels
-        mid_channels = math.ceil(params['num_outputs'] / factor)
-        macs = in_channels * mid_channels
-        macs += mid_channels * out_channels
+            macs = in_channels * out_channels
+        else:
+            mid_channels = math.ceil(params['num_outputs'] / factor)
+            macs = in_channels * mid_channels
+            macs += mid_channels * out_channels
+        # gamma multiplication overhead
+        macs += self.estimator._multiply(output_shape[1:])
         return macs
 
     def estimate_gated_convolution(
