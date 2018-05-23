@@ -75,27 +75,33 @@ class GateLayers(object):
             raise GatePolicyTypeError('Unrecognized gated convolution policy.')
         return cls(self, node, params, gate_params, tensor).instantiate()
 
-    def _estimate_overhead(self, info, input_shape, output_shape):
+    def _estimate_overhead(self, info, input_shape, output_shape, params):
         in_channels = input_shape[-1]
         out_channels = output_shape[-1]
-        if self.factor <= 0:
+        factor = params.get('factor', 0)
+        if factor <= 0:
             return in_channels * out_channels
-        mid_channels = math.ceil(self.num_outputs / self.factor)
+        mid_channels = math.ceil(params['num_outputs'] / factor)
         macs = in_channels * mid_channels
         macs += mid_channels * out_channels
         return macs
 
     def estimate_gated_convolution(
             self, node, info, input_shape, output_shape, params):
-        layer_info = self.constructor.estimate_convolution(
+        layer_info = self.estimate_convolution(
+            node, info, input_shape, output_shape, params)
+        if params.get('enable', True):
+            try:
+                mask = self.estimator.get_history('gate.active', node)
+            except KeyError:
+                pass
+            else:
+                density = self.estimator._mask_density(mask)
+                layer_info['_mask'] = mask
+                layer_info['density'] = density
+                layer_info['macs'] = int(layer_info['macs'] * density)
+        overhead = self._estimate_overhead(
             info, input_shape, output_shape, params)
-        if self.enable:
-            mask = self.estimator.get_history('gate.active', info['_node'])
-            density = self.estimator._mask_density(mask)
-            layer_info['_mask'] = mask
-            layer_info['density'] = density
-            layer_info['macs'] *= density
-        overhead = self._estimate_overhead(info, input_shape, output_shape)
         layer_info['overhead'] = overhead
         layer_info['macs'] += overhead
         return layer_info

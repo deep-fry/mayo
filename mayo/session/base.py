@@ -228,7 +228,7 @@ class SessionBase(object, metaclass=SessionMeta):
                 layer_info[node.formatted_name()] = stat
             info_dict['layers'] = layer_info
         else:
-            keys = list({
+            keys = sorted({
                 k for v in stats.values() for k in v if not k.startswith('_')})
             layer_info = Table(['layer', 'shape'] + keys)
             for node, shape in net.shapes.items():
