@@ -1,4 +1,5 @@
 import time
+import functools
 import collections
 
 import numpy as np
@@ -6,7 +7,7 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import object_from_params, Change
-from mayo.net.graph import LayerNode, TensorNode, SplitNode
+from mayo.net.graph import LayerNode
 
 
 class ResourceEstimator(object):
@@ -192,26 +193,6 @@ class ResourceEstimator(object):
             if name in stat_tensors
         }
 
-    def get_estimates(self, net):
-        self.net = net
-        statistics = {}
-        for node, shape in net.shapes.items():
-            if not isinstance(node, LayerNode):
-                continue
-            stats = {}
-            try:
-                func, params = object_from_params(
-                    node.params, self, 'estimate_')
-            except NotImplementedError:
-                continue
-            # tensors
-            inputs = [net.shapes[p] for p in node.predecessors]
-            inputs = inputs[0] if len(inputs) == 1 else inputs
-            stats = func(node, inputs, shape, params)
-            stats = {name: value for name, value in stats.items()}
-            statistics[node] = stats
-        return statistics
-
     @staticmethod
     def _multiply(items):
         value = 1
@@ -220,8 +201,8 @@ class ResourceEstimator(object):
         return value
 
     @classmethod
-    def _kernel_size(cls, node):
-        kernel = node.params['kernel_size']
+    def _kernel_size(cls, params):
+        kernel = params['kernel_size']
         if isinstance(kernel, collections.Sequence):
             return cls._multiply(kernel)
         elif isinstance(kernel, int):
@@ -229,95 +210,41 @@ class ResourceEstimator(object):
         raise TypeError(
             'We do not understand the kernel size {!r}.'.format(kernel))
 
-    def _gate_density(self, gates):
-        if not gates:
-            log.warn(
-                'Cannot estimate gate density without a history of gates, '
-                'defaulting to zero sparsity.')
+    @staticmethod
+    def _mask_density(mask):
+        if not mask:
             return 1
-        valids = sum(np.sum(g.astype(np.int32)) for g in gates)
-        totals = sum(g.size for g in gates)
+        valids = sum(np.sum(m.astype(np.int32)) for m in mask)
+        totals = sum(m.size for m in mask)
         return float(valids / totals)
 
-    def _gate_for_node(self, node):
-        """
-        Recursively find the gate sparsity of the predecessor nodes
-        that can propagate sparsity.
-        """
-        def true():
-            num = max(self.max_len('gate.active'), 1)
-            channels = self.net.shapes[node][-1]
-            return [np.ones([1, 1, 1, channels], dtype=bool)] * num
+    @staticmethod
+    def _mask_join(masks, reducer):
+        combined_mask = []
+        i = 0
+        while True:
+            try:
+                each = [m[i] if isinstance(m, list) else m for m in masks]
+            except IndexError:
+                break
+            i += 1
+        for each in zip(*masks):
+            combined_mask.append(functools.reduce(reducer, each))
+        return combined_mask
 
-        if isinstance(node, SplitNode):
-            return self._gate_for_node(node.predecessors[0])
-        if isinstance(node, TensorNode):
-            preds = node.predecessors
-            if preds:
-                return self._gate_for_node(preds[0])
-            # input node
-            return true()
-        if not isinstance(node, LayerNode):
-            raise TypeError(
-                'Do not know how to find gate sparsity for node {!r}'
-                .format(node))
-        ntype = node.params['type']
-        if ntype == 'gated_convolution':
-            if node.params.get('should_gate', True):
-                try:
-                    return self.get_history('gate.active', node)
-                except KeyError:
-                    log.warn(
-                        'No gate history available, defaulting to '
-                        'zero sparsity.')
-            return true()
-        passthrough_types = [
-            'dropout', 'max_pool', 'average_pool', 'activation', 'identity']
-        if ntype in passthrough_types:
-            return self._gate_for_node(node.predecessors[0])
-        if ntype in ['concat', 'add', 'mul']:
-            histories = [
-                self._gate_for_node(p)
-                for p in node.predecessors[0].predecessors]
-            history = []
-            for each in zip(*histories):
-                if ntype == 'concat':
-                    each = np.concatenate(each, axis=-1)
-                else:
-                    func = np.add if ntype == 'add' else np.multiply
-                    result = None
-                    for h in each:
-                        h = h.astype(int)
-                        if result is None:
-                            result = h
-                        else:
-                            result = func(result, h)
-                    each = result.astype(bool)
-                history.append(each)
-            return history
-        return true()
+    @staticmethod
+    def _mask_passthrough(info, layer_info):
+        if 'density' in info:
+            layer_info['density'] = info['density']
+        if '_mask' in info:
+            layer_info['_mask'] = info['_mask']
+        return layer_info
 
-    def estimate_gated_convolution(
-            self, node, input_shape, output_shape, params):
-        out_density = self._gate_density(self._gate_for_node(node))
-        # gated convolution expects only one input
-        in_node = node.predecessors[0]
-        in_density = self._gate_density(self._gate_for_node(in_node))
-        stats = self.estimate_convolution(
-            node, input_shape, output_shape, params)
-        stats['MACs'] = int(stats['MACs'] * in_density * out_density)
-        stats['density'] = out_density
-        # gating network overhead
-        # io channels
-        overhead = int(input_shape[-1] * output_shape[-1])
-        granularity = params.get('granularity', 'channel')
-        if granularity == 'vector':
-            kernel_height = params['kernel_size']
-            if not isinstance(kernel_height, int):
-                kernel_height, _ = kernel_height
-            # vector-wise gating output shape: height
-            # and input kernel height
-            overhead *= output_shape[1] * kernel_height
-        # TODO parametric gamma element-wise multiply + add overhead
-        stats['MACs'] += overhead
-        return stats
+    @staticmethod
+    def _apply_input_sparsity(info, layer_info):
+        if '_mask' not in info:
+            return layer_info
+        macs = layer_info['macs']
+        layer_info['macs'] = macs * info.get('density', 1)
+        layer_info['_original_macs'] = macs
+        return layer_info

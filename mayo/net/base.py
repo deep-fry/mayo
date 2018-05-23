@@ -28,6 +28,10 @@ class NetBase(object):
     def layers(self):
         return {n: self._tensors[n] for n in self._graph.layer_nodes()}
 
+    @property
+    def shapes(self):
+        raise NotImplementedError
+
     def info(self):
         return {}
 
@@ -50,11 +54,7 @@ class NetBase(object):
     def _node_analysis(self, node, analyzer_map, info):
         analyzer = self._get_analyzer(analyzer_map, node)
         if node in self._graph.input_nodes():
-            if node not in info:
-                raise ValueError(
-                    'Input node {!r} is not initialized with a value '
-                    'before instantiating the net.'.format(node))
-            info[node] = analyzer(node, info[node])
+            info[node] = analyzer(node, info.get(node, {}))
             return
         pred_nodes = node.predecessors
         if node in info:
@@ -109,10 +109,23 @@ class NetBase(object):
         # instantiation
         return func(node, tensors, params)
 
-    def _estimate(self):
+    def estimate(self):
         func_map = {'layer': self._estimate_layer}
         return self.dataflow_analysis(func_map)
 
-    def _estimate_layer(self, node, stat):
-        func, params = object_from_params(node.params, self, 'estimate_')
-        return func(node, stat, params)
+    def _estimate_layer(self, node, info):
+        int_shape = lambda shape: [int(s) for s in shape]
+        input_shape = [int_shape(self.shapes[p]) for p in node.predecessors]
+        input_shape = input_shape[0] if len(input_shape) == 1 else input_shape
+        output_shape = int_shape(self.shapes[node])
+        try:
+            func, params = object_from_params(node.params, self, 'estimate_')
+        except NotImplementedError:
+            func = self.generic_estimate
+            params = node.params
+        return func(node, info, input_shape, output_shape, params)
+
+    def generic_estimate(self, node, info, input_shape, output_shape, params):
+        # disallow information before any layer to pass through
+        # the layer by default
+        return {}

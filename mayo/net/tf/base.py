@@ -12,6 +12,7 @@ class TFNetBase(NetBase):
     """Instantiates a TensorFlow network from the DAG graph.  """
     def __init__(self, session, model, inputs, reuse):
         self.session = session
+        self.estimator = self.session.estimator
         self.is_training = session.is_training
         self._transformer = ParameterTransformer(session, reuse)
         super().__init__(model, inputs)
@@ -135,3 +136,12 @@ class TFNetBase(NetBase):
         if isinstance(tensors, collections.Sequence):
             return [tf.pad(t, paddings) for t in tensors]
         return tf.pad(tensors, paddings)
+
+    def _estimate_layer(self, node, info):
+        # info pass-through
+        if node.params['type'] in ['identity', 'dropout']:
+            return info
+        layer_info = super()._estimate_layer(node, info)
+        for o in self.overriders.get(node, []):
+            o.estimate(layer_info, info)
+        return layer_info

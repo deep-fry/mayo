@@ -219,7 +219,7 @@ class SessionBase(object, metaclass=SessionMeta):
         net = self.task.nets[0]
         info_dict = net.info(plumbing)
         # layer info
-        stats = self.estimator.get_estimates(net)
+        stats = net.estimate()
         if plumbing:
             layer_info = {}
             for node, shape in net.shapes.items():
@@ -235,9 +235,10 @@ class SessionBase(object, metaclass=SessionMeta):
                 values = tuple(values.get(k, unknown) for k in keys)
                 shape = format_shape(shape)
                 layer_info.add_row((node.formatted_name(), shape) + values)
-            formatted_footers = [
-                sum(layer_info.get_column(k)) for k in keys]
-            layer_info.set_footer(['', '    total:'] + formatted_footers)
+            formatted_footer = [''] * len(keys)
+            formatted_footer[keys.index('macs')] = sum(
+                layer_info.get_column('macs'))
+            layer_info.set_footer(['', ''] + formatted_footer)
             info_dict['layers'] = layer_info
         if self.task.nets[0].overriders:
             info_dict['overriders'] = self._overrider_info(plumbing)
@@ -251,12 +252,15 @@ class SessionBase(object, metaclass=SessionMeta):
                 else:
                     yield o
         info_dict = {}
+        overriders = []
+        for each in self.task.nets[0].overriders.values():
+            overriders += each
         if plumbing:
-            for o in flatten(self.task.nets[0].overriders):
-                info = tuple(o.info())
+            for o in flatten(overriders):
+                info = list(o.info())
                 info_dict.setdefault(o.__class__, []).append(info)
         else:
-            for o in flatten(self.task.nets[0].overriders):
+            for o in flatten(overriders):
                 info = o.info()
                 table = info_dict.setdefault(o.__class__, Table(info._fields))
                 table.add_row(info)
@@ -266,8 +270,9 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
-        for o in self.task.nets[0].overriders:
-            o.assign_parameters()
+        for node, overriders in self.task.nets[0].overriders.items():
+            for o in overriders:
+                o.assign_parameters()
 
     @contextmanager
     def ensure_graph_unchanged(self, func_name):

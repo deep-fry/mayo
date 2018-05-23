@@ -62,6 +62,7 @@ class GatedConvolutionBase(object):
         self.input = tensor
         self.conved = self.constructor.instantiate_convolution(
             self.node, tensor, params)
+        self.conv_params = params
 
     def _update_defaults(self, defaults):
         pass
@@ -355,6 +356,3 @@ class GatedConvolutionBase(object):
         self.regularize()
         self._instantiate_regularization()
         return self.activated
-
-    def estimate(self, stats):
-        ...
