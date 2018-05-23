@@ -1,6 +1,5 @@
 import collections
 
-from mayo import error
 from mayo.util import object_from_params
 from mayo.net.graph import Graph, TensorNode, LayerNode, SplitNode, JoinNode
 
@@ -58,11 +57,11 @@ class NetBase(object):
             return
         pred_nodes = node.predecessors
         if node in info:
-            raise error.ValueError(
+            raise ValueError(
                 'Node {!r} has already been assigned a value.'.format(node))
         for pred_node in pred_nodes:
             if pred_node not in info:
-                raise error.ValueError(
+                raise ValueError(
                     'Node {!r} is not assigned.'.format(pred_node))
         if isinstance(node, JoinNode):
             info[node] = analyzer(node, [info[p] for p in pred_nodes])
@@ -70,7 +69,7 @@ class NetBase(object):
         # non-JoinNode should have only one predecessor
         # and propagate the value
         if len(pred_nodes) > 1:
-            raise error.IndexError(
+            raise IndexError(
                 'Number of predecessors of {!r} must be 1 '
                 'for a {!r}.'.format(node.__class__.__name__))
         pred_node = pred_nodes[0]
@@ -92,7 +91,7 @@ class NetBase(object):
         elif isinstance(node, LayerNode):
             info[node] = analyzer(node, info[node])
         else:
-            raise error.TypeError('Unexpected node type {!r}.'.format(node))
+            raise TypeError('Unexpected node type {!r}.'.format(node))
 
     def dataflow_analysis(self, analyzer_map, info=None):
         info = info or {}

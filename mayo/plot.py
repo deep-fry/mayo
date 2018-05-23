@@ -4,7 +4,6 @@ import numpy as np
 from PIL import Image
 
 from mayo.log import log
-from mayo.error import ValueError, TypeError, KeyError
 from mayo.task.image.classify import Classify
 
 

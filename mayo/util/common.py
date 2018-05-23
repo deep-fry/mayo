@@ -5,6 +5,10 @@ import contextlib
 import tensorflow as tf
 
 
+class ShapeError(ValueError):
+    """Incorrect shape.  """
+
+
 def debug(tensors):
     def wrapped(*args):
         __import__('ipdb').set_trace()

@@ -4,7 +4,6 @@ from contextlib import contextmanager
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.error import NotImplementedError
 from mayo.net.tf import TFNet
 from mayo.session.test import Test
 

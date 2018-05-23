@@ -1,7 +1,7 @@
 import tensorflow as tf
 import numpy as np
 
-from mayo.error import ShapeError
+from mayo.util import ShapeError
 
 
 def box_to_corners(box, unstack=True, stack=True):
