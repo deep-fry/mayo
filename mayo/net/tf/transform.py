@@ -1,6 +1,5 @@
 import copy
 import contextlib
-import collections
 
 import tensorflow as tf
 from tensorflow.contrib import slim
@@ -22,8 +21,11 @@ class ParameterTransformer(object):
         self.session = session
         self.is_training = session.is_training
         self.reuse = reuse
-        self.overriders = []
+        self.overriders = {}
         self.variables = {}
+
+    def _add_overrider(self, node, overrider):
+        self.overriders.setdefault(node, []).append(overrider)
 
     def _create_hyperobjects(self, layer_node, params):
         suffixes = ['regularizer', 'initializer']
@@ -81,7 +83,7 @@ class ParameterTransformer(object):
         if activation_overrider:
             override_fn = lambda x: activation_overrider.apply(
                 node, 'activations', tf.get_variable, x)
-            self.overriders.append(activation_overrider)
+            self._add_overrider(node, activation_overrider)
         else:
             override_fn = None
         # produce a default ReLU activation for overrider specifically
@@ -130,7 +132,7 @@ class ParameterTransformer(object):
                 log.debug(
                     'Overriding {!r} with {!r}.'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
-                self.overriders.append(overrider)
+                self._add_overrider(node, overrider)
             # gradient overrider
             overrider = gradient_overriders.get(key)
             if overrider and self.is_training:
@@ -140,7 +142,7 @@ class ParameterTransformer(object):
                 gradient_map = {'Identity': gradient_name}
                 with self.session.tf_graph.gradient_override_map(gradient_map):
                     v = tf.identity(v)
-                self.overriders.append(overrider)
+                self._add_overrider(node, overrider)
             self.variables.setdefault(node, {})[name] = v
             return v
 

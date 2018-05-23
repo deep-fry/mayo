@@ -9,6 +9,7 @@ from mayo.util import (
     Change, Table, Percent, unknown, format_shape)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
+from mayo.net.base import LayerNode, JoinNode
 from mayo.session.checkpoint import CheckpointHandler
 
 
@@ -107,10 +108,11 @@ class SessionBase(object, metaclass=SessionMeta):
     def _instantiate_task(self):
         task_cls, task_params = self._task_constructor
         self.task = task_cls(self, **task_params)
-        # ensure configuration variable is instantiated
-        self._config_var
 
     def _finalize(self):
+        # ensure configuration variable is instantiated
+        self._config_var
+        # invoke finalizers
         for name, finalizer in self.finalizers.items():
             log.debug(
                 'Finalizing session with finalizer {!r}: {!r}'
@@ -218,7 +220,7 @@ class SessionBase(object, metaclass=SessionMeta):
         net = self.task.nets[0]
         info_dict = net.info(plumbing)
         # layer info
-        stats = self.estimator.get_estimates(net)
+        stats = net.estimate()
         if plumbing:
             layer_info = {}
             for node, shape in net.shapes.items():
@@ -227,16 +229,32 @@ class SessionBase(object, metaclass=SessionMeta):
                 layer_info[node.formatted_name()] = stat
             info_dict['layers'] = layer_info
         else:
-            keys = list({k for v in stats.values() for k in v})
+            keys = set()
+            for node, stat in stats.items():
+                if isinstance(stat, list):
+                    for each in stat:
+                        keys |= set(each)
+                elif isinstance(stat, dict):
+                    keys |= set(stat)
+                else:
+                    raise TypeError('Unrecognized type.')
+            keys = sorted(k for k in keys if not k.startswith('_'))
             layer_info = Table(['layer', 'shape'] + keys)
             for node, shape in net.shapes.items():
-                values = stats.get(node, {})
-                values = tuple(values.get(k, unknown) for k in keys)
-                shape = format_shape(shape)
+                if isinstance(node, LayerNode):
+                    values = stats.get(node, {})
+                    values = tuple(values.get(k, unknown) for k in keys)
+                else:
+                    values = tuple([unknown] * len(keys))
+                if isinstance(node, JoinNode):
+                    shape = ', '.join(format_shape(s) for s in shape)
+                else:
+                    shape = format_shape(shape)
                 layer_info.add_row((node.formatted_name(), shape) + values)
-            formatted_footers = [
-                sum(layer_info.get_column(k)) for k in keys]
-            layer_info.set_footer(['', '    total:'] + formatted_footers)
+            formatted_footer = [''] * len(keys)
+            formatted_footer[keys.index('macs')] = sum(
+                layer_info.get_column('macs'))
+            layer_info.set_footer(['', ''] + formatted_footer)
             info_dict['layers'] = layer_info
         if self.task.nets[0].overriders:
             info_dict['overriders'] = self._overrider_info(plumbing)
@@ -250,12 +268,15 @@ class SessionBase(object, metaclass=SessionMeta):
                 else:
                     yield o
         info_dict = {}
+        overriders = []
+        for each in self.task.nets[0].overriders.values():
+            overriders += each
         if plumbing:
-            for o in flatten(self.task.nets[0].overriders):
-                info = tuple(o.info())
+            for o in flatten(overriders):
+                info = list(o.info())
                 info_dict.setdefault(o.__class__, []).append(info)
         else:
-            for o in flatten(self.task.nets[0].overriders):
+            for o in flatten(overriders):
                 info = o.info()
                 table = info_dict.setdefault(o.__class__, Table(info._fields))
                 table.add_row(info)
@@ -265,8 +286,9 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
-        for o in self.task.nets[0].overriders:
-            o.assign_parameters()
+        for node, overriders in self.task.nets[0].overriders.items():
+            for o in overriders:
+                o.assign_parameters()
 
     @contextmanager
     def ensure_graph_unchanged(self, func_name):

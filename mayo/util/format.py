@@ -18,10 +18,7 @@ class Unknown(object):
     __radd__ = __add__
 
     def __str__(self):
-        return '?'
-
-    def __format__(self, spec):
-        return '{:{spec}}'.format(0, spec=spec).replace('0', '?')
+        return ''
 
 
 unknown = Unknown()
@@ -64,6 +61,10 @@ class Table(collections.Sequence):
     def add_row(self, row):
         if isinstance(row, collections.Mapping):
             row = (row[h] for h in self._headers)
+        if len(row) != len(self._headers):
+            raise ValueError(
+                'Number of columns of row {!r} does not match headers {!r}.'
+                .format(row, self._headers))
         self._rows.append(list(row))
 
     def add_rows(self, rows):
@@ -95,7 +96,7 @@ class Table(collections.Sequence):
                 value = formatter(value, width)
             else:
                 value = formatter.format(value, width=width)
-        elif isinstance(value, (int, Unknown)):
+        elif isinstance(value, int):
             value = '{:{width},}'.format(value, width=width or 0)
         elif isinstance(value, float):
             value = '{:{width}.{prec}}'.format(
