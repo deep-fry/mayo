@@ -140,8 +140,14 @@ class TFNetBase(NetBase):
     def _estimate_layer(self, node, info):
         # info pass-through
         if node.params['type'] in ['identity', 'dropout']:
-            return info
+            return self.estimator._mask_passthrough(info, {})
         layer_info = super()._estimate_layer(node, info)
+        log.debug(
+            'Estimated statistics for {!r}: {}.'
+            .format(node.formatted_name(), layer_info))
         for o in self.overriders.get(node, []):
-            o.estimate(layer_info, info)
+            layer_info = o.estimate(layer_info, info)
+            log.debug(
+                'Overrider {!r} modified statistics: {}.'
+                .format(o, layer_info))
         return layer_info

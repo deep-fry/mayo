@@ -114,4 +114,7 @@ class NetworkSlimmer(ChannelPrunerBase):
             'density': density,
             'macs': int(macs * density),
         }
-        return layer_info.update(update)
+        if '_original_macs' not in layer_info:
+            update['_original_macs'] = macs
+        layer_info.update(update)
+        return layer_info

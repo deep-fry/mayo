@@ -73,12 +73,18 @@ class Layers(TFNetBase):
             output = activation_fn(output)
         return output
 
+    def _estimate_depthwise_convolution(self, output_shape, params):
+        # output feature map size (H x W x C_out)
+        macs = output_shape[1:]
+        # kernel size K_H x K_W
+        macs.append(self.estimator._kernel_size(params))
+        return self.estimator._multiply(macs)
+
     def estimate_convolution(
             self, node, info, input_shape, output_shape, params):
-        depthwise_info = self.estimate_depthwise_convolution(
-            node, info, input_shape, output_shape, params)
+        macs = self._estimate_depthwise_convolution(output_shape, params)
         # input channel size C_in
-        macs = depthwise_info['macs'] * input_shape[-1]
+        macs *= input_shape[-1]
         return self.estimator._apply_input_sparsity(info, {'macs': macs})
 
     def instantiate_depthwise_convolution(self, node, tensor, params):
@@ -88,11 +94,7 @@ class Layers(TFNetBase):
 
     def estimate_depthwise_convolution(
             self, node, info, input_shape, output_shape, params):
-        # output feature map size (H x W x C_out)
-        macs = output_shape[1:]
-        # kernel size K_H x K_W
-        macs.append(self.estimator._kernel_size(params))
-        macs = self.estimator._multiply(macs)
+        macs = self._estimate_depthwise_convolution(output_shape, params)
         layer_info = self.estimator._apply_input_sparsity(info, {'macs': macs})
         return self.estimator._mask_passthrough(info, layer_info)
 
