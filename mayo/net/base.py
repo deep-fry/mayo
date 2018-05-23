@@ -114,10 +114,9 @@ class NetBase(object):
         return self.dataflow_analysis(func_map)
 
     def _estimate_layer(self, node, info):
-        int_shape = lambda shape: [int(s) for s in shape]
-        input_shape = [int_shape(self.shapes[p]) for p in node.predecessors]
+        input_shape = [self.shapes[p] for p in node.predecessors]
         input_shape = input_shape[0] if len(input_shape) == 1 else input_shape
-        output_shape = int_shape(self.shapes[node])
+        output_shape = self.shapes[node]
         try:
             func, params = object_from_params(node.params, self, 'estimate_')
         except NotImplementedError:

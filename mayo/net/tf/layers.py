@@ -75,7 +75,7 @@ class Layers(TFNetBase):
 
     def _estimate_depthwise_convolution(self, output_shape, params):
         # output feature map size (H x W x C_out)
-        macs = output_shape[1:]
+        macs = list(output_shape[1:])
         # kernel size K_H x K_W
         macs.append(self.estimator._kernel_size(params))
         return self.estimator._multiply(macs)
