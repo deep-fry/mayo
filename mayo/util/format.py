@@ -18,10 +18,7 @@ class Unknown(object):
     __radd__ = __add__
 
     def __str__(self):
-        return '?'
-
-    def __format__(self, spec):
-        return '{:{spec}}'.format(0, spec=spec).replace('0', '?')
+        return ''
 
 
 unknown = Unknown()
@@ -95,7 +92,7 @@ class Table(collections.Sequence):
                 value = formatter(value, width)
             else:
                 value = formatter.format(value, width=width)
-        elif isinstance(value, (int, Unknown)):
+        elif isinstance(value, int):
             value = '{:{width},}'.format(value, width=width or 0)
         elif isinstance(value, float):
             value = '{:{width}.{prec}}'.format(

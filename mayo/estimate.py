@@ -6,8 +6,7 @@ import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import object_from_params, Change
-from mayo.net.graph import LayerNode
+from mayo.util import Change, Percent
 
 
 class ResourceEstimator(object):
@@ -216,7 +215,7 @@ class ResourceEstimator(object):
             return 1
         valids = sum(np.sum(m.astype(np.int32)) for m in mask)
         totals = sum(m.size for m in mask)
-        return float(valids / totals)
+        return Percent(valids / totals)
 
     @staticmethod
     def _mask_join(masks, reducer):
@@ -245,6 +244,6 @@ class ResourceEstimator(object):
         if '_mask' not in info:
             return layer_info
         macs = layer_info['macs']
-        layer_info['macs'] = macs * info.get('density', 1)
+        layer_info['macs'] = int(macs * info.get('density', 1))
         layer_info['_original_macs'] = macs
         return layer_info
