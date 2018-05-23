@@ -143,7 +143,7 @@ class LayerNode(NodeBase):
 
 class MultiNodeBase(NodeBase):
     def __init__(self, nodes, module, graph):
-        name = ', '.join(nodes)
+        name = '{{{}}}'.format(', '.join(nodes))
         super().__init__(name, module, graph)
 
 

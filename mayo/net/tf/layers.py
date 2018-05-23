@@ -197,7 +197,7 @@ class Layers(TFNetBase):
         for i in infos:
             hist = i.get('_mask') or np.ones(mask_shape, dtype=bool)
             masks.append(hist)
-        return self._estimate_join(infos, reducer)
+        return self._estimate_join(masks, reducer)
 
     def estimate_add(self, node, infos, input_shapes, output_shape, params):
         return self._estimate_binary_elementwise(

@@ -9,6 +9,7 @@ from mayo.util import (
     Change, Table, Percent, unknown, format_shape)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
+from mayo.net.base import LayerNode, JoinNode
 from mayo.session.checkpoint import CheckpointHandler
 
 
@@ -228,13 +229,27 @@ class SessionBase(object, metaclass=SessionMeta):
                 layer_info[node.formatted_name()] = stat
             info_dict['layers'] = layer_info
         else:
-            keys = sorted({
-                k for v in stats.values() for k in v if not k.startswith('_')})
+            keys = set()
+            for node, stat in stats.items():
+                if isinstance(stat, list):
+                    for each in stat:
+                        keys |= set(each)
+                elif isinstance(stat, dict):
+                    keys |= set(stat)
+                else:
+                    raise TypeError('Unrecognized type.')
+            keys = sorted(k for k in keys if not k.startswith('_'))
             layer_info = Table(['layer', 'shape'] + keys)
             for node, shape in net.shapes.items():
-                values = stats.get(node, {})
-                values = tuple(values.get(k, unknown) for k in keys)
-                shape = format_shape(shape)
+                if isinstance(node, LayerNode):
+                    values = stats.get(node, {})
+                    values = tuple(values.get(k, unknown) for k in keys)
+                else:
+                    values = tuple([unknown] * len(keys))
+                if isinstance(node, JoinNode):
+                    shape = ', '.join(format_shape(s) for s in shape)
+                else:
+                    shape = format_shape(shape)
                 layer_info.add_row((node.formatted_name(), shape) + values)
             formatted_footer = [''] * len(keys)
             formatted_footer[keys.index('macs')] = sum(

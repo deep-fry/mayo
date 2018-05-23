@@ -219,17 +219,14 @@ class ResourceEstimator(object):
 
     @staticmethod
     def _mask_join(masks, reducer):
-        combined_mask = []
-        i = 0
-        while True:
-            try:
-                each = [m[i] if isinstance(m, list) else m for m in masks]
-            except IndexError:
-                break
-            i += 1
-        for each in zip(*masks):
-            combined_mask.append(functools.reduce(reducer, each))
-        return combined_mask
+        length = 1
+        for hist in masks:
+            if isinstance(hist, list):
+                length = max(length, len(hist))
+        masks = [
+            [hist] * length if not isinstance(hist, list) else hist
+            for hist in masks]
+        return [functools.reduce(reducer, each) for each in zip(*masks)]
 
     @staticmethod
     def _mask_passthrough(info, layer_info):

@@ -61,6 +61,10 @@ class Table(collections.Sequence):
     def add_row(self, row):
         if isinstance(row, collections.Mapping):
             row = (row[h] for h in self._headers)
+        if len(row) != len(self._headers):
+            raise ValueError(
+                'Number of columns of row {!r} does not match headers {!r}.'
+                .format(row, self._headers))
         self._rows.append(list(row))
 
     def add_rows(self, rows):
