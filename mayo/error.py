@@ -21,6 +21,10 @@ class KeyError(MayoError, builtins.KeyError):
     """Key not found.  """
 
 
+class IndexError(MayoError, builtins.IndexError):
+    """Index out of range.  """
+
+
 class ShapeError(ValueError):
     """Incorrect shape.  """
 

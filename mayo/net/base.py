@@ -1,7 +1,8 @@
 import collections
 
+from mayo import error
 from mayo.util import object_from_params
-from mayo.net.graph import Graph, LayerNode, SplitNode, JoinNode
+from mayo.net.graph import Graph, TensorNode, LayerNode, SplitNode, JoinNode
 
 
 class NetBase(object):
@@ -30,32 +31,46 @@ class NetBase(object):
     def info(self):
         return {}
 
-    def _instantiate(self):
-        for each_node in self._graph.topological_order():
-            self._instantiate_node(each_node)
-
-    def _instantiate_node(self, node):
+    def _get_analyzer(self, analyzer_map, node):
         if node in self._graph.input_nodes():
-            if node not in self._tensors:
+            func = analyzer_map.get('input')
+        else:
+            func = analyzer_map.get(type(node))
+        type_map = {
+            TensorNode: 'tensor',
+            JoinNode: 'join',
+            SplitNode: 'split',
+            LayerNode: 'layer',
+        }
+        func = func or analyzer_map.get(type_map[type(node)])
+        if not func:
+            return lambda node, prev: prev
+        return func
+
+    def _node_analysis(self, node, analyzer_map, info):
+        analyzer = self._get_analyzer(analyzer_map, node)
+        if node in self._graph.input_nodes():
+            if node not in info:
                 raise ValueError(
                     'Input node {!r} is not initialized with a value '
                     'before instantiating the net.'.format(node))
+            info[node] = analyzer(node, info[node])
             return
         pred_nodes = node.predecessors
-        if node in self._tensors:
-            raise ValueError(
+        if node in info:
+            raise error.ValueError(
                 'Node {!r} has already been assigned a value.'.format(node))
         for pred_node in pred_nodes:
-            if pred_node not in self._tensors:
-                raise ValueError(
+            if pred_node not in info:
+                raise error.ValueError(
                     'Node {!r} is not assigned.'.format(pred_node))
         if isinstance(node, JoinNode):
-            self._tensors[node] = [self._tensors[p] for p in pred_nodes]
+            info[node] = analyzer(node, [info[p] for p in pred_nodes])
             return
         # non-JoinNode should have only one predecessor
         # and propagate the value
         if len(pred_nodes) > 1:
-            raise IndexError(
+            raise error.IndexError(
                 'Number of predecessors of {!r} must be 1 '
                 'for a {!r}.'.format(node.__class__.__name__))
         pred_node = pred_nodes[0]
@@ -64,21 +79,40 @@ class NetBase(object):
             for index, sibling in enumerate(pred_node.successors):
                 if sibling != node:
                     continue
-                values.append(self._tensors[pred_node][index])
+                values.append(info[pred_node][index])
             if len(values) > 1:
                 raise ValueError(
                     'We do not support multiple edges from the same '
                     'node to the same node for now.')
-            self._tensors[node] = values[0]
+            info[node] = analyzer(node, values[0])
+            return
+        info[node] = info[pred_node]
+        if isinstance(node, TensorNode):
+            info[node] = analyzer(node, info[node])
+        elif isinstance(node, LayerNode):
+            info[node] = analyzer(node, info[node])
         else:
-            self._tensors[node] = self._tensors[pred_node]
-        # transform layer nodes with layer computations
-        if isinstance(node, LayerNode):
-            # instantiate layer
-            self._tensors[node] = self._instantiate_layer(
-                node, self._tensors[node], node.params)
+            raise error.TypeError('Unexpected node type {!r}.'.format(node))
 
-    def _instantiate_layer(self, node, tensors, params):
-        func, params = object_from_params(params, self, 'instantiate_')
+    def dataflow_analysis(self, analyzer_map, info=None):
+        info = info or {}
+        for node in self._graph.topological_order():
+            self._node_analysis(node, analyzer_map, info)
+        return info
+
+    def _instantiate(self):
+        func_map = {'layer': self._instantiate_layer}
+        self._tensors = self.dataflow_analysis(func_map, self._tensors)
+
+    def _instantiate_layer(self, node, tensors):
+        func, params = object_from_params(node.params, self, 'instantiate_')
         # instantiation
         return func(node, tensors, params)
+
+    def _estimate(self):
+        func_map = {'layer': self._estimate_layer}
+        return self.dataflow_analysis(func_map)
+
+    def _estimate_layer(self, node, stat):
+        func, params = object_from_params(node.params, self, 'estimate_')
+        return func(node, stat, params)

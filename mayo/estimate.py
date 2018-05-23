@@ -229,37 +229,6 @@ class ResourceEstimator(object):
         raise TypeError(
             'We do not understand the kernel size {!r}.'.format(kernel))
 
-    def estimate_depthwise_convolution(
-            self, node, input_shape, output_shape, params):
-        # output feature map size (H x W x C_out)
-        macs = list(output_shape[1:])
-        # kernel size K_H x K_W
-        macs.append(self._kernel_size(node))
-        return {'MACs': self._multiply(macs)}
-
-    def estimate_convolution(self, node, input_shape, output_shape, params):
-        depthwise_stats = self.estimate_depthwise_convolution(
-            node, input_shape, output_shape, params)
-        # input channel size C_in
-        macs = depthwise_stats['MACs'] * int(input_shape[-1])
-        stats = {}
-        # a hacky way to estimate MACs for channel gater overriders
-        try:
-            mask = self.net.variables[node]['activations/NetworkSlimmer.mask']
-        except KeyError:
-            pass
-        else:
-            mask = self.net.session.run(mask)
-            density = self._gate_density([mask])
-            stats['density'] = density
-            macs *= density
-        stats['MACs'] = int(macs)
-        return stats
-
-    def estimate_fully_connected(
-            self, node, input_shape, output_shape, params):
-        return {'MACs': int(input_shape[-1] * output_shape[-1])}
-
     def _gate_density(self, gates):
         if not gates:
             log.warn(

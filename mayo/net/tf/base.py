@@ -85,9 +85,9 @@ class TFNetBase(NetBase):
             arguments.append('{}={}'.format(k, v))
         return '    ' + '\n    '.join(arguments)
 
-    def _instantiate_layer(self, node, tensors, params):
+    def _instantiate_layer(self, node, tensors):
         # transform parameters
-        params, scope = self._transformer.transform(node, params)
+        params, scope = self._transformer.transform(node, node.params)
         with scope:
             tensors = self.instantiate_numeric_padding(node, tensors, params)
             layer_type = params['type']

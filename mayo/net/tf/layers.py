@@ -72,10 +72,40 @@ class Layers(TFNetBase):
             output = activation_fn(output)
         return output
 
+    def estimate_convolution(self, node, input_shape, output_shape, params):
+        groups = params.pop('num_groups', 1)
+        if groups > 1:
+            return NotImplemented
+        depthwise_stats = self.estimate_depthwise_convolution(
+            node, input_shape, output_shape, params)
+        # input channel size C_in
+        macs = depthwise_stats['MACs'] * int(input_shape[-1])
+        stats = {}
+        # a hacky way to estimate MACs for channel gater overriders
+        try:
+            mask = self.net.variables[node]['activations/NetworkSlimmer.mask']
+        except KeyError:
+            pass
+        else:
+            mask = self.net.session.run(mask)
+            density = self._gate_density([mask])
+            stats['density'] = density
+            macs *= density
+        stats['MACs'] = int(macs)
+        return stats
+
     def instantiate_depthwise_convolution(self, node, tensor, params):
         multiplier = params.pop('depth_multiplier', 1)
         return slim.separable_conv2d(
             tensor, num_outputs=None, depth_multiplier=multiplier, **params)
+
+    def estimate_depthwise_convolution(
+            self, node, input_shape, output_shape, params):
+        # output feature map size (H x W x C_out)
+        macs = list(output_shape[1:])
+        # kernel size K_H x K_W
+        macs.append(self._kernel_size(node))
+        return {'MACs': self._multiply(macs)}
 
     @staticmethod
     def _reduce_kernel_size_for_small_input(params, tensor):
@@ -111,6 +141,10 @@ class Layers(TFNetBase):
 
     def instantiate_fully_connected(self, node, tensor, params):
         return slim.fully_connected(tensor, **params)
+
+    def estimate_fully_connected(
+            self, node, input_shape, output_shape, params):
+        return {'MACs': int(input_shape[-1] * output_shape[-1])}
 
     def instantiate_softmax(self, node, tensor, params):
         return slim.softmax(tensor, **params)

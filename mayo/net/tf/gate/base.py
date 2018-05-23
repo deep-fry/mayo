@@ -355,3 +355,6 @@ class GatedConvolutionBase(object):
         self.regularize()
         self._instantiate_regularization()
         return self.activated
+
+    def estimate(self, stats):
+        ...
