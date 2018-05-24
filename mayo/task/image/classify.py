@@ -50,7 +50,7 @@ class Classify(ImageTaskBase):
 
     def _accuracy(self, prediction, truth, num_tops=1):
         top = self._top(prediction, truth, num_tops)
-        return tf.reduce_sum(top) / top.shape.num_elements()
+        return tf.reduce_sum(top) / self.config.system.batch_size_per_gpu
 
     @memoize_method
     def _train_setup(self, prediction, truth):
