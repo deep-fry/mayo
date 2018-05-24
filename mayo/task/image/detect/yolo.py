@@ -7,7 +7,7 @@ from tensorflow.contrib import slim
 from PIL import Image, ImageDraw, ImageFont
 
 from mayo.log import log
-from mayo.util import memoize_property, pad_to_shape
+from mayo.util import memoize_property, pad_to_shape, map_fn
 from mayo.task.image.detect import util
 from mayo.task.image.detect.base import ImageDetectTaskBase
 
@@ -32,7 +32,7 @@ class YOLOv2(ImageDetectTaskBase):
     def __init__(
             self, session, preprocess, num_classes, background_class,
             shape, anchors, scales, moment=None, num_cells=13,
-            train_iou_threshold=0.6, confidence_threshold=0.5,
+            train_iou_threshold=0.6, score_threshold=0.3,
             nms_iou_threshold=0.4, nms_max_boxes=10):
         """
         anchors (tensor):
@@ -42,7 +42,7 @@ class YOLOv2(ImageDetectTaskBase):
         train_iou_threshold (float):
             the threshold of IOU upper-bound to suppress the absense
             of object in training loss.
-        confidence_threshold (float):
+        score_threshold (float):
             the threshold used to filter less confident detections
             during validation.
         nms_iou_threshold (float):
@@ -66,7 +66,7 @@ class YOLOv2(ImageDetectTaskBase):
 
         self.scales = dict(self._default_scales, **scales)
         self.train_iou_threshold = train_iou_threshold
-        self.confidence_threshold = confidence_threshold
+        self.score_threshold = score_threshold
         self.nms_iou_threshold = nms_iou_threshold
         self.nms_max_boxes = nms_max_boxes
 
@@ -75,16 +75,14 @@ class YOLOv2(ImageDetectTaskBase):
 
     @memoize_property
     def anchors(self):
-        # anchors defined in (width, height) order
-        values = [v[::-1] for v in self._anchors]
-        return tf.constant(values)
+        return tf.constant(self._anchors)
 
     def _activate(self, box):
         """ Activation functions for bounding box coordinates.  """
-        yx, hw = tf.split(box, [2, 2], axis=-1)
-        return tf.sigmoid(yx), tf.exp(hw)
+        xy, wh = tf.split(box, [2, 2], axis=-1)
+        return tf.sigmoid(xy), tf.exp(wh)
 
-    def _cell_to_global(self, yx, hw):
+    def _cell_to_global(self, xy, wh):
         """
         Transform (batch x num_cells x num_cells x num_anchors x 4)
         raw bounding box (after sigmoid and exponentiation) to the
@@ -96,14 +94,13 @@ class YOLOv2(ImageDetectTaskBase):
         rows = tf.tile(rows, [1, self.num_cells])
         cols = tf.reshape(line, [1, self.num_cells])
         cols = tf.tile(cols, [self.num_cells, 1])
-        grid = tf.stack([rows, cols], axis=-1)
+        grid = tf.stack([cols, rows], axis=-1)
         grid = tf.reshape(grid, [1, self.num_cells, self.num_cells, 1, 2])
         grid = tf.cast(grid, tf.float32)
         # box transformation
-        yx += grid
-        hw *= tf.reshape(self.anchors, [1, 1, 1, self.num_anchors, 2])
-        box = tf.concat([yx, hw], axis=-1) / self.num_cells
-        return box
+        xy += grid
+        wh *= tf.reshape(self.anchors, [1, 1, 1, self.num_anchors, 2])
+        return tf.concat([xy, wh], axis=-1) / self.num_cells
 
     def _truth_to_cell(self, each):
         """
@@ -128,25 +125,25 @@ class YOLOv2(ImageDetectTaskBase):
             label = label[:count]
 
         # normalize the scale of bounding boxes to the size of each cell
-        # y, x, h, w are (num_truths)
-        y, x, h, w = tf.unstack(box * self.num_cells, axis=-1)
+        # x, y, w, h are (num_truths)
+        x, y, w, h = tf.unstack(box * self.num_cells, axis=-1)
 
         # indices of the box-containing cells (num_truths)
         # any position within [k * cell_size, (k + 1) * cell_size)
         # gets mapped to the index k.
-        row_float, col_float = (tf.floor(v) for v in (y, x))
-        row, col = (tf.cast(v, tf.int32) for v in (row_float, col_float))
+        xc_float, yc_float = (tf.floor(v) for v in (x, y))
+        xc, yc = (tf.cast(v, tf.int32) for v in (xc_float, yc_float))
 
         # ious: num_truths x num_boxes
         pair_box, pair_anchor = util.cartesian(
-            tf.stack([h, w], axis=-1), self.anchors)
+            tf.stack([w, h], axis=-1), self.anchors)
         ious = util.iou(pair_box, pair_anchor, anchors=True)
         # box indices: (num_truths)
         _, anchor_index = tf.nn.top_k(ious)
         anchor_index_squeezed = tf.squeeze(anchor_index, axis=-1)
         # coalesced indices (num_truths x 3), where 3 values denote
-        # (#row, #column, #anchor)
-        index = tf.stack([row, col, anchor_index_squeezed], axis=-1)
+        # (#column, #row, #anchor)
+        index = tf.stack([xc, yc, anchor_index_squeezed], axis=-1)
 
         # objectness tensor
         # for each (batch), indices (num_truths x 3) are used to scatter values
@@ -159,9 +156,9 @@ class YOLOv2(ImageDetectTaskBase):
         # best_anchor: (num_truths x 2)
         best_anchor = tf.gather_nd(self.anchors, anchor_index)
         best_anchor = best_anchor
-        h_anchor, w_anchor = tf.unstack(best_anchor, axis=-1)
+        w_anchor, h_anchor = tf.unstack(best_anchor, axis=-1)
         # adjusted relative to cell row and col (num_truths x 4)
-        box = [y - row_float, x - col_float, h / h_anchor, w / w_anchor]
+        box = [x - xc_float, y - yc_float, w / w_anchor, h / h_anchor]
         box = tf.stack(box, axis=-1)
         # boxes
         box = tf.scatter_nd(index, box, self._base_shape + [4])
@@ -170,25 +167,7 @@ class YOLOv2(ImageDetectTaskBase):
         label = tf.scatter_nd(index, label, self._base_shape)
         return objectness, box, label
 
-    def _filter(self, prediction):
-        # confidence: cell x cell x anchors
-        # classes: cell x cell x anchors x num_classes
-        confidence, classes, outbox = prediction
-        # filter objects with a low confidence score
-        # cell x cell x anchors x classes
-        base_shape = [self.num_cells * self.num_cells * self.num_anchors]
-        boxes = tf.reshape(outbox, base_shape + [4])
-        # cell * cell * anchors
-        confidence = tf.reshape(confidence, base_shape)
-        mask = confidence >= self.confidence_threshold
-        # only confident objects are left
-        boxes = tf.boolean_mask(boxes, mask)
-        classes = tf.reshape(classes, base_shape + [self.num_classes])
-        scores = tf.reduce_max(classes, axis=-1)
-        scores = tf.boolean_mask(scores, mask)
-        classes = tf.argmax(classes, axis=-1, output_type=tf.int32)
-        classes = tf.boolean_mask(classes, mask)
-
+    def _non_max_suppression(self, boxes, scores, classes):
         # non-max suppression
         indices = tf.image.non_max_suppression(
             boxes, scores, self.nms_max_boxes, self.nms_iou_threshold)
@@ -196,11 +175,38 @@ class YOLOv2(ImageDetectTaskBase):
         boxes = tf.gather_nd(boxes, indices)
         scores = tf.gather_nd(scores, indices)
         classes = tf.gather_nd(classes, indices)
+        return boxes, scores, classes
+
+    def _pad_filter(self, boxes, scores, classes, pad):
         count = tf.shape(boxes)[0]
-        boxes = pad_to_shape(boxes, [self.nms_max_boxes, 4])
-        scores = pad_to_shape(scores, [self.nms_max_boxes])
-        classes = pad_to_shape(classes, [self.nms_max_boxes])
+        boxes = pad_to_shape(boxes, [pad, 4])
+        scores = pad_to_shape(scores, [pad])
+        classes = pad_to_shape(classes, [pad])
         return boxes, scores, classes, count
+
+    def _filter(self, prediction, nms=True):
+        object_mask, cls, outbox = prediction
+        # filter objects with a low confidence score
+        # cell x cell x anchors x classes
+        confidence = object_mask * cls
+        # cell x cell x anchors
+        classes = tf.argmax(confidence, axis=-1, output_type=tf.int32)
+        scores = tf.reduce_max(confidence, axis=-1)
+        mask = scores >= self.score_threshold
+        # only confident objects are left
+        boxes = tf.boolean_mask(outbox, mask)
+        scores = tf.boolean_mask(scores, mask)
+        classes = tf.boolean_mask(classes, mask)
+        # post-process boxes
+        # TODO resize to input image
+        corners = util.box_to_corners(boxes)
+        # non-max suppression
+        pad = 100
+        if nms:
+            corners, scores, classes = self._non_max_suppression(
+                corners, scores, classes)
+            pad = self.nms_max_boxes
+        return self._pad_filter(corners, scores, classes, pad)
 
     def transform(self, net, data, prediction, truth):
         """
@@ -216,6 +222,7 @@ class YOLOv2(ImageDetectTaskBase):
             last dimension (5) consists of a bounding box (4), and a label (1).
         """
         raw_output = prediction['output']
+        #  raw_output = tf.constant(np.load('out.npy'))
         batch = util.shape(raw_output)[0]
         prediction = tf.reshape(
             raw_output,
@@ -225,22 +232,23 @@ class YOLOv2(ImageDetectTaskBase):
             prediction, [4, 1, self.num_classes], axis=-1)
         obj_predict = tf.nn.sigmoid(obj_predict)
         obj_predict_squeeze = tf.squeeze(obj_predict, -1)
-        yx_predict, hw_predict = self._activate(box_predict)
+        xy_predict, wh_predict = self._activate(box_predict)
         prediction = {
             'raw': raw_output,
             'object': obj_predict_squeeze,
             'object_mask': obj_predict,
-            #  'box': tf.concat([yx_predict, hw_predict], axis=-1),
-            'outbox': self._cell_to_global(yx_predict, hw_predict),
+            #  'box': tf.concat([xy_predict, wh_predict], axis=-1),
+            'outbox': self._cell_to_global(xy_predict, wh_predict),
             'class': tf.nn.softmax(hot_predict),
         }
         inputs = (
-            prediction['object'], prediction['class'], prediction['outbox'])
-        box_test, score_test, class_test, count_test = tf.map_fn(
+            prediction['object_mask'], prediction['class'],
+            prediction['outbox'])
+        corner_test, score_test, class_test, count_test = map_fn(
             self._filter, inputs,
             dtype=(tf.float32, tf.float32, tf.int32, tf.int32))
         prediction['test'] = {
-            'box': box_test,
+            'corner': corner_test,
             'class': class_test,
             'score': score_test,
             'count': count_test,
@@ -270,7 +278,7 @@ class YOLOv2(ImageDetectTaskBase):
             rgb = colorsys.hsv_to_rgb(i / self.num_classes, 0.5, 1)
             yield tuple(int(c * 255) for c in rgb)
 
-    def _test(self, name, boxes, scores, classes, count):
+    def _test(self, name, corners, scores, classes, count):
         image = Image.open(name)
         width, height = image.size
         image = image.convert('RGBA')
@@ -279,16 +287,15 @@ class YOLOv2(ImageDetectTaskBase):
         font = ImageFont.truetype(font, 5 * thickness)
         log.info('{}: {} boxes.'.format(name.decode(), count))
         max_score = max(scores)
-        boxes = boxes[:count]
-        for box, score, cls in zip(boxes, scores, classes):
+        corners = corners[:count]
+        for corner, score, cls in zip(corners, scores, classes):
             layer = Image.new('RGBA', image.size, (255, 255, 255, 0))
             draw = ImageDraw.ImageDraw(layer)
-            y, x, h, w = box
-            y, x, h, w = y * height, x * width, h * height, w * width
-            top = max(0, round(y - h / 2))
-            bottom = min(height, round(y + h / 2))
-            left = max(0, round(x - w / 2))
-            right = min(width, round(x + w / 2))
+            top, left, bottom, right = corner
+            top = int(max(0, top * height))
+            left = int(max(0, left * width))
+            bottom = int(min(height, bottom * height))
+            right = int(min(width, right * width))
             transparency = 127 + int(128 * score / max_score)
             color = self._colors[cls] + (transparency, )
             for i in range(thickness):
@@ -316,9 +323,9 @@ class YOLOv2(ImageDetectTaskBase):
 
     def test(self, names, predictions):
         test = predictions['test']
-        boxes, scores, classes, count = \
-            test['box'], test['score'], test['class'], test['count']
-        for args in zip(names, boxes, scores, classes, count):
+        iterer = zip(
+            names, test['corner'], test['score'], test['class'], test['count'])
+        for args in iterer:
             self._test(*args)
 
     def _iou_score(self, pred_box, truth_box, num_objects):

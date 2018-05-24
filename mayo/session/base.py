@@ -346,6 +346,14 @@ class SessionBase(object, metaclass=SessionMeta):
             results = self.raw_run(ops, **kwargs)
         return results
 
+    def debug(self, tensors):
+        def wrapped(*args):
+            __import__('ipdb').set_trace()
+            return args
+        self.estimator.register(
+            tensors, 'debug', history=1, transformer=wrapped)
+        return tensors
+
     def interact(self):
         from IPython import embed
         embed()

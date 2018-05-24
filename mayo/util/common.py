@@ -9,16 +9,11 @@ class ShapeError(ValueError):
     """Incorrect shape.  """
 
 
-def debug(tensors):
-    def wrapped(*args):
-        __import__('ipdb').set_trace()
-        return tf.ones([], dtype=tf.int32)
-    original = tensors
-    if isinstance(tensors, (tf.Tensor, tf.Variable)):
-        tensors = [tensors]
-    ones = tf.py_func(wrapped, tensors, [tf.int32])
-    with tf.control_dependencies(ones):
-        return original
+def map_fn(func, inputs, dtype=None, static=False):
+    if not static:
+        return tf.map_fn(func, inputs, dtype=dtype)
+    inputs = [tf.unstack(i, axis=0) for i in inputs]
+    return list(zip(*(func(args) for args in zip(*inputs))))
 
 
 def pad_to_shape(tensor, shape, default_value=0):

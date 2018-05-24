@@ -10,6 +10,6 @@ class Test(SessionBase):
 
     def test(self):
         todo = list(zip(self.task.names, self.task.predictions))
-        results = self.run(todo)
+        results = self.run(todo, batch=True)
         for names, predictions in results:
             self.task.test(names, predictions)
