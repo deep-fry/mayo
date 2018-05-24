@@ -230,7 +230,7 @@ class YOLOv2(ImageDetectTaskBase):
             'object_mask': obj_predict,
             'box': tf.concat([yx_predict, hw_predict], axis=-1),
             'outbox': self._cell_to_global(yx_predict, hw_predict),
-            'class': hot_predict,
+            'class': tf.nn.softmax(hot_predict),
         }
         inputs = (
             prediction['object_mask'], prediction['class'],
