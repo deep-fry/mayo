@@ -49,15 +49,17 @@ class Evaluate(SessionBase):
         epochs = list(self._range(self.checkpoint.list_epochs()))
         epochs_to_eval = ', '.join(str(e) for e in epochs)
         log.info('Checkpoints to evaluate: {}'.format(epochs_to_eval))
-        results = Table(('Epoch', 'Top 1', 'Top 5'))
+        table = None
         # ensures imgs_seen initialized and loaded
         try:
             for e in epochs:
                 with log.demote():
                     stats = self.eval(e, keyboard_interrupt=False)
-                row = [e, stats['top1'], stats['top5']]
-                results.add_row(row)
-                log.info('epoch: {}, top1: {}, top5: {}'.format(*row))
+                table = table or Table(['epoch'] + list(sorted(stats)))
+                table.add_row(dict({'epoch': e}, **stats))
+                infos = ['epoch: {}'.format(e)]
+                infos += ['{}: {}'.format(k, v) for k, v in stats.items()]
+                log.info(', '.join(infos))
         except KeyboardInterrupt:
             pass
-        return results
+        return table

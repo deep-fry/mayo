@@ -115,6 +115,7 @@ class Classify(ImageTaskBase):
         log.info(
             '    top1: {}, top5: {} [{} images]'
             .format(stats['top1'], stats['top5'], num_examples))
+        return stats
 
     def test(self, names, inputs, predictions):
         results = {}
