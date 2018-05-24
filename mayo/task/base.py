@@ -107,7 +107,7 @@ class TFTaskBase(object):
             'Please impelement .post_eval() which computes an info dict '
             'for the evaluation metrics.')
 
-    def test(self, name, inputs, prediction):
+    def test(self, name, prediction):
         raise NotImplementedError(
             'Please implement .test() which produces human-readable output '
             'for a given input.')

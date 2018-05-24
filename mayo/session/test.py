@@ -9,8 +9,7 @@ class Test(SessionBase):
         self.load_checkpoint(self.config.system.checkpoint.load)
 
     def test(self):
-        todo = zip(self.task.names, self.task.inputs, self.task.predictions)
-        todo = list(todo)
+        todo = list(zip(self.task.names, self.task.predictions))
         results = self.run(todo)
-        for names, inputs, predictions in results:
-            self.task.test(names, inputs, predictions)
+        for names, predictions in results:
+            self.task.test(names, predictions)

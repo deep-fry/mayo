@@ -270,16 +270,13 @@ class YOLOv2(ImageDetectTaskBase):
             rgb = colorsys.hsv_to_rgb(i / self.num_classes, 0.5, 1)
             yield tuple(int(c * 255) for c in rgb)
 
-    @memoize_property
-    def _font(self):
-        font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
-        return ImageFont.truetype(font, 12)
-
-    def _test(self, name, image, boxes, scores, classes, count):
-        height, width, channels = image.shape
-        image = Image.fromarray(np.uint8(255.0 * image))
+    def _test(self, name, boxes, scores, classes, count):
+        image = Image.open(name)
+        width, height = image.size
         image = image.convert('RGBA')
         thickness = int((height + width) / 300)
+        font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
+        font = ImageFont.truetype(font, 5 * thickness)
         log.info('{}: {} boxes.'.format(name.decode(), count))
         max_score = max(scores)
         boxes = boxes[:count]
@@ -300,14 +297,14 @@ class YOLOv2(ImageDetectTaskBase):
             # draw label
             cls_name = self.class_names[cls]
             label = ' {} {:.2f} '.format(cls_name, score)
-            label_width, label_height = draw.textsize(label, font=self._font)
+            label_width, label_height = draw.textsize(label, font=font)
             label_pos = [left, top]
             label_rect = [left + label_width, top + label_height]
             draw.rectangle(label_pos + label_rect, fill=color)
-            draw.text(label_pos, label, fill=(0, 0, 0, 127), font=self._font)
+            draw.text(label_pos, label, fill=(0, 0, 0, 127), font=font)
             image = Image.alpha_composite(image, layer)
             log.info(
-                '  Confidence: {:.2f}, class: {}, box: {}'
+                '  Confidence: {:f}, class: {}, box: {}'
                 .format(score, cls_name, ((top, left), (bottom, right))))
         path = self.session.config.system.search_path.run.outputs[0]
         path = os.path.join(path, 'detect')
@@ -317,11 +314,11 @@ class YOLOv2(ImageDetectTaskBase):
         path = os.path.join(path, '{}.png'.format(name))
         image.save(path, quality=90)
 
-    def test(self, names, images, predictions):
+    def test(self, names, predictions):
         test = predictions['test']
         boxes, scores, classes, count = \
             test['box'], test['score'], test['class'], test['count']
-        for args in zip(names, images, boxes, scores, classes, count):
+        for args in zip(names, boxes, scores, classes, count):
             self._test(*args)
 
     def _iou_score(self, pred_box, truth_box, num_objects):

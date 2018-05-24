@@ -98,12 +98,12 @@ class Preprocess(object):
             values.append(truth_map[key])
         return values
 
-    def augment(self, image):
+    def augment(self, image, ensure_shape='fill'):
         # augment for validation
         augment = Augment(image, None, self.after_shape, self.moment)
         actions = self._actions(self.mode) + self._actions('final_cpu')
         actions += self._actions(self._actions('final_gpu'))
-        return augment.augment(actions)
+        return augment.augment(actions, ensure_shape=ensure_shape)
 
     def preprocess(self):
         # file names
