@@ -68,8 +68,7 @@ class Classify(ImageTaskBase):
         return tf.losses.softmax_cross_entropy(
             logits=prediction, onehot_labels=truth)
 
-    @memoize_method
-    def _eval_setup(self):
+    def eval(self):
         def metrics(net, prediction, truth):
             top1 = self._top(prediction, truth, 1)
             top5 = self._top(prediction, truth, 5)
@@ -95,11 +94,7 @@ class Classify(ImageTaskBase):
                 tensor, name, 'eval', history='infinite',
                 formatter=functools.partial(formatter, name=name))
 
-    def eval(self, net, prediction, truth):
-        # set up eval estimators, once and for all predictions and truths
-        return self._eval_setup()
-
-    def eval_final_stats(self):
+    def post_eval(self):
         stats = {}
         num_examples = self.session.num_examples
         num_remaining = num_examples % self.session.batch_size

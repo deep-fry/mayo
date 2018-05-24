@@ -9,7 +9,7 @@ class Evaluate(SessionBase):
     mode = 'validate'
 
     def _finalize(self):
-        self.task.map_eval()
+        self.task.eval()
         super()._finalize()
 
     def eval(self, key=None, keyboard_interrupt=True):
@@ -30,7 +30,7 @@ class Evaluate(SessionBase):
                 raise e
         else:
             log.info('Evaluation complete.')
-        return self.task.eval_final_stats()
+        return self.task.post_eval()
 
     def _range(self, epochs):
         eval_range = self.config.get('eval.range', {})

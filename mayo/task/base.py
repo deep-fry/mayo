@@ -10,6 +10,8 @@ from mayo.session.test import Test
 
 class TFTaskBase(object):
     """Specifies common training and evaluation tasks.  """
+    debug = False
+
     def __init__(self, session):
         super().__init__()
         self.is_test = isinstance(session, Test)
@@ -56,7 +58,7 @@ class TFTaskBase(object):
             prediction = net.outputs()
             data, prediction, truth = self.transform(
                 net, data, prediction, truth)
-            if i == 0:
+            if i == 0 and self.debug:
                 self._register_estimates(prediction, truth)
             inputs.append(data)
             predictions.append(prediction)
@@ -96,17 +98,16 @@ class TFTaskBase(object):
         raise NotImplementedError(
             'Please implement .train() which returns the loss tensor.')
 
-    def eval(self, net, prediction, truth):
+    def eval(self):
         raise NotImplementedError(
-            'Please implement .eval() which returns the evaluation metrics.')
+            'Please implement .eval() which registers the evaluation metrics.')
+
+    def post_eval(self):
+        raise NotImplementedError(
+            'Please impelement .post_eval() which computes an info dict '
+            'for the evaluation metrics.')
 
     def test(self, name, inputs, prediction):
         raise NotImplementedError(
             'Please implement .test() which produces human-readable output '
             'for a given input.')
-
-    def map_train(self):
-        return list(self.map(self.train))
-
-    def map_eval(self):
-        return list(self.map(self.eval))

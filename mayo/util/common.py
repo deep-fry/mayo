@@ -12,9 +12,13 @@ class ShapeError(ValueError):
 def debug(tensors):
     def wrapped(*args):
         __import__('ipdb').set_trace()
-        return args
-    types = [t.dtype for t in tensors]
-    return tf.py_func(wrapped, tensors, types)
+        return tf.ones([], dtype=tf.int32)
+    original = tensors
+    if isinstance(tensors, (tf.Tensor, tf.Variable)):
+        tensors = [tensors]
+    ones = tf.py_func(wrapped, tensors, [tf.int32])
+    with tf.control_dependencies(ones):
+        return original
 
 
 def pad_to_shape(tensor, shape, default_value=0):

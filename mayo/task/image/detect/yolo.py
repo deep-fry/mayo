@@ -32,14 +32,14 @@ class YOLOv2(ImageDetectTaskBase):
     def __init__(
             self, session, preprocess, num_classes, background_class,
             shape, anchors, scales, moment=None, num_cells=13,
-            iou_threshold=0.6, score_threshold=0.6,
+            train_iou_threshold=0.6, score_threshold=0.5,
             nms_iou_threshold=0.4, nms_max_boxes=10):
         """
         anchors (tensor):
             a (num_anchors x 2) tensor of anchor boxes [(h, w), ...].
         scales (dict): the weights of the losses.
         num_cells (int): the number of cells to divide the image into a grid.
-        iou_threshold (float):
+        train_iou_threshold (float):
             the threshold of IOU upper-bound to suppress the absense
             of object in training loss.
         score_threshold (float):
@@ -65,7 +65,7 @@ class YOLOv2(ImageDetectTaskBase):
         self._base_shape = [num_cells, num_cells, self.num_anchors]
 
         self.scales = dict(self._default_scales, **scales)
-        self.iou_threshold = iou_threshold
+        self.train_iou_threshold = train_iou_threshold
         self.score_threshold = score_threshold
         self.nms_iou_threshold = nms_iou_threshold
         self.nms_max_boxes = nms_max_boxes
@@ -213,10 +213,10 @@ class YOLOv2(ImageDetectTaskBase):
             a (batch x num_objects x 5) tensor, where each item of the
             last dimension (5) consists of a bounding box (4), and a label (1).
         """
-        prediction = prediction['output']
-        batch = util.shape(prediction)[0]
+        raw_output = prediction['output']
+        batch = util.shape(raw_output)[0]
         prediction = tf.reshape(
-            prediction,
+            raw_output,
             (batch, self.num_cells, self.num_cells,
              self.num_anchors, 4 + 1 + self.num_classes))
         box_predict, obj_predict, hot_predict = tf.split(
@@ -225,6 +225,7 @@ class YOLOv2(ImageDetectTaskBase):
         obj_predict_squeeze = tf.squeeze(obj_predict, -1)
         yx_predict, hw_predict = self._activate(box_predict)
         prediction = {
+            'raw': raw_output,
             'object': obj_predict_squeeze,
             'object_mask': obj_predict,
             'box': tf.concat([yx_predict, hw_predict], axis=-1),
@@ -263,10 +264,15 @@ class YOLOv2(ImageDetectTaskBase):
         return data['input'], prediction, truth
 
     @memoize_property
-    def colors(self):
+    def _colors(self):
         for i in range(self.num_classes):
             rgb = colorsys.hsv_to_rgb(i / self.num_classes, 0.5, 1)
             yield tuple(int(c * 255) for c in rgb)
+
+    @memoize_property
+    def _font(self):
+        font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
+        return ImageFont.truetype(font, 12)
 
     def _test(self, name, image, boxes, scores, classes, count):
         height, width, channels = image.shape
@@ -274,8 +280,6 @@ class YOLOv2(ImageDetectTaskBase):
         image = image.convert('RGBA')
         thickness = int((height + width) / 300)
         log.info('{}: {} boxes.'.format(name.decode(), count))
-        font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
-        font = ImageFont.truetype(font, 12)
         max_score = max(scores)
         boxes = boxes[:count]
         for box, score, cls in zip(boxes, scores, classes):
@@ -288,18 +292,18 @@ class YOLOv2(ImageDetectTaskBase):
             left = max(0, round(x - w / 2))
             right = min(width, round(x + w / 2))
             transparency = 127 + int(128 * score / max_score)
-            color = self.colors[cls] + (transparency, )
+            color = self._colors[cls] + (transparency, )
             for i in range(thickness):
                 draw.rectangle(
                     (left + i, top + i, right - i, bottom - i), outline=color)
             # draw label
             cls_name = self.class_names[cls]
             label = ' {} {:.2f} '.format(cls_name, score)
-            label_width, label_height = draw.textsize(label, font=font)
+            label_width, label_height = draw.textsize(label, font=self._font)
             label_pos = [left, top]
             label_rect = [left + label_width, top + label_height]
             draw.rectangle(label_pos + label_rect, fill=color)
-            draw.text(label_pos, label, fill=(0, 0, 0, 127), font=font)
+            draw.text(label_pos, label, fill=(0, 0, 0, 127), font=self._font)
             image = Image.alpha_composite(image, layer)
             log.info(
                 '  Confidence: {:.2f}, class: {}, box: {}'
@@ -353,7 +357,8 @@ class YOLOv2(ImageDetectTaskBase):
         # (batch x num_cells x num_cells x num_anchors x num_objects x 4)
         iou_score = self._iou_score(
             prediction['outbox'], truth['rawbox'], num_objects)
-        is_obj_absent = tf.cast(iou_score <= self.iou_threshold, tf.float32)
+        is_obj_absent = tf.cast(
+            iou_score <= self.train_iou_threshold, tf.float32)
         noobj_loss = (1 - truth['object_mask']) * is_obj_absent
         noobj_loss *= prediction['object_mask'] ** 2
         noobj_loss = self.scales['noobject'] * tf.reduce_sum(noobj_loss)
