@@ -32,7 +32,7 @@ class YOLOv2(ImageDetectTaskBase):
     def __init__(
             self, session, preprocess, num_classes, background_class,
             shape, anchors, scales, moment=None, num_cells=13,
-            train_iou_threshold=0.6, score_threshold=0.5,
+            train_iou_threshold=0.6, confidence_threshold=0.5,
             nms_iou_threshold=0.4, nms_max_boxes=10):
         """
         anchors (tensor):
@@ -42,7 +42,7 @@ class YOLOv2(ImageDetectTaskBase):
         train_iou_threshold (float):
             the threshold of IOU upper-bound to suppress the absense
             of object in training loss.
-        score_threshold (float):
+        confidence_threshold (float):
             the threshold used to filter less confident detections
             during validation.
         nms_iou_threshold (float):
@@ -66,7 +66,7 @@ class YOLOv2(ImageDetectTaskBase):
 
         self.scales = dict(self._default_scales, **scales)
         self.train_iou_threshold = train_iou_threshold
-        self.score_threshold = score_threshold
+        self.confidence_threshold = confidence_threshold
         self.nms_iou_threshold = nms_iou_threshold
         self.nms_max_boxes = nms_max_boxes
 
@@ -75,14 +75,14 @@ class YOLOv2(ImageDetectTaskBase):
 
     @memoize_property
     def anchors(self):
-        return tf.constant(self._anchors)
+        # anchors defined in (width, height) order
+        values = [v[::-1] for v in self._anchors]
+        return tf.constant(values)
 
     def _activate(self, box):
         """ Activation functions for bounding box coordinates.  """
         yx, hw = tf.split(box, [2, 2], axis=-1)
-        yx = tf.sigmoid(yx)
-        hw = tf.exp(hw)
-        return [yx, hw]
+        return tf.sigmoid(yx), tf.exp(hw)
 
     def _cell_to_global(self, yx, hw):
         """
@@ -171,20 +171,22 @@ class YOLOv2(ImageDetectTaskBase):
         return objectness, box, label
 
     def _filter(self, prediction):
-        object_mask, cls, outbox = prediction
+        # confidence: cell x cell x anchors
+        # classes: cell x cell x anchors x num_classes
+        confidence, classes, outbox = prediction
         # filter objects with a low confidence score
         # cell x cell x anchors x classes
-        confidence = object_mask * cls
         base_shape = [self.num_cells * self.num_cells * self.num_anchors]
         boxes = tf.reshape(outbox, base_shape + [4])
-        confidence = tf.reshape(confidence, base_shape + [self.num_classes])
-        # cell x cell x anchors
-        classes = tf.argmax(confidence, axis=-1, output_type=tf.int32)
-        scores = tf.reduce_max(confidence, axis=-1)
-        mask = scores >= self.score_threshold
+        # cell * cell * anchors
+        confidence = tf.reshape(confidence, base_shape)
+        mask = confidence >= self.confidence_threshold
         # only confident objects are left
         boxes = tf.boolean_mask(boxes, mask)
+        classes = tf.reshape(classes, base_shape + [self.num_classes])
+        scores = tf.reduce_max(classes, axis=-1)
         scores = tf.boolean_mask(scores, mask)
+        classes = tf.argmax(classes, axis=-1, output_type=tf.int32)
         classes = tf.boolean_mask(classes, mask)
 
         # non-max suppression
@@ -228,13 +230,12 @@ class YOLOv2(ImageDetectTaskBase):
             'raw': raw_output,
             'object': obj_predict_squeeze,
             'object_mask': obj_predict,
-            'box': tf.concat([yx_predict, hw_predict], axis=-1),
+            #  'box': tf.concat([yx_predict, hw_predict], axis=-1),
             'outbox': self._cell_to_global(yx_predict, hw_predict),
             'class': tf.nn.softmax(hot_predict),
         }
         inputs = (
-            prediction['object_mask'], prediction['class'],
-            prediction['outbox'])
+            prediction['object'], prediction['class'], prediction['outbox'])
         box_test, score_test, class_test, count_test = tf.map_fn(
             self._filter, inputs,
             dtype=(tf.float32, tf.float32, tf.int32, tf.int32))
