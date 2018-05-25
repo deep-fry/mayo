@@ -1,7 +1,6 @@
 import os
 import colorsys
 
-import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 from PIL import Image, ImageDraw, ImageFont
@@ -292,10 +291,10 @@ class YOLOv2(ImageDetectTaskBase):
             layer = Image.new('RGBA', image.size, (255, 255, 255, 0))
             draw = ImageDraw.ImageDraw(layer)
             top, left, bottom, right = corner
-            top = int(max(0, top * height))
-            left = int(max(0, left * width))
-            bottom = int(min(height, bottom * height))
-            right = int(min(width, right * width))
+            top = round(max(0, top * height))
+            left = round(max(0, left * width))
+            bottom = round(min(height, bottom * height))
+            right = round(min(width, right * width))
             transparency = 127 + int(128 * score / max_score)
             color = self._colors[cls] + (transparency, )
             for i in range(thickness):
