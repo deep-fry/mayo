@@ -32,7 +32,7 @@ class YOLOv2(ImageDetectTaskBase):
             self, session, preprocess, num_classes, background_class,
             shape, anchors, scales, moment=None, num_cells=13,
             train_iou_threshold=0.6, score_threshold=0.3,
-            nms_iou_threshold=0.4, nms_max_boxes=10):
+            nms_iou_threshold=0.5, nms_max_boxes=10):
         """
         anchors (tensor):
             a (num_anchors x 2) tensor of anchor boxes [(h, w), ...].
@@ -141,8 +141,9 @@ class YOLOv2(ImageDetectTaskBase):
         _, anchor_index = tf.nn.top_k(ious)
         anchor_index_squeezed = tf.squeeze(anchor_index, axis=-1)
         # coalesced indices (num_truths x 3), where 3 values denote
-        # (#column, #row, #anchor)
-        index = tf.stack([xc, yc, anchor_index_squeezed], axis=-1)
+        # (#row, #column, #anchor)
+        # YOLO swaps the ordering of row and column just to make life difficult
+        index = tf.stack([yc, xc, anchor_index_squeezed], axis=-1)
 
         # objectness tensor
         # for each (batch), indices (num_truths x 3) are used to scatter values
@@ -236,7 +237,7 @@ class YOLOv2(ImageDetectTaskBase):
             'raw': raw_output,
             'object': obj_predict_squeeze,
             'object_mask': obj_predict,
-            #  'box': tf.concat([xy_predict, wh_predict], axis=-1),
+            'box': tf.concat([xy_predict, wh_predict], axis=-1),
             'outbox': self._cell_to_global(xy_predict, wh_predict),
             'class': tf.nn.softmax(hot_predict),
         }
@@ -284,7 +285,7 @@ class YOLOv2(ImageDetectTaskBase):
         thickness = int((height + width) / 300)
         font = os.path.join(os.path.split(__file__)[0], 'opensans.ttf')
         font = ImageFont.truetype(font, 5 * thickness)
-        log.info('{}: {} boxes.'.format(name.decode(), count))
+        log.info('{}: {} detections.'.format(name.decode(), count))
         max_score = max(scores)
         corners = corners[:count]
         iterer = list(zip(corners, scores, classes))
