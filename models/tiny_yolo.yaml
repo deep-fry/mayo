@@ -35,8 +35,7 @@ model:
                 decay: 0.9997
                 epsilon: 0.001
             activation_fn: tensorflow.nn.leaky_relu
-            activation_params:
-                alpha: 0.1
+            activation_params: {alpha: 0.1}
         _pool: &pool
             type: max_pool
             kernel_size: 2

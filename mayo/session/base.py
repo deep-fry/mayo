@@ -129,6 +129,8 @@ class SessionBase(object, metaclass=SessionMeta):
 
     @property
     def num_examples(self):
+        if self.mode == 'test':
+            return len(self.task._preprocessor.files)
         return self.config.dataset.num_examples_per_epoch[self.mode]
 
     @property

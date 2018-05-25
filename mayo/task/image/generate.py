@@ -11,7 +11,7 @@ class Preprocess(object):
         super().__init__()
         self.system = system
         self.mode = mode
-        if mode not in ['train', 'validate']:
+        if mode not in ['test', 'train', 'validate']:
             raise ValueError(
                 'Unrecognized preprocessing mode {!r}'.format(self.mode))
         self.truth_keys = truth_keys
@@ -74,7 +74,15 @@ class Preprocess(object):
     def _actions(self, key):
         return ensure_list(self.actions.get(key) or [])
 
-    def _preprocess(self, serialized):
+    def _preprocess_images(self, name):
+        image_string = tf.read_file(name)
+        image = tf.image.decode_jpeg(
+            image_string, channels=self.before_shape[-1])
+        image = tf.image.convert_image_dtype(image, dtype=tf.float32)
+        image = self.augment(image, ensure_shape='stretch')
+        return image, name
+
+    def _preprocess_records(self, serialized):
         # unserialize and prepocess image
         buffer, label, bbox, count, bbox_label, text = \
             self._parse_proto(serialized)
@@ -113,23 +121,29 @@ class Preprocess(object):
         if self.mode == 'train':
             # shuffle .tfrecord files
             dataset = dataset.shuffle(buffer_size=len(self.files))
-        # tfrecord files to images
-        dataset = dataset.flat_map(tf.data.TFRecordDataset)
-        dataset = dataset.repeat()
+
+        if self.mode == 'test':
+            func = self._preprocess_images
+        else:
+            # tfrecord files to images
+            dataset = dataset.flat_map(tf.data.TFRecordDataset)
+            dataset = dataset.repeat()
+            func = self._preprocess_records
+
         num_threads = self.system.preprocess.num_threads
-        dataset = dataset.map(self._preprocess, num_parallel_calls=num_threads)
-        dataset = dataset.prefetch(num_threads * batch_size)
-        if self.mode == 'train':
-            buffer_size = min(1024, 10 * batch_size)
-            dataset = dataset.shuffle(buffer_size=buffer_size)
-        dataset = dataset.apply(
-            tf.contrib.data.batch_and_drop_remainder(batch_size))
+        dataset = dataset.map(func, num_parallel_calls=num_threads)
+        if self.mode in ['train', 'eval']:
+            dataset = dataset.prefetch(num_threads * batch_size)
+            if self.mode == 'train':
+                buffer_size = min(1024, 10 * batch_size)
+                dataset = dataset.shuffle(buffer_size=buffer_size)
+            dataset = dataset.apply(
+                tf.contrib.data.batch_and_drop_remainder(batch_size))
+        else:
+            dataset = dataset.batch(batch_size)
         # iterator
         iterator = dataset.make_one_shot_iterator()
-        images, *truths = iterator.get_next()
-        # ensuring the shape of images and labels to be constants
-        batch = [images] + truths
-        batch_splits = []
+        batch = iterator.get_next()
         batch_splits = list(zip(
             *(tf.split(each, num_gpus, axis=0) for each in batch)))
 
@@ -139,9 +153,9 @@ class Preprocess(object):
             def augment(i):
                 augment = Augment(i, None, self.after_shape, self.moment)
                 return augment.augment(gpu_actions, ensure_shape=False)
-            for gid, (images, *truths) in enumerate(batch_splits):
+            for gid, (images, *additional) in enumerate(batch_splits):
                 with tf.device('/gpu:{}'.format(gid)):
                     # FIXME is tf.map_fn good for performance?
                     images = tf.map_fn(augment, images)
-                batch_splits[gid] = [images] + truths
+                batch_splits[gid] = [images] + additional
         return batch_splits

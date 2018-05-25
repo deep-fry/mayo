@@ -2,7 +2,7 @@ from mayo.session.base import SessionBase
 
 
 class Test(SessionBase):
-    mode = 'validate'
+    mode = 'test'
 
     def __init__(self, config):
         super().__init__(config)

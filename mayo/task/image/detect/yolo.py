@@ -287,7 +287,9 @@ class YOLOv2(ImageDetectTaskBase):
         log.info('{}: {} boxes.'.format(name.decode(), count))
         max_score = max(scores)
         corners = corners[:count]
-        for corner, score, cls in zip(corners, scores, classes):
+        iterer = list(zip(corners, scores, classes))
+        iterer = reversed(sorted(iterer, key=lambda v: v[1]))
+        for corner, score, cls in iterer:
             layer = Image.new('RGBA', image.size, (255, 255, 255, 0))
             draw = ImageDraw.ImageDraw(layer)
             top, left, bottom, right = corner
@@ -309,9 +311,10 @@ class YOLOv2(ImageDetectTaskBase):
             draw.rectangle(label_pos + label_rect, fill=color)
             draw.text(label_pos, label, fill=(0, 0, 0, 127), font=font)
             image = Image.alpha_composite(image, layer)
+            box = [int(v) for v in (left, top, right, bottom)]
             log.info(
-                '  Confidence: {:f}, class: {}, box: {}'
-                .format(score, cls_name, ((top, left), (bottom, right))))
+                '  Confidence: {:f}, class: {}, box: ({}, {}) ({}, {})'
+                .format(score, cls_name, *box))
         path = self.session.config.system.search_path.run.outputs[0]
         path = os.path.join(path, 'detect')
         os.makedirs(path, exist_ok=True)
