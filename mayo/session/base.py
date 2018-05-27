@@ -349,9 +349,9 @@ class SessionBase(object, metaclass=SessionMeta):
         return results
 
     def debug(self, tensors):
-        def wrapped(*args):
+        def wrapped(t):
             __import__('ipdb').set_trace()
-            return args
+            return t
         self.estimator.register(
             tensors, 'debug', history=1, transformer=wrapped)
         return tensors
