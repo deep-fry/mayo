@@ -165,15 +165,16 @@ class Target(object):
         self.bias_quantizer = bias_quantizer
 
     def init_info(self, info, session, start):
-        self.scale = info.range['scale']
-        self.min_scale = info.range['min_scale']
-        self.update_factor = info.range['scale_update_factor']
-        self.start_threshold = info.range['from']
+        inforange = info.range[0]
+        self.scale = inforange['scale']
+        self.min_scale = inforange['min_scale']
+        self.update_factor = inforange['scale_update_factor']
+        self.start_threshold = inforange['from']
         if start:
-            self.thresholds = [info.range['from']] * len(self.tv)
+            self.thresholds = [inforange['from']] * len(self.tv)
         else:
             self.thresholds = [session.run(v) for v in self.tv]
-        self.end_thresholds = [info.range['to']] * len(self.tv)
+        self.end_thresholds = [inforange['to']] * len(self.tv)
 
     def add_var(self, variable):
         self.tv.extend(variable)

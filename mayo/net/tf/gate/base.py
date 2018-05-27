@@ -62,6 +62,7 @@ class GatedConvolutionBase(object):
         self.input = tensor
         self.conved = self.constructor.instantiate_convolution(
             self.node, tensor, params)
+        self.conv_params = params
 
     def _update_defaults(self, defaults):
         pass

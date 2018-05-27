@@ -30,9 +30,16 @@ class Profile(Train):
         self.save()
 
     def _register_quantize_loss(self, overriders):
-        for o in overriders:
+        for key, o in overriders.items():
+            if isinstance(o, list):
+                for each_o in o:
+                    loss = each_o.quantize_loss()
+                    self.estimator.register(
+                        loss, 'q_loss/' + each_o.name, history='running_mean')
+                continue
             loss = o.quantize_loss()
-            self.estimator.register(loss, o.name, history='running_mean')
+            self.estimator.register(
+                loss, 'q_loss/' + o.name, history='running_mean')
 
     def _register_activations(self):
         history = self.config.dataset.num_examples_per_epoch.get(self.mode)

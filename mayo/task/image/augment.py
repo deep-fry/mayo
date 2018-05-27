@@ -140,7 +140,7 @@ class Augment(object):
         permuted_splits = [channel_splits[o] for o in order]
         return tf.concat(permuted_splits, -1)
 
-    def _ensure_shape(self, i):
+    def _ensure_shape(self, i, fill=True):
         # ensure image is the correct shape
         ph, pw, pc = i.shape.as_list()
         h, w, c = self.shape
@@ -164,9 +164,9 @@ class Augment(object):
             'Ensuring size of image is as expected by our inputs {} x {} by '
             'resizing it...'.format(h, w))
         # rescale image
-        return self.resize(i, h, w, fill=True)
+        return self.resize(i, h, w, fill=fill)
 
-    def augment(self, actions, ensure_shape=True):
+    def augment(self, actions, ensure_shape='fill'):
         image = self.image
         with tf.name_scope(values=[image], name='augment'):
             for func, params in multi_objects_from_params(actions, self):
@@ -177,4 +177,10 @@ class Augment(object):
                     image = func(image, **params)
         if not ensure_shape:
             return image
-        return self._ensure_shape(image)
+        if ensure_shape == 'fill':
+            fill = True
+        elif ensure_shape == 'stretch':
+            fill = False
+        else:
+            raise ValueError('Unrecognized ensure_shape parameter.')
+        return self._ensure_shape(image, fill=fill)

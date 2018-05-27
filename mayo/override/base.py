@@ -225,6 +225,10 @@ class OverriderBase(object):
     def info(self):
         return self._info()
 
+    def estimate(self, layer_info, info):
+        """ Override this method to modify layer estimation statistics.  """
+        return layer_info
+
     @classmethod
     def finalize_info(cls, table):
         pass

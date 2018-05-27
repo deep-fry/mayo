@@ -1,7 +1,8 @@
 search:
     iter_max_epoch: 10
-    acc_base: 99.9
+    acc_base: 0.99
     tolerance: 0.001
+    # search_mode: one_epoch
     search_mode: fine_tune
     num_epochs: 1.0
     update: true
@@ -14,6 +15,6 @@ search:
         # range: [{from: 2, to: -2, scale: -1}]
         # link_width: [0, 1]
         target: width
-        range: {from: 8, to: 1, scale: -1, min_scale: -1, scale_update_factor: 0.5}
+        range: [{from: 8, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}]
         overriders: true
         update: true

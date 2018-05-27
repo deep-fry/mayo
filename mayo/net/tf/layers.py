@@ -1,3 +1,4 @@
+import numpy as np
 import tensorflow as tf
 from tensorflow.contrib import slim
 
@@ -72,10 +73,30 @@ class Layers(TFNetBase):
             output = activation_fn(output)
         return output
 
+    def _estimate_depthwise_convolution(self, output_shape, params):
+        # output feature map size (H x W x C_out)
+        macs = list(output_shape[1:])
+        # kernel size K_H x K_W
+        macs.append(self.estimator._kernel_size(params))
+        return self.estimator._multiply(macs)
+
+    def estimate_convolution(
+            self, node, info, input_shape, output_shape, params):
+        macs = self._estimate_depthwise_convolution(output_shape, params)
+        # input channel size C_in
+        macs *= input_shape[-1]
+        return self.estimator._apply_input_sparsity(info, {'macs': macs})
+
     def instantiate_depthwise_convolution(self, node, tensor, params):
         multiplier = params.pop('depth_multiplier', 1)
         return slim.separable_conv2d(
             tensor, num_outputs=None, depth_multiplier=multiplier, **params)
+
+    def estimate_depthwise_convolution(
+            self, node, info, input_shape, output_shape, params):
+        macs = self._estimate_depthwise_convolution(output_shape, params)
+        layer_info = self.estimator._apply_input_sparsity(info, {'macs': macs})
+        return self.estimator._mask_passthrough(info, layer_info)
 
     @staticmethod
     def _reduce_kernel_size_for_small_input(params, tensor):
@@ -103,14 +124,26 @@ class Layers(TFNetBase):
             return tensor
         return slim.avg_pool2d(tensor, **params)
 
+    def _estimate_unary_elementwise(
+            self, node, info, input_shape, output_shape, params):
+        return self.estimator._mask_passthrough(info, {})
+
+    estimate_average_pool = _estimate_unary_elementwise
+
     def instantiate_max_pool(self, node, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
         if self._should_pool_nothing(params):
             return tensor
         return slim.max_pool2d(tensor, **params)
 
+    estimate_max_pool = _estimate_unary_elementwise
+
     def instantiate_fully_connected(self, node, tensor, params):
         return slim.fully_connected(tensor, **params)
+
+    def estimate_fully_connected(
+            self, node, info, input_shape, output_shape, params):
+        return {'macs': input_shape[-1] * output_shape[-1]}
 
     def instantiate_softmax(self, node, tensor, params):
         return slim.softmax(tensor, **params)
@@ -136,17 +169,49 @@ class Layers(TFNetBase):
     def instantiate_concat(self, node, tensors, params):
         return tf.concat(tensors, **use_name_not_scope(params))
 
+    def estimate_concat(self, node, infos, input_shapes, output_shape, params):
+        masks = []
+        for info, shape in zip(infos, input_shapes):
+            hist = info.get('_mask') or np.ones(shape, dtype=bool)
+            masks.append(hist)
+        mask = []
+        for each in zip(*masks):
+            mask.append(np.concatenate(each, axis=-1))
+        density = self.estimator._mask_density(mask)
+        return {'_mask': mask, 'density': density}
+
     def instantiate_space_to_depth(self, node, tensors, params):
         return tf.space_to_depth(tensors, **use_name_not_scope(params))
 
     def instantiate_add(self, node, tensors, params):
         return tf.add_n(tensors, name=params['scope'])
 
+    def _estimate_join(self, masks, reducer):
+        mask = self.estimator._mask_join(masks, reducer)
+        density = self.estimator._mask_density(mask)
+        return {'_mask': mask, 'density': density}
+
+    def _estimate_binary_elementwise(self, infos, input_shapes, reducer):
+        mask_shape = input_shapes[0]
+        masks = []
+        for i in infos:
+            hist = i.get('_mask') or np.ones(mask_shape, dtype=bool)
+            masks.append(hist)
+        return self._estimate_join(masks, reducer)
+
+    def estimate_add(self, node, infos, input_shapes, output_shape, params):
+        return self._estimate_binary_elementwise(
+            infos, input_shapes, np.logical_or)
+
     def instantiate_mul(self, node, tensors, params):
         if len(tensors) != 2:
             raise ValueError(
                 'The function `tf.multiply` expects exactly two inputs.')
         return tf.multiply(tensors[0], tensors[1], name=params['scope'])
+
+    def estimate_mul(self, node, infos, input_shapes, output_shape, params):
+        return self._estimate_binary_elementwise(
+            infos, input_shapes, np.logical_and)
 
     def instantiate_activation(self, node, tensors, params):
         supported_modes = [
@@ -158,6 +223,8 @@ class Layers(TFNetBase):
                 .format(self, mode))
         func = getattr(tf.nn, mode)
         return func(tensors, name=params['scope'])
+
+    estimate_activation = _estimate_unary_elementwise
 
     def instantiate_identity(self, node, tensors, params):
         return tensors

@@ -90,14 +90,7 @@ _overrider:
             point: {1}
             should_update: true
             stochastic: false
-    biases: *quantizer
-    activation:
-        fixed:
-            type: mayo.override.FixedPointQuantizer
-            width: {2}
-            point: {3}
-            should_update: true
-            stochastic: false""".format(bitwidth, point, bitwidth, point)
+    biases: *quantizer""".format(bitwidth, point)
     name = filename + '/' + 'custom{}.yaml'.format(bitwidth)
     with open(name, 'w') as f:
         f.write(yaml_str)

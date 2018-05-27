@@ -67,7 +67,7 @@ class SearchBase(Train):
     def _search_iteration(self):
         system = self.config.system
         epoch = self.once()
-        self._update_stats(self.estimator.get_value('accuracy'))
+        self._update_stats(self.estimator.get_value('accuracy', 'train'))
         floor_epoch = math.floor(epoch)
         cp_interval = system.checkpoint.get('save.interval', 0)
 
@@ -91,7 +91,6 @@ class SearchBase(Train):
                 self.log_thresholds(self.loss_avg, self.acc_avg)
                 self.start_acc = None
                 return self.backward_policy()
-                # return self.backward_policy()
         return True
 
     def _exceed_max_epoch(self, epoch, max_epoch, early_stop=None):
@@ -99,14 +98,19 @@ class SearchBase(Train):
             baseline = (self.acc_base - self.start_acc) / float(max_epoch)
             acc_grad = (self.acc_avg - self.start_acc) / float(epoch)
             # increasing grad but slower than expected
-            if acc_grad > 0 and acc_grad < (baseline * early_stop):
+            if acc_grad > 0 and baseline > 0 \
+                    and acc_grad < (baseline * early_stop):
                 log.info('Early stop activated !')
                 return True
         return epoch >= max_epoch and epoch > 0
 
     def _fetch_as_overriders(self, info):
         self.targets = Targets(info)
-        for o in self.task.nets[0].overriders:
+        for key, o in self.task.nets[0].overriders.items():
+            if isinstance(o, list):
+                for each_o in o:
+                    self.targets.add_overrider(each_o)
+                continue
             self.targets.add_overrider(o)
 
     def _fetch_as_variables(self, info):
@@ -281,5 +285,10 @@ class SearchBase(Train):
         return np.sum(np.abs(after - before))
 
     def flush_quantize_loss(self, overriders):
-        for o in overriders:
-            self.estimator.flush(o.name)
+        for key, o in overriders.items():
+            if isinstance(o, list):
+                for each_o in o:
+                    self.estimator.flush(
+                        'q_loss/' + each_o.name)
+                continue
+            self.estimator.register('q_loss/' + o.name)

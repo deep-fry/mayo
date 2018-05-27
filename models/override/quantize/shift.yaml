@@ -10,3 +10,4 @@ _overrider:
             should_update: true
             stochastic: ulp
     biases: {<<: *weights}
+    activation: {<<: *weights}

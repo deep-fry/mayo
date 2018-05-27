@@ -38,7 +38,6 @@ class GlobalSearch(SearchBase, Profile):
         else:
             scale_check = self._fetch_scale() < tmp_tv.min_scale
             threshold_check = tmp_tv.end_thresholds[0] < tmp_tv.thresholds[0]
-
         if scale_check and threshold_check:
             # retrace the best ckpt
             self.load_checkpoint(self.best_ckpt)
@@ -213,6 +212,7 @@ class GlobalSearch(SearchBase, Profile):
         ranges = [self.parse_range(r) for r in ranges]
         q_losses = []
         items = []
+        import pdb; pdb.set_trace()
         for item in product(*ranges):
             log.info('Profile {} configuration for {}'.format(item, targets))
             if link_width and item[link_width[0]] > item[link_width[1]]:
@@ -246,8 +246,13 @@ class GlobalSearch(SearchBase, Profile):
         # registered quantization loss
         self.profile(overriders)
         q_loss = 0
-        for o in overriders:
-            q_loss += self.estimator.get_value(o.name)[0]
+        for key, o in overriders.items():
+            if isinstance(o, list):
+                for each_o in o:
+                    q_loss += self.estimator.get_value(
+                        'q_loss/' + each_o.name)[0]
+                continue
+            q_loss += self.estimator.get_value('q_loss' + o.name)[0]
         return q_loss
 
     def present(self, overriders, items, losses, targets):
