@@ -22,9 +22,9 @@ class YOLOv2(ImageDetectTaskBase):
     """
     _truth_keys = ['bbox/label', 'bbox', 'bbox/count']
     _default_scales = {
-        'object': 1,
-        'noobject': 0.5,
-        'coordinate': 5,
+        'object': 5,
+        'noobject': 1,
+        'coordinate': 1,
         'class': 1,
     }
 
@@ -75,11 +75,6 @@ class YOLOv2(ImageDetectTaskBase):
     @memoize_property
     def anchors(self):
         return tf.constant(self._anchors)
-
-    def _activate(self, box):
-        """ Activation functions for bounding box coordinates.  """
-        xy, wh = tf.split(box, [2, 2], axis=-1)
-        return tf.sigmoid(xy), tf.exp(wh)
 
     def _cell_to_global(self, xy, wh):
         """
@@ -158,7 +153,9 @@ class YOLOv2(ImageDetectTaskBase):
         best_anchor = best_anchor
         w_anchor, h_anchor = tf.unstack(best_anchor, axis=-1)
         # adjusted relative to cell row and col (num_truths x 4)
-        box = [x - xc_float, y - yc_float, w / w_anchor, h / h_anchor]
+        box = [
+            x - xc_float, y - yc_float,
+            tf.log(w / w_anchor), tf.log(h / h_anchor)]
         box = tf.stack(box, axis=-1)
         # boxes
         box = tf.scatter_nd(index, box, self._base_shape + [4])
@@ -228,18 +225,19 @@ class YOLOv2(ImageDetectTaskBase):
             raw_output,
             (batch, self.num_cells, self.num_cells,
              self.num_anchors, 4 + 1 + self.num_classes))
-        box_predict, obj_predict, hot_predict = tf.split(
+        box_predict, obj_predict, class_predict = tf.split(
             prediction, [4, 1, self.num_classes], axis=-1)
         obj_predict = tf.nn.sigmoid(obj_predict)
         obj_predict_squeeze = tf.squeeze(obj_predict, -1)
-        xy_predict, wh_predict = self._activate(box_predict)
+        xy_original, wh_original = tf.split(box_predict, [2, 2], axis=-1)
+        xy_predict, wh_predict = tf.sigmoid(xy_original), tf.exp(wh_original)
         prediction = {
             'raw': raw_output,
             'object': obj_predict_squeeze,
             'object_mask': obj_predict,
-            'box': tf.concat([xy_predict, wh_predict], axis=-1),
+            'coordinate': [xy_predict, wh_original],
             'outbox': self._cell_to_global(xy_predict, wh_predict),
-            'class': tf.nn.softmax(hot_predict),
+            'class': tf.nn.softmax(class_predict),
         }
         inputs = (
             prediction['object_mask'], prediction['class'],
@@ -254,11 +252,12 @@ class YOLOv2(ImageDetectTaskBase):
             'count': count_test,
         }
         # the original box and label values from the dataset
+        image = data['input']
         if truth:
             rawlabel, truebox, count = truth
             rawlabel += self.label_offset
             truebox = util.corners_to_box(truebox)
-            obj, box, label = tf.map_fn(
+            obj, box, label = map_fn(
                 self._truth_to_cell, (truebox, rawlabel, count),
                 dtype=(tf.float32, tf.float32, tf.int32))
             truth = {
@@ -270,7 +269,7 @@ class YOLOv2(ImageDetectTaskBase):
                 'rawbox': truebox,
                 'rawclass': rawlabel,
             }
-        return data['input'], prediction, truth
+        return image, prediction, truth
 
     @memoize_property
     def _colors(self):
@@ -343,17 +342,15 @@ class YOLOv2(ImageDetectTaskBase):
 
     def train(self, net, prediction, truth):
         """Training loss.  """
-        num_objects = tf.shape(truth['rawbox'])[1]
-
         # coordinate loss
-        coord_loss = tf.reduce_sum(
-            (prediction['box'] - truth['box']) ** 2, axis=-1)
-        coord_loss = tf.reduce_sum(truth['object'] * coord_loss)
+        xy_predict, wh_original = prediction['coordinate']
+        xy_truth, wh_truth = tf.split(truth['box'], [2, 2], axis=-1)
+        xy_dist = (xy_predict - xy_truth) ** 2
+        wh_dist = (wh_original - wh_truth) ** 2
+        xy_loss = tf.reduce_sum(xy_dist, axis=-1)
+        wh_loss = tf.reduce_sum(wh_dist, axis=-1)
+        coord_loss = tf.reduce_sum(truth['object'] * (xy_loss + wh_loss))
         coord_loss *= self.scales['coordinate']
-
-        # objectness loss
-        obj_loss = truth['object'] * (1 - prediction['object']) ** 2
-        obj_loss = self.scales['object'] * tf.reduce_sum(obj_loss)
 
         # class loss
         class_loss = (truth['class'] - prediction['class']) ** 2
@@ -363,6 +360,7 @@ class YOLOv2(ImageDetectTaskBase):
         # no-object loss
         # match shape
         # (batch x num_cells x num_cells x num_anchors x num_objects x 4)
+        num_objects = tf.shape(truth['rawbox'])[1]
         iou_score = self._iou_score(
             prediction['outbox'], truth['rawbox'], num_objects)
         is_obj_absent = tf.cast(
@@ -370,5 +368,9 @@ class YOLOv2(ImageDetectTaskBase):
         noobj_loss = (1 - truth['object_mask']) * is_obj_absent
         noobj_loss *= prediction['object_mask'] ** 2
         noobj_loss = self.scales['noobject'] * tf.reduce_sum(noobj_loss)
+
+        # objectness loss
+        obj_loss = truth['object'] * (1 - prediction['object']) ** 2
+        obj_loss = self.scales['object'] * tf.reduce_sum(obj_loss)
 
         return obj_loss + noobj_loss + coord_loss + class_loss

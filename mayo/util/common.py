@@ -13,7 +13,10 @@ def map_fn(func, inputs, dtype=None, static=False):
     if not static:
         return tf.map_fn(func, inputs, dtype=dtype)
     inputs = [tf.unstack(i, axis=0) for i in inputs]
-    return list(zip(*(func(args) for args in zip(*inputs))))
+    outputs = []
+    for args in zip(*inputs):
+        outputs.append(func(args))
+    return [tf.stack(o, axis=0) for o in zip(*outputs)]
 
 
 def pad_to_shape(tensor, shape, default_value=0):
