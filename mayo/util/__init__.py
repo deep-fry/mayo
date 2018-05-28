@@ -1,5 +1,5 @@
 from mayo.util.common import (
-    ShapeError, debug, pad_to_shape, null_scope,
+    map_fn, ShapeError, pad_to_shape, null_scope,
     memoize_method, memoize_property)
 from mayo.util.change import Change
 from mayo.util.format import format_shape, Percent, unknown, Table
@@ -11,7 +11,7 @@ from mayo.util.collections import (
 
 
 __all__ = [
-    ShapeError, debug, pad_to_shape, null_scope,
+    ShapeError, pad_to_shape, null_scope,
     memoize_method, memoize_property,
     Change, format_shape, Percent, unknown, Table,
     import_from_file, import_from_dot_path, import_from_string,

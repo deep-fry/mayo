@@ -48,8 +48,8 @@ class ResourceEstimator(object):
         formatter: calls .register_print with `formatter`.
         debugger: function to print extra debug info.
         """
-        if not isinstance(tensor, (tf.Tensor, tf.Variable)):
-            raise TypeError('We expect {!r} to be a Tensor'.format(tensor))
+        if not isinstance(tensor, (list, tuple, tf.Tensor, tf.Variable)):
+            raise TypeError('We expect {!r} to be a Tensor.'.format(tensor))
         history = self.default_history if history is None else history
         node = 'global' if node is None else node
         layer = self.operations.setdefault(node, {})
@@ -89,9 +89,19 @@ class ResourceEstimator(object):
             history = self.default_history
         stats = self.statistics.setdefault(node, {})
         values = stats.setdefault(name, [])
-        if history != 'infinite':
+        if history != 'infinite' and history != 'running_mean':
             while len(values) >= history:
                 values.pop(0)
+        if history == 'running_mean':
+            if len(values) >= 1:
+                # Wellford's Method, better numerical stability
+                mean, count = values[0]
+                mean += (value - mean) / float(count)
+                count += 1
+                values[0] = (mean, count)
+            else:
+                values.append((value, 0))
+            return
         values.append(value)
 
     def append(self, statistics):
@@ -106,12 +116,22 @@ class ResourceEstimator(object):
             for key, value in stats.items():
                 values = curr_stats.setdefault(key, [])
                 history = prop[key]['history']
-                if history != 'infinite':
+                if history != 'infinite' and history != 'running_mean':
                     while len(values) >= history:
                         values.pop(0)
                 transformer = prop[key]['transformer']
                 if transformer:
                     value = transformer(value)
+                if history == 'running_mean':
+                    if len(values) >= 1:
+                        # Wellford's Method, better numerical stability
+                        mean, count = values[0]
+                        mean += (value - mean) / float(count)
+                        count += 1
+                        values[0] = (mean, count)
+                    else:
+                        values.append((value, 1))
+                    continue
                 values.append(value)
 
     def max_len(self, name=None):
@@ -147,7 +167,8 @@ class ResourceEstimator(object):
         return self.statistics[node or 'global'][name]
 
     def flush(self, name, node=None):
-        del self.statistics[node or 'global'][name]
+        if self.statistics != {}:
+            del self.statistics[node or 'global'][name]
 
     def flush_all(self, name):
         for node, stats in self.statistics.items():

@@ -10,22 +10,36 @@ class Profile(Train):
     def __init__(self, config):
         super().__init__(config)
         self.net = self.task.nets[0]
+        self._run_train_ops = False
+        self.config.system.max_epochs = 1
 
-    def profile(self):
+    def profile(self, overriders=None):
         log.info('Start profiling for one epoch...')
         if self.config.system.profile.activations:
             self._register_activations()
+        if overriders:
+            self._register_quantize_loss(overriders)
         # disable checkpoint saving and train_op
         self.config.system.checkpoint.save = False
-        self._run_train_ops = False
         # reset num_epochs and stop at 1 epoch
         self.reset_num_epochs()
-        self.config.system.max_epochs = 1
         # start training
         self.train()
         # save profiling results
         self.info()
         self.save()
+
+    def _register_quantize_loss(self, overriders):
+        for key, o in overriders.items():
+            if isinstance(o, list):
+                for each_o in o:
+                    loss = each_o.quantize_loss()
+                    self.estimator.register(
+                        loss, 'q_loss/' + each_o.name, history='running_mean')
+                continue
+            loss = o.quantize_loss()
+            self.estimator.register(
+                loss, 'q_loss/' + o.name, history='running_mean')
 
     def _register_activations(self):
         history = self.config.dataset.num_examples_per_epoch.get(self.mode)

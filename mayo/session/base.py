@@ -129,6 +129,8 @@ class SessionBase(object, metaclass=SessionMeta):
 
     @property
     def num_examples(self):
+        if self.mode == 'test':
+            return len(self.task._preprocessor.files)
         return self.config.dataset.num_examples_per_epoch[self.mode]
 
     @property
@@ -345,6 +347,14 @@ class SessionBase(object, metaclass=SessionMeta):
         else:
             results = self.raw_run(ops, **kwargs)
         return results
+
+    def debug(self, tensors):
+        def wrapped(t):
+            __import__('ipdb').set_trace()
+            return t
+        self.estimator.register(
+            tensors, 'debug', history=1, transformer=wrapped)
+        return tensors
 
     def interact(self):
         from IPython import embed

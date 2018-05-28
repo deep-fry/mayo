@@ -50,7 +50,7 @@ class Classify(ImageTaskBase):
 
     def _accuracy(self, prediction, truth, num_tops=1):
         top = self._top(prediction, truth, num_tops)
-        return tf.reduce_sum(top) / top.shape.num_elements()
+        return tf.reduce_sum(top) / self.config.system.batch_size_per_gpu
 
     @memoize_method
     def _train_setup(self, prediction, truth):
@@ -68,8 +68,7 @@ class Classify(ImageTaskBase):
         return tf.losses.softmax_cross_entropy(
             logits=prediction, onehot_labels=truth)
 
-    @memoize_method
-    def _eval_setup(self):
+    def eval(self):
         def metrics(net, prediction, truth):
             top1 = self._top(prediction, truth, 1)
             top5 = self._top(prediction, truth, 5)
@@ -95,11 +94,7 @@ class Classify(ImageTaskBase):
                 tensor, name, 'eval', history='infinite',
                 formatter=functools.partial(formatter, name=name))
 
-    def eval(self, net, prediction, truth):
-        # set up eval estimators, once and for all predictions and truths
-        return self._eval_setup()
-
-    def eval_final_stats(self):
+    def post_eval(self):
         stats = {}
         num_examples = self.session.num_examples
         num_remaining = num_examples % self.session.batch_size
@@ -115,6 +110,7 @@ class Classify(ImageTaskBase):
         log.info(
             '    top1: {}, top5: {} [{} images]'
             .format(stats['top1'], stats['top5'], num_examples))
+        return stats
 
     def test(self, names, inputs, predictions):
         results = {}
