@@ -39,7 +39,7 @@ def main():
             print('Training starts for {} bits'.format(b))
             lenet_command = './my datasets/mnist.yaml {} models/override/lenet5.yaml models/override/_global.yaml trainers/lenet5.yaml system.checkpoint.load=pretrained system.max_epochs={} reset-num-epochs train'.format(
                 name, max_epochs)
-            cifar_command = ('./my datasets/cifar10.yaml {} models/cifarnet.yaml trainers/cifarnet.yaml system.checkpoint.load=null system.checkpoint.save.interval=10 system.num_gpus=4 system.batch_size_per_gpu=1024 system.max_epochs={} reset-num-epochs train'.format(
+            cifar_command = ('./my datasets/cifar10.yaml {} models/override/cifarnet.yaml models/override/_global.yaml trainers/cifarnet.yaml system.checkpoint.load=null system.checkpoint.save.interval=10 system.num_gpus=4 system.batch_size_per_gpu=1024 system.max_epochs={} reset-num-epochs train'.format(
                 name, max_epochs))
             subprocess.run(lenet_command, shell=True)
             print('Training done')
