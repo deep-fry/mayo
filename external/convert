@@ -216,6 +216,7 @@ The universal deep learning framework saved model converter.
 Usage:
     {executable} <from_file> info [options]
     {executable} <from_file> to <to_file> [options]
+    {executable} <from_file> replace <to_file>
 
 Arguments:
     * <from_file> can be:
@@ -273,6 +274,12 @@ def _porter(file, porters):
         raise ValueError('Unrecognized suffix {!r}'.format(suffix))
 
 
+def replace_vars(var_map, target_var_map):
+    for key, item in var_map.items():
+        target_var_map[key] = item
+    return target_var_map
+
+
 def main():
     args = docopt(usage(), version=__version__)
     from_file = args['<from_file>']
@@ -299,6 +306,17 @@ def main():
         exporter_cls = _porter(to_file, _exporters)
         exporter = exporter_cls(importer.var_to_tensor, rules)
         exporter.export(to_file, args['--dry-run'])
+    elif args['replace']:
+        target_file = args['<to_file>']
+        # import target
+        importer_cls = _porter(target_file, _importers)
+        target_importer = importer_cls(target_file, rules)
+        # replace
+        replaced_var_to_tensor = replace_vars(
+            importer.var_to_tensor, target_importer.var_to_tensor)
+        exporter_cls = _porter(target_file, _exporters)
+        exporter = exporter_cls(replaced_var_to_tensor, rules)
+        exporter.export(target_file, args['--dry-run'])
     else:
         raise TypeError('Do not know what we should do.')
 
