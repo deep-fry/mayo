@@ -40,7 +40,7 @@ class SearchBase(Train):
             self.search_overriders()
             return True
         search_func = getattr(self, 'search_simple')
-        search_func()
+        search_func(self.search_mode)
         return False
 
     def assign_targets(self, overrider, targets, values):

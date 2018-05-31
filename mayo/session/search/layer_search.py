@@ -1,11 +1,13 @@
 import yaml
 import numpy as np
-
+import tensorflow as tf
 from itertools import product
+
 from mayo.session.search.base import SearchBase
 from mayo.session.profile import Profile
 from mayo.override.base import OverriderBase
 from mayo.log import log
+from mayo.util import Table
 
 
 class LayerwiseSearch(SearchBase, Profile):
@@ -144,7 +146,8 @@ class LayerwiseSearch(SearchBase, Profile):
             return int(old_scale * factor)
         return old_scale * factor
 
-    def search_simple(self):
+    def search_simple(self, search_mode):
+        print('Search progressing ...')
         config = self.config.search
         session = self.task.session
         overriders = self.task.nets[0].overriders
@@ -152,33 +155,36 @@ class LayerwiseSearch(SearchBase, Profile):
         ranges = config.parameters.range
         num_epochs = config.pop('num_epochs', 'one_shot')
         training = config.pop('training', False)
+        export_ckpt = config.pop('export_ckpt', False)
         link_width = self.config.search.parameters.pop('link_width', None)
         if len(ranges) == 1:
             ranges = len(targets) * ranges
         ranges = [self.parse_range(r) for r in ranges]
         q_losses = {}
         items = {}
-        for o in overriders:
-            q_loss = 0
-            q_losses[o.name] = []
-            items[o.name] = []
-            for item in product(*ranges):
-                log.info(
-                    'Profile {} configuration for {} in overrider {}'.format(
-                        item, targets, o.name))
-                if link_width and item[link_width[0]] > item[link_width[1]]:
-                    continue
-                self.assign_targets(o, targets, item)
-                if num_epochs == 'one_shot':
-                    before, after = session.run([o.before, o.after])
-                    q_loss = self.np_quantize_loss(before, after)
-                else:
-                    q_loss = self.profiled_search(
-                        training, num_epochs, o, targets, item)
-                log.info('Profiled quantization loss is {}'.format(q_loss))
-                q_losses[o.name].append(q_loss)
-                items[o.name].append(item)
-        self.present(overriders, items, q_losses, targets)
+        # lets decide priority first
+        macs = self.task.nets[0].estimate()
+        priority_ranks = [(key, macs[key]) for key, o in overriders.items()]
+        priority_ranks = sorted(
+            priority_ranks, key=lambda x:x[1]['macs'], reverse=True)
+        for key, _ in priority_ranks:
+            for o in overriders[key]:
+                q_loss = 0
+                q_losses[o.name] = []
+                items[o.name] = []
+                for item in product(*ranges):
+                    if link_width and item[link_width[0]] > item[link_width[1]]:
+                        continue
+                    self.assign_targets(o, targets, item)
+                    if num_epochs == 'one_shot' or search_mode == 'one_shot':
+                        before, after = session.run([o.before, o.after])
+                        q_loss = self.np_quantize_loss(before, after)
+                    else:
+                        q_loss = self.profiled_search(
+                            training, num_epochs, o, targets, item)
+                    q_losses[o.name].append(q_loss)
+                    items[o.name].append(item)
+        self.present(overriders, items, q_losses, targets, export_ckpt)
         return False
 
     def profiled_search(
@@ -194,12 +200,28 @@ class LayerwiseSearch(SearchBase, Profile):
         self.profile(overriders)
         return self.estimator.get_value(overrider.name)[0]
 
-    def present(self, overriders, items, losses, targets):
-        for o in overriders:
-            sel_loss = np.min(np.array(losses[o.name]))
-            sel_arg = np.argmin(np.array(losses[o.name]))
-            formatter = 'overrider: {}, suggested bitwidths: {} for {}'
-            formatter += ' quantize loss: {}'
-            log.info(formatter.format(
-                o.name, items[o.name][sel_arg], targets, sel_loss))
+    def present(self, overriders, items, losses, targets, export_ckpt):
+        table = Table(['variable', 'suggested value', 'target', 'loss'])
+        filter_variables = []
+        for key, os in overriders.items():
+            for o in os:
+                for target in targets:
+                    sel_loss = np.min(np.array(losses[o.name]))
+                    sel_arg = np.argmin(np.array(losses[o.name]))
+                    name = o.name
+                    if len(name) > 4:
+                        name = o.name.split('/')
+                        name = '/'.join(name[-4:])
+                    if isinstance(getattr(o, target), tf.Variable):
+                        filter_variables.append(getattr(o, target))
+                    table.add_row((
+                        name, items[o.name][sel_arg], target, sel_loss))
+        if len(filter_variables) and export_ckpt:
+            self.save_variables(filter_variables)
+        print(table.format())
         return
+
+    def save_variables(self, variables):
+        log.info('Saving suggested targeting values to a checkpoint')
+        saver = tf.train.Saver(variables)
+        saver.save(self.tf_session, './suggestion', write_meta_graph=False)

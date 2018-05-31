@@ -51,7 +51,7 @@ model.layers:
         overrider:
             weights: *playground
             biases: *playground
-            # gradient: {weights: *playground}
+            gradient: {weights: *playground}
             # activation: *playground
             # activation:
             #     type: mayo.override.ChannelPruner
