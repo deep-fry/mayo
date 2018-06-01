@@ -100,6 +100,8 @@ class Config(ConfigBase):
             ipdb.post_mortem(etb)
 
     def _setup_excepthook(self):
+        if 'VSCODE_PID' in os.environ:
+            return
         sys.excepthook = self._excepthook
 
     def _setup_log_level(self):
