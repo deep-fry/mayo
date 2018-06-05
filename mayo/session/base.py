@@ -292,7 +292,7 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
-        for node, overriders in self.task.nets[0].overriders.items():
+        for _, overriders in self.task.nets[0].overriders.items():
             for o in overriders:
                 o.assign_parameters()
 
