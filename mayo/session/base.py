@@ -253,10 +253,14 @@ class SessionBase(object, metaclass=SessionMeta):
                 else:
                     shape = format_shape(shape)
                 layer_info.add_row((node.formatted_name(), shape) + values)
-            formatted_footer = [''] * len(keys)
-            formatted_footer[keys.index('macs')] = sum(
-                layer_info.get_column('macs'))
-            layer_info.set_footer(['', ''] + formatted_footer)
+            try:
+                macs = sum(layer_info.get_column('macs'))
+            except ValueError:
+                pass
+            else:
+                formatted_footer = [''] * len(keys)
+                formatted_footer[keys.index('macs')] = macs
+                layer_info.set_footer(['', ''] + formatted_footer)
             info_dict['layers'] = layer_info
         if self.task.nets[0].overriders:
             info_dict['overriders'] = self._overrider_info(plumbing)
