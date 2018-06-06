@@ -51,6 +51,7 @@ class Logger(object):
         self._last_is_update = False
         self._last_use_spinner = True
         self._last_level = self.level
+        self._once = []
 
     @property
     def width(self):
@@ -153,7 +154,11 @@ class Logger(object):
             sign = self._frame_info()
         return '{} {}'.format(self.colored(sign, level), text)
 
-    def log(self, text, level='info', update=False, spinner=True):
+    def log(self, text, level='info', update=False, spinner=True, once=None):
+        if once is not None:
+            if once in self._once:
+                return
+            self._once.append(once)
         num_level = self._levels[level]
         if self._level > num_level:
             return
@@ -196,20 +201,20 @@ class Logger(object):
             elif r == 'q':
                 sys.exit(-1)
 
-    def debug(self, text, update=False, spinner=True):
-        return self.log(text, 'debug', update, spinner)
+    def debug(self, text, update=False, spinner=True, once=None):
+        return self.log(text, 'debug', update, spinner, once)
 
-    def info(self, text, update=False, spinner=True):
-        return self.log(text, 'info', update, spinner)
+    def info(self, text, update=False, spinner=True, once=None):
+        return self.log(text, 'info', update, spinner, once)
 
-    def key(self, text, update=False, spinner=True):
-        return self.log(text, 'key', update, spinner)
+    def key(self, text, update=False, spinner=True, once=None):
+        return self.log(text, 'key', update, spinner, once)
 
-    def warn(self, text, update=False, spinner=True):
-        return self.log(text, 'warn', update, spinner)
+    def warn(self, text, update=False, spinner=True, once=None):
+        return self.log(text, 'warn', update, spinner, once)
 
-    def error(self, text, update=False, spinner=True):
-        return self.log(text, 'error', update, spinner)
+    def error(self, text, update=False, spinner=True, once=None):
+        return self.log(text, 'error', update, spinner, once)
 
     def error_exit(self, error_msg):
         with self.use_pause_level('off'):
