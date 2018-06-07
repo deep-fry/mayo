@@ -35,10 +35,10 @@ class Profile(Train):
                 percentile = tf.contrib.distributions.percentile(
                     each_o.after, percentile)
                 self.estimator.register(
-                    each_o.after, 'avg_' + each_o.name, node=key
+                    each_o.after, 'avg_' + each_o.name, node=key,
                     history='running_mean')
                 self.estimator.register(
-                    percentile, 'max_' + each_o.name, node=key
+                    percentile, 'max_' + each_o.name, node=key,
                     history='running_mean')
 
     def _register_activations(self):

@@ -203,21 +203,3 @@ class LayerwiseSearch(SearchBase, Profile):
             model_name += '_profile_' + self.config.search.search_mode
             self.save_checkpoint(model_name)
         return
-
-    def save_variables(self, vars_to_values):
-        verify_varables = []
-        for var, targets_to_values in vars_to_values.items():
-            for target, value in targets_to_values.items():
-                setattr(var, target, value)
-                verify_varables.append(getattr(var, target))
-        verify_varables = self.run(verify_varables)
-
-        def parse_overriders(base):
-            overriders = base.task.nets[0].overriders
-            keys = list(overriders.keys())
-            return keys, overriders
-
-        import pdb; pdb.set_trace()
-        # log.info('Saving suggested targeting values to a checkpoint')
-        # saver = tf.train.Saver(variables)
-        # saver.save(self.tf_session, './suggestion', write_meta_graph=False)
