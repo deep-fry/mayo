@@ -146,60 +146,58 @@ class LayerwiseSearch(SearchBase, Profile):
 
     def search_simple(self):
         config = self.config.search
-        session = self.task.session
         overriders = self.task.nets[0].overriders
-        targets = config.parameters.target
-        ranges = config.parameters.range
+        targets = config.parameters.targets
         num_epochs = config.pop('num_epochs', 'one_shot')
-        training = config.pop('training', False)
-        link_width = self.config.search.parameters.pop('link_width', None)
-        if len(ranges) == 1:
-            ranges = len(targets) * ranges
-        ranges = [self.parse_range(r) for r in ranges]
-        q_losses = {}
-        items = {}
-        for o in overriders:
-            q_loss = 0
-            q_losses[o.name] = []
-            items[o.name] = []
-            for item in product(*ranges):
-                log.info(
-                    'Profile {} configuration for {} in overrider {}'.format(
-                        item, targets, o.name))
-                if link_width and item[link_width[0]] > item[link_width[1]]:
-                    continue
-                self.assign_targets(o, targets, item)
-                if num_epochs == 'one_shot':
-                    before, after = session.run([o.before, o.after])
-                    q_loss = self.np_quantize_loss(before, after)
+        # training = config.pop('training', False)
+        export_ckpt = config.pop('export_ckpt', False)
+        macs = self.task.nets[0].estimate()
+        priority_ranks = [(key, macs[key]) for key, o in overriders.items()]
+        priority_ranks = sorted(
+            priority_ranks, key=lambda x:x[1]['macs'], reverse=True)
+        target_values = {}
+        for key, _ in priority_ranks:
+            for o in overriders[key]:
+                target_values[o] = {}
+                if num_epochs == 'one_shot' or search_mode == 'one_shot':
+                    o.update()
+                    for target in targets:
+                        target_values[o][target] = self.run(getattr(o, target))
                 else:
-                    q_loss = self.profiled_search(
-                        training, num_epochs, o, targets, item)
-                log.info('Profiled quantization loss is {}'.format(q_loss))
-                q_losses[o.name].append(q_loss)
-                items[o.name].append(item)
-        self.present(overriders, items, q_losses, targets)
+                    self.profiled_search(
+                        config.training, num_epochs, overriders, targets)
+        self.present(overriders, target_values, targets, export_ckpt)
         return False
 
     def profiled_search(
-            self, training, num_epochs, overrider, targets, item):
-        overriders = self.task.nets[0].overriders
-        self.flush_quantize_loss(overriders)
+            self, training, num_epochs, overriders, targets):
         # decide to train or not
         self._run_train_ops = training
         if isinstance(num_epochs, (int, float)):
             self.config.system.max_epochs = num_epochs
-        self.assign_targets(overrider, targets, item)
+        for o in self.generate_overriders(overriders):
+            # freeze overriding
+            setattr(o, 'after', o.before)
+        # keys = list(overriders.keys())
+        # tmp = overriders[keys[0]][0]
         # registered quantization loss
         self.profile(overriders)
-        return self.estimator.get_value(overrider.name)[0]
+        for o in self.generate_overriders(overriders):
+            # construct after, overrde again
+            setattr(o, 'after', o._apply(o.before))
 
-    def present(self, overriders, items, losses, targets):
-        for o in overriders:
-            sel_loss = np.min(np.array(losses[o.name]))
-            sel_arg = np.argmin(np.array(losses[o.name]))
-            formatter = 'overrider: {}, suggested bitwidths: {} for {}'
-            formatter += ' quantize loss: {}'
-            log.info(formatter.format(
-                o.name, items[o.name][sel_arg], targets, sel_loss))
+    def present(self, overriders, target_values, targets, export_ckpt):
+        table = Table(['variable', 'suggested value'])
+        for o in self.generate_overriders(overriders):
+            name = o.name
+            if len(name) > 4:
+                name = o.name.split('/')
+                name = '/'.join(name[-4:])
+            table.add_row((
+                name, target_values[o]))
+        print(table.format())
+        if export_ckpt:
+            model_name = self.config.model.name
+            model_name += '_profile_' + self.config.search.search_mode
+            self.save_checkpoint(model_name)
         return

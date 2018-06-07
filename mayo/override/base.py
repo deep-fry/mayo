@@ -239,9 +239,6 @@ class OverriderBase(object):
         return '<{} overrides {!r}>'.format(
             self.__class__.__qualname__, self.name)
 
-    def quantize_loss(self):
-        return tf.reduce_sum(tf.abs(self.after - self.before))
-
 
 class EmptyOverrider(OverriderBase):
     def _apply(self, value):

@@ -13,12 +13,12 @@ class Profile(Train):
         self._run_train_ops = False
         self.config.system.max_epochs = 1
 
-    def profile(self, overriders=None):
+    def profile(self, overriders=None, percentile=100):
         log.info('Start profiling for one epoch...')
         if self.config.system.profile.activations:
             self._register_activations()
         if overriders:
-            self._register_quantize_loss(overriders)
+            self._register_max_values(overriders, percentile)
         # disable checkpoint saving and train_op
         self.config.system.checkpoint.save = False
         # reset num_epochs and stop at 1 epoch
@@ -29,17 +29,17 @@ class Profile(Train):
         self.info()
         self.save()
 
-    def _register_quantize_loss(self, overriders):
+    def _register_max_values(self, overriders, percentile):
         for key, o in overriders.items():
-            if isinstance(o, list):
-                for each_o in o:
-                    loss = each_o.quantize_loss()
-                    self.estimator.register(
-                        loss, 'q_loss/' + each_o.name, history='running_mean')
-                continue
-            loss = o.quantize_loss()
-            self.estimator.register(
-                loss, 'q_loss/' + o.name, history='running_mean')
+            for each_o in o:
+                percentile = tf.contrib.distributions.percentile(
+                    each_o.after, percentile)
+                self.estimator.register(
+                    each_o.after, 'avg_' + each_o.name, node=key
+                    history='running_mean')
+                self.estimator.register(
+                    percentile, 'max_' + each_o.name, node=key
+                    history='running_mean')
 
     def _register_activations(self):
         history = self.config.dataset.num_examples_per_epoch.get(self.mode)

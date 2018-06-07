@@ -51,6 +51,11 @@ class SearchBase(Train):
     def parse_range(self, r):
         return [i for i in range(r['from'], r['to'] + r['scale'], r['scale'])]
 
+    def generate_overriders(self, overriders):
+        for key, os in overriders.items():
+            for o in os:
+                yield o
+
     def search_overriders(self):
         self._init_scales()
         self._reset_stats()
@@ -283,12 +288,3 @@ class SearchBase(Train):
 
     def np_quantize_loss(self, before, after):
         return np.sum(np.abs(after - before))
-
-    def flush_quantize_loss(self, overriders):
-        for key, o in overriders.items():
-            if isinstance(o, list):
-                for each_o in o:
-                    self.estimator.flush(
-                        'q_loss/' + each_o.name)
-                continue
-            self.estimator.register('q_loss/' + o.name)
