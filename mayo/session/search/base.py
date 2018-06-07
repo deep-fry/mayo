@@ -7,6 +7,7 @@ import pickle
 from mayo.log import log
 from mayo.session.util import Targets
 from mayo.session.train import Train
+from itertools import product
 
 
 class SearchBase(Train):
@@ -50,6 +51,16 @@ class SearchBase(Train):
 
     def parse_range(self, r):
         return [i for i in range(r['from'], r['to'] + r['scale'], r['scale'])]
+
+    def generate_ranges(self, t_to_r):
+        ranges = []
+        targets = []
+        for target, range in dict(t_to_r).items():
+            ranges.append(self.parse_range(range))
+            targets.append(target)
+        for comb_range in product(*ranges):
+            yield (targets, list(comb_range))
+
 
     def search_overriders(self):
         self._init_scales()

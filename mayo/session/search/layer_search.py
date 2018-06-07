@@ -1,7 +1,6 @@
 import yaml
 import numpy as np
 import tensorflow as tf
-from itertools import product
 
 from mayo.session.search.base import SearchBase
 from mayo.session.profile import Profile
@@ -151,17 +150,12 @@ class LayerwiseSearch(SearchBase, Profile):
         config = self.config.search
         session = self.task.session
         overriders = self.task.nets[0].overriders
-        targets = config.parameters.target
-        ranges = config.parameters.range
+        target_range = config.parameters.target_range
         num_epochs = config.pop('num_epochs', 'one_shot')
         training = config.pop('training', False)
         export_ckpt = config.pop('export_ckpt', False)
-        link_width = self.config.search.parameters.pop('link_width', None)
-        if len(ranges) == 1:
-            ranges = len(targets) * ranges
-        ranges = [self.parse_range(r) for r in ranges]
         q_losses = {}
-        items = {}
+        items_values = {}
         # lets decide priority first
         macs = self.task.nets[0].estimate()
         priority_ranks = [(key, macs[key]) for key, o in overriders.items()]
@@ -171,11 +165,9 @@ class LayerwiseSearch(SearchBase, Profile):
             for o in overriders[key]:
                 q_loss = 0
                 q_losses[o.name] = []
-                items[o.name] = []
-                for item in product(*ranges):
-                    if link_width and item[link_width[0]] > item[link_width[1]]:
-                        continue
-                    self.assign_targets(o, targets, item)
+                items_values[o.name] = []
+                for targets, items, in self.generate_ranges(target_range):
+                    self.assign_targets(o, targets, items)
                     if num_epochs == 'one_shot' or search_mode == 'one_shot':
                         before, after = session.run([o.before, o.after])
                         q_loss = self.np_quantize_loss(before, after)
@@ -183,8 +175,8 @@ class LayerwiseSearch(SearchBase, Profile):
                         q_loss = self.profiled_search(
                             training, num_epochs, o, targets, item)
                     q_losses[o.name].append(q_loss)
-                    items[o.name].append(item)
-        self.present(overriders, items, q_losses, targets, export_ckpt)
+                    items_values[o.name].append(items)
+        self.present(overriders, items_values, q_losses, targets, export_ckpt)
         return False
 
     def profiled_search(
@@ -202,9 +194,10 @@ class LayerwiseSearch(SearchBase, Profile):
 
     def present(self, overriders, items, losses, targets, export_ckpt):
         table = Table(['variable', 'suggested value', 'target', 'loss'])
-        filter_variables = []
+        filter_values = {}
         for key, os in overriders.items():
             for o in os:
+                o_values = {}
                 for target in targets:
                     sel_loss = np.min(np.array(losses[o.name]))
                     sel_arg = np.argmin(np.array(losses[o.name]))
@@ -213,15 +206,29 @@ class LayerwiseSearch(SearchBase, Profile):
                         name = o.name.split('/')
                         name = '/'.join(name[-4:])
                     if isinstance(getattr(o, target), tf.Variable):
-                        filter_variables.append(getattr(o, target))
+                        o_values[target] = items[o.name][sel_arg]
                     table.add_row((
                         name, items[o.name][sel_arg], target, sel_loss))
-        if len(filter_variables) and export_ckpt:
-            self.save_variables(filter_variables)
+                filter_values[o] = o_values
         print(table.format())
+        if len(filter_values) and export_ckpt:
+            self.save_variables(filter_values)
         return
 
-    def save_variables(self, variables):
-        log.info('Saving suggested targeting values to a checkpoint')
-        saver = tf.train.Saver(variables)
-        saver.save(self.tf_session, './suggestion', write_meta_graph=False)
+    def save_variables(self, vars_to_values):
+        verify_varables = []
+        for var, targets_to_values in vars_to_values.items():
+            for target, value in targets_to_values.items():
+                setattr(var, target, value)
+                verify_varables.append(getattr(var, target))
+        verify_varables = self.run(verify_varables)
+
+        def parse_overriders(base):
+            overriders = base.task.nets[0].overriders
+            keys = list(overriders.keys())
+            return keys, overriders
+
+        import pdb; pdb.set_trace()
+        # log.info('Saving suggested targeting values to a checkpoint')
+        # saver = tf.train.Saver(variables)
+        # saver.save(self.tf_session, './suggestion', write_meta_graph=False)
