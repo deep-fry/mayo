@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow.python.ops.init_ops import Initializer
 
 from mayo.log import log
-from mayo.util import memoize_property
+from mayo.util import memoize_property, ShapeError
 
 
 class OverriderError(Exception):
@@ -136,7 +136,13 @@ class OverriderBase(object):
             self.parameters[name].__get__(self, None)
             # assignment
             var = self._parameter_variables[name]
-            self.session.assign(var, value, raw_run=True)
+            try:
+                self.session.assign(var, value, raw_run=True)
+            except ValueError:
+                raise ShapeError(
+                    'Variable {!r} in overrider {!r} expects '
+                    'its assigned value {!r} to match its shape {!r}.'
+                    .format(var, self, value, var.shape))
             # add our variable to the list of initialized_variables
             if var not in self.session.initialized_variables:
                 self.session.initialized_variables.append(var)
