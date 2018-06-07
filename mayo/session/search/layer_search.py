@@ -184,6 +184,7 @@ class LayerwiseSearch(SearchBase, Profile):
         # tmp = overriders[keys[0]][0]
         # registered quantization loss
         self.profile(overriders)
+        import pdb; pdb.set_trace()
         for o in self.generate_overriders(overriders):
             # construct after, overrde again
             setattr(o, 'after', o._apply(o.before))
