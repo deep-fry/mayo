@@ -132,7 +132,7 @@ class Preprocess(object):
 
         num_threads = self.system.preprocess.num_threads
         dataset = dataset.map(func, num_parallel_calls=num_threads)
-        if self.mode in ['train', 'eval']:
+        if self.mode in ['train', 'validate']:
             dataset = dataset.prefetch(num_threads * batch_size)
             if self.mode == 'train':
                 buffer_size = min(1024, 10 * batch_size)

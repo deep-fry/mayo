@@ -7,6 +7,7 @@ import pickle
 from mayo.log import log
 from mayo.session.util import Targets
 from mayo.session.train import Train
+from itertools import product
 
 
 class SearchBase(Train):
@@ -40,7 +41,7 @@ class SearchBase(Train):
             self.search_overriders()
             return True
         search_func = getattr(self, 'search_simple')
-        search_func()
+        search_func(self.search_mode)
         return False
 
     def assign_targets(self, overrider, targets, values):

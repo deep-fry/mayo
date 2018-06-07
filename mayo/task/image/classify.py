@@ -24,10 +24,11 @@ class Classify(ImageTaskBase):
         for i, (each_ties, each_num_ties, each_threshold) in iterer:
             if each_num_ties == 1:
                 continue
-            indices = np.nonzero(each_ties)
+            indices = np.nonzero(each_ties).tolist()
             log.warn(
                 'Top-k of batch index {} has {} tie values {} at indices {}.'
-                .format(i, each_num_ties, each_threshold, indices))
+                .format(i, int(each_num_ties), int(each_threshold), indices),
+                once='ties')
         return num_ties
 
     def _top(self, prediction, truth, num_tops=1):

@@ -232,6 +232,7 @@ Arguments:
     def cli_overriders_assign(self):
         """Assign overridden values to original parameters.  """
         self._get_session('train').overriders_assign()
+        self._get_session('train').save_checkpoint('assigned')
 
     def cli_overriders_reset(self):
         """Reset the internal state of overriders.  """

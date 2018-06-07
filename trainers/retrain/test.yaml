@@ -8,6 +8,7 @@ search:
     training: true
     run_status: normal
     early_stop: 0.7
+    export_ckpt: true
     parameters:
         type: mayo.override.DGQuantizer
         # type: mayo.override.FloatingPointQuantizer
@@ -15,7 +16,7 @@ search:
         # targets: ['mantissa_width', 'exponent_bias']
         targets: ['point']
         # link_width: [0, 1]
-        target: width
-        range: [{from: 8, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}]
-        overriders: true
-        update: true
+        # target: width
+        # range: [{from: 8, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}]
+        # overriders: true
+        # update: true

@@ -17,5 +17,7 @@ _overrider:
     expand1: {<<: *overrider}
     expand3: {<<: *overrider}
     # mobilenet
-    depthwise: {<<: *overrider}
+    depthwise:
+        <<: *overrider
+        depthwise_weights: $(_overrider.weights)
     pointwise: {<<: *overrider}

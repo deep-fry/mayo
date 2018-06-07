@@ -67,7 +67,7 @@ class TFNetBase(NetBase):
 
     @property
     def shapes(self):
-        unify = lambda t: tuple(int(s) for s in t.shape)
+        unify = lambda t: tuple(s.value for s in t.shape)
         shapes = {}
         for node, tensors in self._tensors.items():
             if isinstance(tensors, collections.Sequence):
