@@ -34,6 +34,7 @@ class BaseImporter(object):
 
     @property
     def var_to_shape(self):
+        self.var_to_tensor.pop('mayo/config', None)
         return {k: list(v.shape) for k, v in self.var_to_tensor.items()}
 
     def _import(self, file, rules):
