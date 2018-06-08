@@ -177,17 +177,18 @@ class LayerwiseSearch(SearchBase, Profile):
         self._run_train_ops = training
         if isinstance(num_epochs, (int, float)):
             self.config.system.max_epochs = num_epochs
-        for o in self.generate_overriders(overriders):
-            # freeze overriding
-            setattr(o, 'after', o.before)
-        # keys = list(overriders.keys())
-        # tmp = overriders[keys[0]][0]
-        # registered quantization loss
         self.profile(overriders)
-        import pdb; pdb.set_trace()
-        for o in self.generate_overriders(overriders):
+        for overrider, key in self.generate_overriders(overriders, key=True):
+            self.estimator.get_value('max_' + overrider.name, node=key)
+        max_values = {}
+        avg_values = {}
+        for o, key in self.generate_overriders(overriders, key=True):
             # construct after, overrde again
-            setattr(o, 'after', o._apply(o.before))
+            avg = self.estimator.get_value('avg_' + o.name, node=key)
+            max_val = self.estimator.get_value('max_' + o.name, node=key)
+            max_values[o.name] = max_val
+            avg_values[o.name] = avg
+        import pdb; pdb.set_trace()
 
     def present(self, overriders, target_values, targets, export_ckpt):
         table = Table(['variable', 'suggested value'])

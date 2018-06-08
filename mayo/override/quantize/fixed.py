@@ -19,8 +19,8 @@ class FixedPointQuantizer(QuantizerBase):
     References:
         [1] https://arxiv.org/pdf/1604.03168
     """
-    width = Parameter('width', 32, [], 'int')
-    point = Parameter('point', 2, [], 'int')
+    width = Parameter('width', 64, [], 'int')
+    point = Parameter('point', 8, [], 'int')
 
     def __init__(self, session, point=None, width=None, should_update=True,
                  stochastic=None):

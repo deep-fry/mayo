@@ -15,6 +15,7 @@ search:
         # target_range: {'point': {from: 2, to: -2, scale: -1}}
         # targets: ['mantissa_width', 'exponent_bias']
         targets: ['point']
+        profile: {'start': 0.1, 'end': 0.3}
         # link_width: [0, 1]
         # target: width
         # range: [{from: 8, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}]

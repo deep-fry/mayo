@@ -33,7 +33,7 @@ class Profile(Train):
         for key, o in overriders.items():
             for each_o in o:
                 percentile = tf.contrib.distributions.percentile(
-                    each_o.after, percentile)
+                    tf.abs(each_o.after), percentile)
                 self.estimator.register(
                     each_o.after, 'avg_' + each_o.name, node=key,
                     history='running_mean')
