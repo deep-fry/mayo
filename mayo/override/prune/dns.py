@@ -10,7 +10,7 @@ class MeanStdPruner(PrunerBase):
         super().__init__(session, should_update)
         self.alpha = alpha
 
-    def _threshold(self, tensor, alpha):
+    def _threshold(self, tensor, alpha=None):
         # axes = list(range(len(tensor.get_shape()) - 1))
         tensor_shape = util.get_shape(tensor)
         axes = list(range(len(tensor_shape)))

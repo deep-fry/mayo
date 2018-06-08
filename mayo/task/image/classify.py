@@ -79,10 +79,10 @@ class Classify(ImageTaskBase):
         top1s = tf.concat(top1s, axis=0)
         top5s = tf.concat(top5s, axis=0)
 
-        formatted_history = {}
+        self._formatted_history = {}
 
         def formatter(estimator, name):
-            history = formatted_history.setdefault(name, [])
+            history = self._formatted_history.setdefault(name, [])
             value = estimator.get_value(name, 'eval')
             value = np.sum(value, axis=-1)
             history.append(sum(value))
@@ -108,6 +108,7 @@ class Classify(ImageTaskBase):
                 total += len(h)
             stats[key] = Percent(valids / total)
             self.estimator.flush(key, 'eval')
+            self._formatted_history = {}
         log.info(
             '    top1: {}, top5: {} [{} images]'
             .format(stats['top1'], stats['top5'], num_examples))

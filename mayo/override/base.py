@@ -5,7 +5,7 @@ import tensorflow as tf
 from tensorflow.python.ops.init_ops import Initializer
 
 from mayo.log import log
-from mayo.util import memoize_property
+from mayo.util import memoize_property, ShapeError
 
 
 class OverriderError(Exception):
@@ -99,7 +99,9 @@ class OverriderBase(object):
     overridden result; `_update` updates states of tensorflow variables used in
     `_apply`.
     """
-    def __init__(self, session, should_update=True):
+    enable = Parameter('enable', True, [], 'bool')
+
+    def __init__(self, session, enable=True, should_update=True):
         super().__init__()
         self._applied = False
         self.name = None
@@ -110,6 +112,7 @@ class OverriderBase(object):
         self._parameter_variables_assignment = {}
         self._getter = _getter_not_initialized
         self.should_update = should_update
+        self.enable = enable
 
     @memoize_property
     def parameters(self):
@@ -136,7 +139,13 @@ class OverriderBase(object):
             self.parameters[name].__get__(self, None)
             # assignment
             var = self._parameter_variables[name]
-            self.session.assign(var, value, raw_run=True)
+            try:
+                self.session.assign(var, value, raw_run=True)
+            except ValueError:
+                raise ShapeError(
+                    'Variable {!r} in overrider {!r} expects '
+                    'its assigned value {!r} to match its shape {!r}.'
+                    .format(var, self, value, var.shape))
             # add our variable to the list of initialized_variables
             if var not in self.session.initialized_variables:
                 self.session.initialized_variables.append(var)
@@ -168,8 +177,7 @@ class OverriderBase(object):
         """
         if self._applied:
             raise OverrideAlreadyAppliedError(
-                'Overrider has already been applied to {!r}'
-                .format(self.before))
+                'Overrider has already been applied to {!r}'.format(value))
         self._applied = True
         self.node = node
         self.name = value.op.name
@@ -177,7 +185,9 @@ class OverriderBase(object):
         self._scope = scope
         self._original_getter = getter
         self._getter = self._tracking_getter(getter, scope)
-        self.after = self._apply(value)
+        self.overridden = self._apply(value)
+        self.after = tf.cond(
+            self.enable, lambda: self.overridden, lambda: value)
         # ensure instantiation of all parameter variables
         for param in self.parameters.values():
             param.__get__(self, None)
