@@ -172,6 +172,10 @@ class SessionBase(object, metaclass=SessionMeta):
     def trainable_variables(self):
         return tf.trainable_variables()
 
+    @property
+    def overriders(self):
+        return self.task.nets[0].overriders
+
     def get_collection(self, key, first_gpu=False):
         func = lambda net, *args: tf.get_collection(key)
         collections = list(self.task.map(func))
@@ -262,7 +266,7 @@ class SessionBase(object, metaclass=SessionMeta):
                 formatted_footer[keys.index('macs')] = macs
                 layer_info.set_footer(['', ''] + formatted_footer)
             info_dict['layers'] = layer_info
-        if self.task.nets[0].overriders:
+        if self.overriders:
             info_dict['overriders'] = self._overrider_info(plumbing)
         return info_dict
 
@@ -275,7 +279,7 @@ class SessionBase(object, metaclass=SessionMeta):
                     yield o
         info_dict = {}
         overriders = []
-        for each in self.task.nets[0].overriders.values():
+        for each in self.overriders.values():
             overriders += each
         if plumbing:
             for o in flatten(overriders):
@@ -292,7 +296,7 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
-        for _, overriders in self.task.nets[0].overriders.items():
+        for _, overriders in self.overriders.items():
             for o in overriders:
                 o.assign_parameters()
 
