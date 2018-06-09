@@ -101,7 +101,7 @@ class OverriderBase(object):
     """
     enable = Parameter('enable', True, [], 'bool')
 
-    def __init__(self, session, enable=True, should_update=True):
+    def __init__(self, session, should_update=True, enable=True):
         super().__init__()
         self._applied = False
         self.name = None

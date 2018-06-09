@@ -34,7 +34,7 @@ model:
                 epsilon: 0.00001
                 center: true
                 fused: true
-                
+
         _block: &block
             type: module
             kwargs:
@@ -74,7 +74,7 @@ model:
                     type: identity
                 shortcut_projection_False:
                     type: identity
-                
+
                 # SE block
                 se_squeeze:
                     type: average_pool
@@ -91,14 +91,14 @@ model:
                     activation_fn: tensorflow.nn.sigmoid
                 se_scale:
                     type: mul
-                
+
             graph:
                 - {from: input, with: [norm1, conv1, norm2, conv2], to: residual}
                 - {from: residual, with: [se_squeeze, se_excite1, se_excite2], to: se_coeff}
                 - {from: [residual, se_coeff], with: [se_scale], to: se_output}
                 - {from: input, with: [shortcut_preprocess_^(projection), shortcut_projection_^(projection)], to: shortcut}
                 - {from: [shortcut, se_output], with: add, to: output }
-                
+
         _block_layer: &block_layer
             type: module
             kwargs:
@@ -116,7 +116,7 @@ model:
                 b7: { <<: *block, depth: ^(depth), stride: 1, projection: false, se_depth: ^(se_depth) }
             graph:
                 - {from: input, with: [b0, b1, b2, b3, b4, b5, b6, b7], to: output}
-                
+
         # root block
         conv1:
             <<: *conv
