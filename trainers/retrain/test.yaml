@@ -14,8 +14,11 @@ search:
         profile: {'start': 0.1, 'end': 0.3}
         samples: 10
         overriders:
-            DGQuantizer:
-                targets: ['point']
+            # DGQuantizer:
+                # targets: ['point']
+                # percentile: 95
+            FloatingPointQuantizer:
+                targets: ['mantissa_width', 'exponent_bias']
                 percentile: 95
         # type: mayo.override.FloatingPointQuantizer
         # target_range: {'point': {from: 2, to: -2, scale: -1}}

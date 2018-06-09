@@ -136,7 +136,7 @@ class FloatingPointQuantizer(QuantizerBase):
     def compute_quantization_loss(
             self, value, exponent_width, mantissa_width, overflow_rate,
             profiled_max=None):
-        exponent_bias = self._bias(value, exponent_width)
+        exponent_bias = self._bias(value, exponent_width, profiled_max)
         quantized = self._quantize(
             value, exponent_width, mantissa_width, exponent_bias)
         # mean squared loss
@@ -165,18 +165,15 @@ class FloatingPointQuantizer(QuantizerBase):
         if samples is None:
             raise ValueError(
                 'require max value to search for {}', self.__name__)
-        # TODO: finish it
-        w = self.eval(self.width)
-        max_value = 2 ** (w - 1)
-        for p in range(-2 * w, w + 1):
-            shift = 2.0 ** (p)
-            if max_bound <= max_value * shift:
-                return w + p
-        log.warn(
-            'Cannot find a binary point position that satisfies the '
-            'overflow_rate budget, using integer (point at the right '
-            'of LSB) instead.')
-        return w
+        w = int(self.eval(self.width))
+        loss_meta = []
+        for mantissa in range(w + 1):
+            exp = w - mantissa
+            loss, bias = self.compute_quantization_loss(
+                samples.flatten(), mantissa, exp, 0, max_bound)
+            loss_meta.append([loss, [exp, mantissa, bias]])
+        loss_meta.sort(key=lambda x: x[0])
+        return loss_meta[0][1]
 
 
 class ShiftQuantizer(FloatingPointQuantizer):

@@ -181,6 +181,7 @@ class LayerwiseSearch(SearchBase, Profile):
         self.config.system.max_epochs = search_params.profile.start
         # empty run to speed to warm up
         for o, key in self.generate_overriders(overriders, prod_key=True):
+            o.enable = False
             o.width = 8
         self.profile()
         # lets profile the values
