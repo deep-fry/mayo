@@ -52,10 +52,10 @@ class SearchBase(Train):
     def parse_range(self, r):
         return [i for i in range(r['from'], r['to'] + r['scale'], r['scale'])]
 
-    def generate_overriders(self, overriders, key=False):
+    def generate_overriders(self, overriders, prod_key=False):
         for key, os in overriders.items():
             for o in os:
-                if key:
+                if prod_key:
                     yield (o, key)
                 else:
                     yield o

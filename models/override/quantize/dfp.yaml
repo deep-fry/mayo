@@ -4,7 +4,7 @@ _overrider:
     weights: &quantizer
         dynamic:
             type: mayo.override.DGQuantizer
-            width: 64
+            width: 8
             overflow_rate: 0.0
             should_update: true
             stochastic: false

@@ -4,6 +4,7 @@ import tensorflow as tf
 from mayo.override import util
 from mayo.override.base import Parameter
 from mayo.override.quantize.base import QuantizerBase
+from mayo.log import log
 
 
 class FloatingPointQuantizer(QuantizerBase):
@@ -118,17 +119,23 @@ class FloatingPointQuantizer(QuantizerBase):
         with tf.control_dependencies([assertion]):
             return value + tf.stop_gradient(quantized - value)
 
-    def _bias(self, value, exponent_width):
+    def _bias(self, value, exponent_width, profiled_max=None):
         max_exponent = int(2 ** exponent_width)
         for exponent in range(min(-max_exponent, -4), max(max_exponent, 4)):
             max_value = 2 ** (exponent + 1)
-            overflows = util.logical_or(value < -max_value, value > max_value)
-            if self._overflow_rate(overflows) <= self.overflow_rate:
-                break
+            if profiled_max is not None:
+                if profiled_max < max_value:
+                    return 2 ** exponent_width - 1 - exponent
+            else:
+                overflows = util.logical_or(
+                    value < -max_value, value > max_value)
+                if self._overflow_rate(overflows) <= self.overflow_rate:
+                    break
         return 2 ** exponent_width - 1 - exponent
 
     def compute_quantization_loss(
-            self, value, exponent_width, mantissa_width, overflow_rate):
+            self, value, exponent_width, mantissa_width, overflow_rate,
+            profiled_max=None):
         exponent_bias = self._bias(value, exponent_width)
         quantized = self._quantize(
             value, exponent_width, mantissa_width, exponent_bias)
@@ -148,6 +155,28 @@ class FloatingPointQuantizer(QuantizerBase):
         value = self.eval(self.before)
         exponent_width = self.eval(self.width) - self.eval(self.mantissa_width)
         self.exponent_bias = self._bias(value, exponent_width)
+
+    def search(self, params):
+        max_bound = params.get('max')
+        if max_bound is None:
+            raise ValueError(
+                'require max value to search for {}', self.__name__)
+        samples = params.get('samples')
+        if samples is None:
+            raise ValueError(
+                'require max value to search for {}', self.__name__)
+        # TODO: finish it
+        w = self.eval(self.width)
+        max_value = 2 ** (w - 1)
+        for p in range(-2 * w, w + 1):
+            shift = 2.0 ** (p)
+            if max_bound <= max_value * shift:
+                return w + p
+        log.warn(
+            'Cannot find a binary point position that satisfies the '
+            'overflow_rate budget, using integer (point at the right '
+            'of LSB) instead.')
+        return w
 
 
 class ShiftQuantizer(FloatingPointQuantizer):

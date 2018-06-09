@@ -3,6 +3,7 @@ search:
     acc_base: 0.99
     tolerance: 0.001
     search_mode: one_epoch
+    # search_mode: one_shot
     num_epochs: 1.0
     update: true
     training: true
@@ -10,12 +11,15 @@ search:
     early_stop: 0.7
     export_ckpt: true
     parameters:
-        type: mayo.override.DGQuantizer
+        profile: {'start': 0.1, 'end': 0.3}
+        samples: 10
+        overriders:
+            DGQuantizer:
+                targets: ['point']
+                percentile: 95
         # type: mayo.override.FloatingPointQuantizer
         # target_range: {'point': {from: 2, to: -2, scale: -1}}
         # targets: ['mantissa_width', 'exponent_bias']
-        targets: ['point']
-        profile: {'start': 0.1, 'end': 0.3}
         # link_width: [0, 1]
         # target: width
         # range: [{from: 8, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}]

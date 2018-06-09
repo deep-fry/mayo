@@ -13,47 +13,17 @@ class Profile(Train):
         self._run_train_ops = False
         self.config.system.max_epochs = 1
 
-    def profile(self, overriders=None, percentile=100):
-        log.info('Start profiling for one epoch...')
-        if self.config.system.profile.activations:
-            self._register_activations()
-        if overriders:
-            self._register_max_values(overriders, percentile)
-        # disable checkpoint saving and train_op
+    def profile(self, reset=True):
+        log.info('Start profiling ...')
         self.config.system.checkpoint.save = False
         # reset num_epochs and stop at 1 epoch
-        self.reset_num_epochs()
+        if reset:
+            self.reset_num_epochs()
         # start training
         self.train()
         # save profiling results
         self.info()
         self.save()
-
-    def _register_max_values(self, overriders, percentile):
-        for key, o in overriders.items():
-            for each_o in o:
-                percentile = tf.contrib.distributions.percentile(
-                    tf.abs(each_o.after), percentile)
-                self.estimator.register(
-                    each_o.after, 'avg_' + each_o.name, node=key,
-                    history='running_mean')
-                self.estimator.register(
-                    percentile, 'max_' + each_o.name, node=key,
-                    history='running_mean')
-
-    def _register_activations(self):
-        history = self.config.dataset.num_examples_per_epoch.get(self.mode)
-        for node, tensor in self.net.layers().items():
-            # FIXME
-            # store max values only for now
-            # self.estimator.register(
-            #     tensor, 'activation', node=node, history=history)
-            # store the topk
-            # values, indices = tf.nn.top_k(tf.abs(tensor), k=10)
-            # tensor = tf.cast(tensor, tf.float32)
-            values = tf.reduce_max(tf.abs(tensor))
-            self.estimator.register(
-                values, 'activation', node=node, history=history)
 
     def info(self):
         pass
