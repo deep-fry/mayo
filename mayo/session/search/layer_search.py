@@ -199,9 +199,13 @@ class LayerwiseSearch(SearchBase, Profile):
             max_val = self.estimator.get_value('max_' + o.name, node=key)
             params['max'] = max_val[0]
             params['avg'] = avg
+            params['targets'] = \
+                search_params.overriders.get(type(o).__name__).targets
             params['samples'] = self.estimator.get_value(o.name, node=key)
             meta_params[o.name] = params
+            # find a target -> suggested value dict
             target = o.search(params)
+            # map this dict accroding to overriders
             targets[o] = target
         return targets
 

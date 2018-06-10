@@ -165,6 +165,11 @@ class FloatingPointQuantizer(QuantizerBase):
         if samples is None:
             raise ValueError(
                 'require max value to search for {}', self.__name__)
+        targets = params.get('targets')
+        if targets is None or 'mantissa_width' not in targets or \
+                'exponent_bias' not in targets:
+            raise ValueError(
+                'Required targets are not specified')
         w = int(self.eval(self.width))
         loss_meta = []
         for mantissa in range(w + 1):
@@ -173,7 +178,13 @@ class FloatingPointQuantizer(QuantizerBase):
                 samples.flatten(), mantissa, exp, 0, max_bound)
             loss_meta.append([loss, [exp, mantissa, bias]])
         loss_meta.sort(key=lambda x: x[0])
-        return loss_meta[0][1]
+        # pick the one that has smallest quantization loss
+        exp, mantissa, bias = loss_meta[0][1]
+        selected_targets = {
+            'mantissa_width': mantissa,
+            'exponent_bias': bias,
+        }
+        return selected_targets
 
 
 class ShiftQuantizer(FloatingPointQuantizer):
