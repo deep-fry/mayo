@@ -14,12 +14,12 @@ search:
         profile: {'start': 0.1, 'end': 0.15}
         samples: 10
         overriders:
-            ShiftQuantizer:
-                targets: ['exponent_bias']
-                percentile: 95
-            # DGQuantizer:
-                # targets: ['point']
-                # percentile: 95
+            # ShiftQuantizer:
+            #     targets: ['exponent_bias']
+            #     percentile: 95
+            DGQuantizer:
+                targets: ['point']
+                percentile: 90
             # FloatingPointQuantizer:
             #     targets: ['mantissa_width', 'exponent_bias']
             #     percentile: 95
