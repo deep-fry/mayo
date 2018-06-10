@@ -8,5 +8,6 @@ _overrider:
             point: 1
             should_update: true
             stochastic: false
+            _priority: 100
     biases: {<<: *quantizer}
     # activation: {<<: *quantizer}

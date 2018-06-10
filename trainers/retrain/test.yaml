@@ -11,15 +11,18 @@ search:
     early_stop: 0.7
     export_ckpt: true
     parameters:
-        profile: {'start': 0.1, 'end': 0.3}
+        profile: {'start': 0.1, 'end': 0.15}
         samples: 10
         overriders:
+            ShiftQuantizer:
+                targets: ['exponent_bias']
+                percentile: 95
             # DGQuantizer:
                 # targets: ['point']
                 # percentile: 95
-            FloatingPointQuantizer:
-                targets: ['mantissa_width', 'exponent_bias']
-                percentile: 95
+            # FloatingPointQuantizer:
+            #     targets: ['mantissa_width', 'exponent_bias']
+            #     percentile: 95
         # type: mayo.override.FloatingPointQuantizer
         # target_range: {'point': {from: 2, to: -2, scale: -1}}
         # targets: ['mantissa_width', 'exponent_bias']
