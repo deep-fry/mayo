@@ -4,10 +4,12 @@ _overrider:
     weights: {}
     biases: {}
     activation: {}
+    gradient: {}
     _overrider: &overrider
         weights: $(_overrider.weights)
         biases: $(_overrider.biases)
         activation: $(_overrider.activation)
+        gradient: $(_overrider.gradient)
     # interfaces
     conv: {<<: *overrider}
     fc: {<<: *overrider}
