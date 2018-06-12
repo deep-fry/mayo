@@ -9,3 +9,5 @@ _overrider:
             should_update: true
             stochastic: false
     biases: {<<: *quantizer}
+    activation: {<<: *quantizer}
+    gradient: {<<: *quantizer}
