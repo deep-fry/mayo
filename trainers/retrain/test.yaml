@@ -1,14 +1,15 @@
 search:
-    iter_max_epoch: 10
+    # things used for finetuning
     acc_base: 0.99
     tolerance: 0.001
-    search_mode: one_epoch
+    training: true
+    update: true
+    early_stop: 0.7
+    # end
+    search_mode: fine_tune
+    # search_mode: one_epoch
     # search_mode: one_shot
     num_epochs: 1.0
-    update: true
-    training: true
-    run_status: normal
-    early_stop: 0.7
     export_ckpt: true
     parameters:
         profile: {'start': 0.1, 'end': 0.15}
@@ -18,7 +19,13 @@ search:
             #     targets: ['exponent_bias']
             #     percentile: 95
             DGQuantizer:
-                targets: ['point']
+                targets: ['width']
+                range:
+                    from: 8
+                    to: 1
+                    scale: -2
+                    min_scale: -1
+                    update_factor: 0.5
                 # percentile: 90
                 percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'default': 50}
             # FloatingPointQuantizer:

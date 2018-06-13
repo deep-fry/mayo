@@ -97,7 +97,7 @@ class SearchBase(Train):
             if self._exceed_max_epoch(epoch, iter_max_epoch, early_stop):
                 self.search_cnt += 1
                 self.reset_num_epochs()
-                self.log_thresholds(self.loss_avg, self.acc_avg)
+                self.run_history_thresholds(self.loss_avg, self.acc_avg)
                 self.start_acc = None
                 return self.backward_policy()
         return True
@@ -115,27 +115,12 @@ class SearchBase(Train):
 
     def _fetch_as_overriders(self, info):
         self.targets = Targets(info)
-        for key, o in self.task.nets[0].overriders.items():
-            if isinstance(o, list):
-                for each_o in o:
-                    self.targets.add_overrider(each_o)
-                continue
-            self.targets.add_overrider(o)
-
-    def _fetch_as_variables(self, info):
-        self.targets = Targets(info)
-        targeting_vars = []
-        associated_vars = []
-        for name in info.targets:
-            for item in self.global_variables():
-                if name in item.name:
-                    targeting_vars.append(item)
-        for name in info.associated:
-            for item in self.global_variables():
-                if name in item.name:
-                    associated_vars.append(item)
-        for zipped in zip(targeting_vars, associated_vars):
-            self.targets.add_target(*zipped)
+        # for key, o in self.task.nets[0].overriders.items():
+        #     if isinstance(o, list):
+        #         for each_o in o:
+        #             self.targets.add_overrider(each_o)
+        #         continue
+        #     self.targets.add_overrider(o)
 
     def _node_logging(self, write_to_files):
         if not hasattr(self, 'writing_cnt'):
@@ -149,18 +134,14 @@ class SearchBase(Train):
             pickle.dump([nodes, ops], f)
 
     def _init_scales(self):
-        self.log = {}
-        self.search_cnt = 0
-        self.target_layer = None
-        self.loss_avg = None
-        self.best_ckpt = None
-        info = self.config.search.parameters
-        mode = info.get('overriders', True)
+        self.run_history = {}
+        self.run_history['search_cnt'] = 0
+        self.run_history['target_layer'] = None
+        self.run_history['loss_avg'] = None
+        self.run_history['best_ckpt'] = None
+        search_info = self.config.search.parameters
         # define initial scale
-        if mode:
-            self._fetch_as_overriders(info)
-        else:
-            self._fetch_as_variables(info)
+        self._fetch_as_overriders(search_info)
 
     def once(self):
         train_op = self._train_op if self._run_train_ops else []
@@ -281,14 +262,14 @@ class SearchBase(Train):
             self.assign(v, t)
 
     def log_thresholds(self, loss, acc):
-        _, _, prev_loss = self.log.get(self.target_layer, [None, None, None])
+        _, _, prev_loss = self.run_history.get(self.target_layer, [None, None, None])
         for tv in self.targets.members:
             value = tv.thresholds
             if prev_loss is None:
-                self.log[tv.name] = (value, loss, acc)
+                self.run_history[tv.name] = (value, loss, acc)
             else:
                 if acc > self.acc_base:
-                    self.log[self.target_layer] = (value, loss, acc)
+                    self.run_history[self.target_layer] = (value, loss, acc)
 
     def np_quantize_loss(self, before, after):
         return np.sum(np.abs(after - before))
