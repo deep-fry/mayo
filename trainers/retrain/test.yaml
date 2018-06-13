@@ -19,7 +19,8 @@ search:
             #     percentile: 95
             DGQuantizer:
                 targets: ['point']
-                percentile: 90
+                # percentile: 90
+                percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'default': 50}
             # FloatingPointQuantizer:
             #     targets: ['mantissa_width', 'exponent_bias']
             #     percentile: 95

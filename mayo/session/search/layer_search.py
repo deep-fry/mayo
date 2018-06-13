@@ -219,7 +219,21 @@ class LayerwiseSearch(SearchBase, Profile):
                     o.before, 'avg_' + o.name, node=key,
                     history='running_mean')
             if reg_max:
-                percentile = rules[name].percentile
+                p_dict = rules[name].percentile
+                # if isinstance(percentile, dict):
+                if isinstance(p_dict, (int, float)):
+                    percentile = p_dict
+                else:
+                    default_percentile = p_dict.get('default', 99)
+                    if 'gradients' in o.name:
+                        percentile = p_dict.get(
+                            'gradients', default_percentile)
+                    if 'weights' in o.name:
+                        percentile = p_dict.get('weights', default_percentile)
+                    if 'biases' in o.name:
+                        percentile = p_dict.get('biases', default_percentile)
+                    else:
+                        percentile = default_percentile
                 percentile = tf.contrib.distributions.percentile(
                     tf.abs(o.before), percentile)
                 self.estimator.register(
