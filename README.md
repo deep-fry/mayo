@@ -4,6 +4,7 @@
 
 [fine]: models/override/prune/dns.yaml
 [slim]: models/override/prune/netslim.yaml
+[quantize]: models/override/quantize/
 
 
 ## Installation
@@ -48,15 +49,12 @@ You should expect the final top-1 and top-5 accuracies to be 99.57% and 100% res
 
 ## How to start writing your neural network application in YAML
 
-In Mayo, we decouple the description of each neural network application into three separate components: the dataset, model and trainer, each written in [YAML][yaml].  The reason for decoupling is to encourage reuse, for instance a ResNet-50 model can not only be used for [ImageNet][imagenet] classification, but also object detection with [COCO][coco], or even customized tasks.
-
-Furthermore, in network compression, we can use many fine- and coarse-grained pruning techniques in conjunction with a large range of quantization methods, even optionally on top of low-rank approximation of weight tensors, on a wide variety of neural networks, each could use different datasets and could be trained differently.  We now encounter a vast number of possible combinations of all of these above options, so by decoupling compression techniques from the neural network, from the dataset, from training methodologies, all possible combinations can be achieved by importing the respective YAML descriptions, without having to write a monolithic description file for each combination.
-
-For starters, you can checkout [`models/lenet5.yaml`](models/lenet5.yaml) for an example of a neural network model description, [`datasets/mnist.yaml`](datasets/mnist.yaml) of the MNIST dataset, and [`trainers/lenet5.yaml`](trainers/lenet5.yaml) of a simple training configuration.  For more tutorials, please refer to [[this Wiki page|YAML]].
+For starters, you can checkout [`models/lenet5.yaml`](models/lenet5.yaml) for an example of a neural network model description, [`datasets/mnist.yaml`](datasets/mnist.yaml) of the MNIST dataset, and [`trainers/lenet5.yaml`](trainers/lenet5.yaml) of a simple training configuration.  For more tutorials, please refer to [this Wiki page][mayo-yaml].
 
 [yaml]: http://yaml.org
 [imagenet]: http://www.image-net.org
 [coco]: http://cocodataset.org
+[mayo-yaml]: https://github.com/admk/mayo/wiki/Writing-YAMLs
 
 
 ## The Mayo command line interface
@@ -74,6 +72,13 @@ $ ./my \                                # Invocation of Mayo
     eval                                # Starts model evaluation
 ```
 Each YAML import and key-value pair update recursively merges all mappings of the YAML file with the global configuration.  So right before `eval`, we would have a complete application description specifying the model, dataset and checkpoint used.
+
+
+## Why so many YAMLs?
+
+In Mayo, we decouple the description of each neural network application into three separate components: the dataset, model and trainer, each written in [YAML][yaml].  The reason for decoupling is to encourage reuse, for instance a ResNet-50 model can not only be used for [ImageNet][imagenet] classification, but also object detection with [COCO][coco], or even customized tasks.
+
+Furthermore, in network compression, we can use many fine- and coarse-grained pruning techniques in conjunction with a large range of quantization methods, even optionally on top of low-rank approximation of weight tensors, on a wide variety of neural networks, each could use different datasets and could be trained differently.  We now encounter a vast number of possible combinations of all of these above options, so by decoupling compression techniques from the neural network, from the dataset, from training methodologies, all possible combinations can be achieved by importing the respective YAML descriptions, without having to write a monolithic description file for each combination.
 
 
 ## Results
