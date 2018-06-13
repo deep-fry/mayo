@@ -31,3 +31,11 @@ class Search(Train):
             .format(self.baseline, self.tolerable_baseline))
 
         self.reset_num_epochs()
+
+
+class GlobalSearch(object):
+    pass
+
+
+class LayerwiseSearch(object):
+    pass
