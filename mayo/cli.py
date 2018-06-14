@@ -9,7 +9,7 @@ from docopt import docopt
 
 from mayo.log import log
 from mayo.config import Config
-from mayo.session import Test, Evaluate, Train, Search
+from mayo.session import Test, Evaluate, Train, Search, Profile
 
 _root = os.path.dirname(__file__)
 
@@ -135,10 +135,12 @@ Arguments:
         'search': Search,
         'test': Test,
         'validate': Evaluate,
+        'profile': Profile,
     }
     _keys_map = {
         'train': _train_keys,
         'search': _train_keys,
+        'profile': _train_keys,
         'test': _test_keys,
         'validate': _validate_keys,
     }

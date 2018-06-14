@@ -5,7 +5,7 @@ from mayo.session.train import Train
 from mayo.util import Table
 
 
-class ProfileBase(Train):
+class Profile(Train):
     def profile(self):
         log.debug('Profiling starts.')
         try:
@@ -18,7 +18,7 @@ class ProfileBase(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
-    def run(self, reset=True):
+    def _run(self, reset=True):
         log.info('Start profiling ...')
         self.config.system.checkpoint.save = False
         # reset num_epochs and stop at 1 epoch
@@ -65,13 +65,13 @@ class ProfileBase(Train):
         for o, key in self.generate_overriders(overriders, prod_key=True):
             o.enable = False
             o.width = 8
-        self.run()
+        self._run()
         # lets profile the values
         self.register_values(
             overriders, samples=profile_params.samples,
             rules=rules)
         self.config.system.max_epochs = profile_params.profile.end
-        self.run(reset=False)
+        self._run(reset=False)
         meta_params = {}
         targets = {}
         for o, key in self.generate_overriders(overriders, prod_key=True):
@@ -140,3 +140,11 @@ class ProfileBase(Train):
             model_name += '_profile_' + self.config.search.search_mode
             self.save_checkpoint(model_name)
         return
+
+    def generate_overriders(self, overriders, prod_key=False):
+        for key, os in overriders.items():
+            for o in os:
+                if prod_key:
+                    yield (o, key)
+                else:
+                    yield o
