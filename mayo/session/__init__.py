@@ -6,4 +6,4 @@ from mayo.session.search import GlobalSearch
 from mayo.session.profile import Profile
 
 
-__all__ = [Train, Test, Evaluate, LayerwiseSearch, GlobalSearch, Profile]
+__all__ = [Train, Test, Evaluate, Search, Profile]
