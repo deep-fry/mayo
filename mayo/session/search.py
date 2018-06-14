@@ -226,8 +226,8 @@ class Search(SearchBase):
             self.assign(var, value)
             info['from'] = value
             log.info(
-                'Updated hyperparameter {} in layer {!r} with a new value {}.'
-                .format(var, node_name, value))
+                'Updated hyperparameter {!r} in layer {!r} with a new '
+                'value {}.'.format(var.op.name, node_name, value))
         # fine-tuning with updated hyperparameter
         tolerable = self.fine_tune()
         if tolerable:
