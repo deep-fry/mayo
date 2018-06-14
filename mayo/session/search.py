@@ -159,6 +159,15 @@ class Search(SearchBase):
         return list(reversed(sorted(priority, key=lambda v: v[1])))
 
     def kernel(self):
+        mode = self.config.search.mode
+        try:
+            kernel_func = getattr(self, '{}_kernel'.format(mode))
+        except AttributeError:
+            raise AttributeError(
+                'We cannot search with unrecognized mode {!r}.'.format(mode))
+        return kernel_func()
+
+    def priority_kernel(self):
         priority = self._priority(self.blacklist)
         if not priority:
             log.debug('All nodes blacklisted.')
@@ -182,8 +191,8 @@ class Search(SearchBase):
         self.assign(var, value)
         info['from'] = value
         log.info(
-            'Updated hyperparameter {} in layer {!r} with a new value {}.'
-            .format(var, node_name, value))
+            'Updated hyperparameter {!r} in layer {!r} with a new value {}.'
+            .format(var.op.name, node_name, value))
         # fine-tuning with updated hyperparameter
         tolerable = self.fine_tune()
         if tolerable:
@@ -202,9 +211,7 @@ class Search(SearchBase):
         info['step'] = new_step
         return True
 
-
-class GlobalSearch(SearchBase):
-    def kernel(self):
+    def global_kernel(self):
         for node, info in self.targets.items():
             node_name = node.formatted_name()
             value = self._step_forward(
