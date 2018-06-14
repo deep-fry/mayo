@@ -10,13 +10,6 @@ profile:
             #     percentile: 95
             DGQuantizer:
                 targets: ['width']
-                range:
-                    from: 8
-                    to: 1
-                    scale: -2
-                    min_scale: -1
-                    update_factor: 0.5
-                # percentile: 90
                 percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'default': 50}
             # FloatingPointQuantizer:
             #     targets: ['mantissa_width', 'exponent_bias']

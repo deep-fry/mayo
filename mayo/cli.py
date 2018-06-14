@@ -199,6 +199,10 @@ Arguments:
         """Performs searching.  """
         return self._get_session('search').search()
 
+    def cli_profile(self):
+        """Performs profiling.  """
+        return self._get_session('profile').profile()
+
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """
         return self._get_session('validate').eval()

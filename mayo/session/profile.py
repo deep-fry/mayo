@@ -1,14 +1,11 @@
-import os
-import pickle
 import tensorflow as tf
 
 from mayo.log import log
 from mayo.session.train import Train
+from mayo.util import Table
 
 
 class ProfileBase(Train):
-    modes = ['one_shot', 'one_epoch', 'fine_tune']
-
     def profile(self):
         log.debug('Profiling starts.')
         try:
@@ -21,19 +18,21 @@ class ProfileBase(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
-    def _init_profile(self):
-        self.search_simple()
-        search_func = getattr(self, 'search_simple')
-        search_func(self.search_mode)
-        return False
+    def run(self, reset=True):
+        log.info('Start profiling ...')
+        self.config.system.checkpoint.save = False
+        # reset num_epochs and stop at 1 epoch
+        if reset:
+            self.reset_num_epochs()
+        # start training
+        self.train()
 
     def profile_multi_epochs(self):
-        print('Search progressing ...')
+        print('Profile progressing ...')
         config = self.config.profile
         overriders = self.task.nets[0].overriders
         name_to_rules = config.parameters.overriders
 
-        # training = config.pop('training', False)
         export_ckpt = config.pop('export_ckpt', False)
         num_epochs = config.pop('num_epochs', 0.0)
         macs = self.task.nets[0].estimate()
@@ -52,17 +51,16 @@ class ProfileBase(Train):
                                 target_values[o][target] = self.run(
                                     getattr(o, target))
         else:
-            target_values = self.profiled_search(
-                config.training, overriders, name_to_rules)
+            target_values = self.profiled_search(overriders, name_to_rules)
         self.present(overriders, target_values, export_ckpt)
         return False
 
-    def profiled_search(self, training, overriders, rules):
+    def profiled_search(self, overriders, rules):
         # decide to train or not
-        search_params = self.config.search.parameters
-        self._run_train_ops = training
+        profile_params = self.config.profile.parameters
+        self._run_train_ops = True
 
-        self.config.system.max_epochs = search_params.profile.start
+        self.config.system.max_epochs = profile_params.profile.start
         # empty run to speed to warm up
         for o, key in self.generate_overriders(overriders, prod_key=True):
             o.enable = False
@@ -70,9 +68,9 @@ class ProfileBase(Train):
         self.run()
         # lets profile the values
         self.register_values(
-            overriders, samples=search_params.samples,
+            overriders, samples=profile_params.samples,
             rules=rules)
-        self.config.system.max_epochs = search_params.profile.end
+        self.config.system.max_epochs = profile_params.profile.end
         self.run(reset=False)
         meta_params = {}
         targets = {}
@@ -84,7 +82,7 @@ class ProfileBase(Train):
             params['max'] = max_val[0]
             params['avg'] = avg
             params['targets'] = \
-                search_params.overriders.get(type(o).__name__).targets
+                profile_params.overriders.get(type(o).__name__).targets
             params['samples'] = self.estimator.get_value(o.name, node=key)
             meta_params[o.name] = params
             # find a target -> suggested value dict
@@ -142,15 +140,3 @@ class ProfileBase(Train):
             model_name += '_profile_' + self.config.search.search_mode
             self.save_checkpoint(model_name)
         return
-
-    def run(self, reset=True):
-        log.info('Start profiling ...')
-        self.config.system.checkpoint.save = False
-        # reset num_epochs and stop at 1 epoch
-        if reset:
-            self.reset_num_epochs()
-        # start training
-        self.train()
-        # save profiling results
-        self.info()
-        self.save()
