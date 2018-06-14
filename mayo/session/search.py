@@ -1,4 +1,5 @@
 import re
+import copy
 
 from mayo.log import log
 from mayo.util import memoize_property
@@ -41,9 +42,13 @@ class Search(Train):
     def _priority(self, blacklist=None):
         key = self.config.search.cost_key
         info = self.task.nets[0].estimate()
-        priority = [
-            (node, stats[key]) for node, stats in info.items()
-            if not blacklist or node not in blacklist]
+        priority = []
+        for node, stats in info.items():
+            if node not in self.targets:
+                continue
+            if blacklist and node in blacklist:
+                continue
+            priority.append((node, stats[key]))
         return list(reversed(sorted(priority, key=lambda v: v[1])))
 
     def backtrack(self):
@@ -53,12 +58,14 @@ class Search(Train):
         self.load_checkpoint('backtrack')
         return True
 
+    def set_backtrack_to_here(self):
+        self.backtrack_targets = copy.deepcopy(self.targets)
+        self.save_checkpoint('backtrack')
+
     def fine_tune(self):
         self.estimator.flush('accuracy', 'train')
-        self._train_op = True
-        self.config.system.max_epochs = self.config.search.max_epochs.fine_tune
-        self._iteration()
-        return self.estimator.get_value('accuracy', 'train')
+        self.train(max_epochs=self.config.search.max_epochs.fine_tune)
+        return self.estimator.get_mean('accuracy', 'train')
 
     def _step_forward(self, value, end, step, min_step):
         new_value = value + step
@@ -70,40 +77,6 @@ class Search(Train):
                 return False
             return self._step_forward(value, end, step / 2, min_step)
         return new_value
-
-    def search(self):
-        # profile training accuracy for a given number of epochs
-        self._profile()
-        # initialize search
-        self._init_search()
-        # main procedure
-        max_steps = self.config.search.max_steps
-        step = 0
-        blacklist = set()
-        while True:
-            if max_steps and step > max_steps:
-                break
-            step += 1
-            priority = self._priority(blacklist)
-            if not priority:
-                log.debug('All nodes blacklisted.')
-                break
-            node = priority[0]
-            info = self.targets[node]
-            log.debug('Prioritize layer {!r}.'.format(node.formatted_name()))
-            value = self._step_forward(info['from'], info['to'], info['step'])
-            if value is False:
-                blacklist.add(node)
-                continue
-            var = info['variable']
-            self.assign(var, value)
-            info['from'] = value
-            log.info('Updated hyperparameter {} ')
-            # fine-tuning with updated hyperparameter
-            self.fine_tune()
-            import pdb; pdb.set_trace()
-            # TODO continue here...
-        log.info('Automated hyperparameter optimization done.')
 
     def _profile(self):
         baseline = self.config.search.accuracy.get('baseline')
@@ -125,10 +98,61 @@ class Search(Train):
             .format(self.baseline, self.tolerable_baseline))
         self.reset_num_epochs()
 
+    def _kernel(self, blacklist):
+        priority = self._priority(blacklist)
+        if not priority:
+            log.debug('All nodes blacklisted.')
+            return False
+        node = priority[0]
+        info = self.targets[node]
+        node_name = node.formatted_name()
+        log.debug('Prioritize layer {!r}.'.format(node_name))
+        value = self._step_forward(
+            info['from'], info['to'], info['step'], info['min_step'])
+        var = info['variable']
+        if value is False:
+            log.debug(
+                'Blacklisting {!r} as we cannot further '
+                'increment/decrement {!r}.'.format(node_name, var))
+            blacklist.add(node)
+            return True
+        self.assign(var, value)
+        info['from'] = value
+        log.info(
+            'Updated hyperparameter {} in layer {!r} with a new value {}.'
+            .format(var, node_name, value))
+        # fine-tuning with updated hyperparameter
+        accuracy = self.fine_tune()
+        if accuracy >= self.tolerable_baseline:
+            log.debug(
+                'Fine-tuned accuracy {!r} found tolerable.'
+                .format(accuracy))
+            self.set_backtrack_to_here()
+            return True
+        new_step = info['step'] / 2
+        if new_step < info['min_step']:
+            blacklist.add(node)
+            log.debug(
+                'Blacklisting {!r} as we cannot use smaller '
+                'increment/decrement.'.format(node_name))
+            return True
+        self.backtrack()
+        info['step'] = new_step
+        return True
 
-class GlobalSearch(object):
-    pass
-
-
-class LayerwiseSearch(object):
-    pass
+    def search(self):
+        # profile training accuracy for a given number of epochs
+        self._profile()
+        # initialize search
+        self._init_search()
+        # main procedure
+        max_steps = self.config.search.max_steps
+        step = 0
+        blacklist = set()
+        while True:
+            if max_steps and step > max_steps:
+                break
+            step += 1
+            if not self._kernel(blacklist):
+                break
+        log.info('Automated hyperparameter optimization done.')
