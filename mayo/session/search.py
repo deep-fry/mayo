@@ -201,7 +201,8 @@ class GlobalSearch(SearchBase):
         for node, info in self.targets.items():
             node_name = node.formatted_name()
             value = self._step_forward(
-                info['from'], info['to'], info['step'], info['min_step'])
+                info['from'], info['to'], info['step'], info['min_step'],
+                info['type'])
             var = info['variable']
             if value is False:
                 log.debug(

@@ -2,7 +2,6 @@ import functools
 from collections import Sequence, namedtuple
 
 import tensorflow as tf
-from tensorflow.python.ops.init_ops import Initializer
 
 from mayo.log import log
 from mayo.util import memoize_property, ShapeError
@@ -62,6 +61,7 @@ class Parameter(object):
             kwargs[key] = value
         kwargs['name'] = self.name
         init = kwargs.pop('initial')
+        from tensorflow.python.ops.init_ops import Initializer
         if init is not None and not isinstance(init, Initializer):
             init = tf.constant_initializer(
                 value=init, dtype=self.dtype, verify_shape=True)
