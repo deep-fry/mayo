@@ -26,6 +26,9 @@ class ParameterTransformer(object):
 
     def _add_overrider(self, node, overrider):
         self.overriders.setdefault(node, []).append(overrider)
+        variables = self.variables.setdefault(node, {})
+        for var in overrider.parameter_variables:
+            variables[var.op.name] = var
 
     def _create_hyperobjects(self, layer_node, params):
         suffixes = ['regularizer', 'initializer']

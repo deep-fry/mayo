@@ -125,6 +125,10 @@ class OverriderBase(object):
                 params[value.name] = value
         return params
 
+    @property
+    def parameter_variables(self):
+        return self._parameter_variables.values()
+
     def assign_parameters(self):
         for name, value in self._parameter_variables_assignment.items():
             if value is None:
@@ -281,6 +285,13 @@ class ChainOverrider(OverriderBase, Sequence):
 
     def __len__(self):
         return len(self._overriders)
+
+    @property
+    def parameter_variables(self):
+        variables = []
+        for o in self._overriders:
+            variables += o.parameter_variables
+        return variables
 
     def assign_parameters(self):
         for o in self._overriders:

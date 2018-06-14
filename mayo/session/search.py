@@ -1,5 +1,7 @@
 import re
-import copy
+import math
+
+import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import memoize_property
@@ -14,17 +16,108 @@ class SearchBase(Train):
         self.reset_num_epochs()
         log.info('Profiling baseline accuracy...')
         total_accuracy = step = epoch = 0
-        while epoch < self.config.search.profile_epochs:
-            epoch = self.run([self.num_epochs], batch=True)
+        while epoch < self.config.search.max_epochs.profile:
+            epoch = self.run(self.num_epochs, batch=True)
             total_accuracy += self.estimator.get_value('accuracy', 'train')
             step += 1
         self.baseline = total_accuracy / step
         tolerance = self.config.search.accuracy.tolerance
-        self.tolerable_baseline = self.baseline * tolerance
+        self.tolerable_baseline = self.baseline * (1 - tolerance)
         log.info(
-            'Baseline accuracy: {}, tolerable accuracy: .'
+            'Baseline accuracy: {}, tolerable accuracy: {}.'
             .format(self.baseline, self.tolerable_baseline))
         self.reset_num_epochs()
+
+    def _init_targets(self):
+        # intialize target hyperparameter variables to search
+        targets = {}
+        dtypes = {
+            tf.int32: int,
+            tf.float32: float,
+            tf.float32._as_ref: float,
+        }
+        for regex, info in self.config.search.variables.items():
+            for node, node_variables in self.variables.items():
+                for name, var in node_variables.items():
+                    if not re.search(regex, name):
+                        continue
+                    if node in targets:
+                        raise ValueError(
+                            'We are currently unable to handle multiple '
+                            'hyperparameter variables within the same layer.')
+                    try:
+                        dtype = dtypes[var.dtype]
+                    except KeyError:
+                        raise TypeError(
+                            'We accept only integer or floating-point '
+                            'hyperparameters.')
+                    targets[node] = dict(info, variable=var, type=dtype)
+                    log.debug(
+                        'Targeted hyperparameter {} in {}: {}.'
+                        .format(var, node.formatted_name(), targets[node]))
+        return targets
+
+    def _init_search(self):
+        self.targets = self._init_targets()
+        self.backtrack_targets = None
+        # initialize hyperparameters to starting positions
+        # FIXME how can we continue search?
+        for _, info in self.targets.items():
+            start = info['from']
+            var = info['variable']
+            # unable to use overrider-based hyperparameter assignment, but it
+            # shouldn't be a problem
+            self.assign(var, start)
+        # save a starting checkpoint for backtracking
+        self.save_checkpoint('backtrack')
+
+    def _reduce_step(self, step, dtype):
+        if dtype is float:
+            return step / 2
+        if dtype is int:
+            new_step = int(math.ceil(step / 2))
+            if new_step == step:
+                return step - 1
+            return new_step
+        raise TypeError('Unrecognized data type.')
+
+    def _step_forward(self, value, end, step, min_step, dtype):
+        new_value = value + step
+        if step > 0 and new_value > end or step < 0 and new_value < end:
+            # step size is too large, half it
+            new_step = self._reduce_step(step, dtype)
+            if new_step < min_step:
+                # cannot step further
+                return False
+            return self._step_forward(value, end, new_step, min_step, dtype)
+        return new_value
+
+    def backtrack(self):
+        if not self.backtrack_targets:
+            return False
+        self.targets = self.backtrack_targets
+        self.load_checkpoint('backtrack')
+        return True
+
+    def set_backtrack_to_here(self):
+        self.backtrack_targets = {}
+        for node, info in self.targets.items():
+            self.backtrack_targets[node] = dict(info)
+        self.save_checkpoint('backtrack')
+
+    def fine_tune(self):
+        self.reset_num_epochs()
+        self.overriders_update()
+        max_epoch = self.config.search.max_epochs.fine_tune
+        total_accuracy = step = epoch = 0
+        while epoch < max_epoch:
+            epoch, _ = self.run([self.num_epochs, self._train_op], batch=True)
+            total_accuracy += self.estimator.get_value('accuracy', 'train')
+            step += 1
+        return total_accuracy / step
+
+    def kernel(self, blacklist):
+        raise NotImplementedError
 
     def search(self):
         # profile training accuracy for a given number of epochs
@@ -39,44 +132,12 @@ class SearchBase(Train):
             if max_steps and step > max_steps:
                 break
             step += 1
-            if not self._kernel(blacklist):
+            if not self.kernel(blacklist):
                 break
         log.info('Automated hyperparameter optimization done.')
 
-    def _init_targets(self):
-        # intialize target hyperparameter variables to search
-        targets = {}
-        for regex, info in self.config.search.variables.items():
-            for node, node_variables in self.variables.items():
-                for name, var in node_variables.items():
-                    if not re.search(regex, name):
-                        continue
-                    if node in targets:
-                        raise ValueError(
-                            'We are currently unable to handle multiple '
-                            'hyperparameter variables within the same layer.')
-                    targets[node] = dict(info, variable=var)
-                    log.debug(
-                        'Targeted hyperparameter {} in {}: {}.'
-                        .format(var, node.formatted_name(), info))
-        return targets
 
-
-class LayerSearch(SearchBase):
-    def _init_search(self):
-        self.targets = self._init_targets()
-        self.backtrack_targets = None
-        # initialize # hyperparameters to starting positions
-        # FIXME how can we continue search?
-        for _, info in self.targets:
-            start = info['from']
-            var = info['variable']
-            # unable to use overrider-based hyperparameter assignment, but it
-            # shouldn't be a problem
-            self.assign(var, start)
-        # save a starting checkpoint for backtracking
-        self.save_checkpoint('backtrack')
-
+class Search(SearchBase):
     def _priority(self, blacklist=None):
         key = self.config.search.cost_key
         info = self.task.nets[0].estimate()
@@ -89,49 +150,20 @@ class LayerSearch(SearchBase):
             priority.append((node, stats[key]))
         return list(reversed(sorted(priority, key=lambda v: v[1])))
 
-    def backtrack(self):
-        if not self.backtrack_targets:
-            return False
-        self.targets = self.backtrack_targets
-        self.load_checkpoint('backtrack')
-        return True
-
-    def set_backtrack_to_here(self):
-        self.backtrack_targets = copy.deepcopy(self.targets)
-        self.save_checkpoint('backtrack')
-
-    def fine_tune(self):
-        self.reset_num_epochs()
-        max_finetune_epoch = self.config.search.max_epochs.fine_tune
-        total_accuracy = step = epoch = 0
-        while epoch < max_finetune_epoch:
-            epoch, _ = self.run([self.num_epochs, self.train_op])
-            total_accuracy += self.estimator.get_value('accuracy', 'train')
-            step += 1
-        return total_accuracy / step
-
-    def _step_forward(self, value, end, step, min_step):
-        new_value = value + step
-        if step > 0 and new_value > end or step < 0 and new_value < end:
-            # step size is too large, half it
-            new_step = step / 2
-            if new_step < min_step:
-                # cannot step further
-                return False
-            return self._step_forward(value, end, step / 2, min_step)
-        return new_value
-
-    def _kernel(self, blacklist):
+    def kernel(self, blacklist):
         priority = self._priority(blacklist)
         if not priority:
             log.debug('All nodes blacklisted.')
             return False
-        node = priority[0]
+        node, node_priority = priority[0]
         info = self.targets[node]
         node_name = node.formatted_name()
-        log.debug('Prioritize layer {!r}.'.format(node_name))
+        log.debug(
+            'Prioritize layer {!r} with importance {}.'
+            .format(node_name, node_priority))
         value = self._step_forward(
-            info['from'], info['to'], info['step'], info['min_step'])
+            info['from'], info['to'], info['step'],
+            info['min_step'], info['type'])
         var = info['variable']
         if value is False:
             log.debug(
@@ -152,7 +184,7 @@ class LayerSearch(SearchBase):
                 .format(accuracy))
             self.set_backtrack_to_here()
             return True
-        new_step = info['step'] / 2
+        new_step = self._reduce_step(info['step'], info['type'])
         if new_step < info['min_step']:
             blacklist.add(node)
             log.debug(
@@ -165,27 +197,7 @@ class LayerSearch(SearchBase):
 
 
 class GlobalSearch(SearchBase):
-    def _init_search(self):
-        self.targets = self._init_targets()
-        self.backtrack_targets = None
-        # initialize # hyperparameters to starting positions
-        # FIXME how can we continue search?
-        steps = []
-        for _, info in self.targets:
-            start = info['from']
-            var = info['variable']
-            # unable to use overrider-based hyperparameter assignment, but it
-            # shouldn't be a problem
-            steps.append(info['from'])
-            self.assign(var, start)
-        # check steps
-        if not all(x == steps[0] for x in steps):
-            log.error('All step values must be equal in global search, '
-                      'but we found {}'.format(steps))
-        # save a starting checkpoint for backtracking
-        self.save_checkpoint('backtrack')
-
-    def _kernel(self, blacklist):
+    def kernel(self, blacklist):
         for node, info in self.targets.items():
             node_name = node.formatted_name()
             value = self._step_forward(
@@ -193,7 +205,7 @@ class GlobalSearch(SearchBase):
             var = info['variable']
             if value is False:
                 log.debug(
-                    'Stop becase of {!r}, we cannot further '
+                    'Stopping because of {!r}, as we cannot further '
                     'increment/decrement {!r}.'.format(node_name, var))
                 return False
             self.assign(var, value)
@@ -209,12 +221,13 @@ class GlobalSearch(SearchBase):
                 .format(accuracy))
             self.set_backtrack_to_here()
             return True
-        new_step = info['step'] / 2
-        if new_step < info['min_step']:
-            log.debug(
-                'Stop because of {!r}, as we cannot use smaller '
-                'increment/decrement.'.format(node_name))
-            return False
+        for node, info in self.targets.items():
+            new_step = self._reduce_step(info['step'], info['type'])
+            if new_step < info['min_step']:
+                log.debug(
+                    'Stopping because of {!r}, as we cannot use smaller '
+                    'increment/decrement.'.format(node_name))
+                return False
+            info['step'] = new_step
         self.backtrack()
-        info['step'] = new_step
         return True
