@@ -1,14 +1,4 @@
-search:
-    # things used for finetuning
-    acc_base: 0.99
-    tolerance: 0.001
-    training: true
-    update: true
-    early_stop: 0.7
-    # end
-    search_mode: fine_tune
-    # search_mode: one_epoch
-    # search_mode: one_shot
+profile:
     num_epochs: 1.0
     export_ckpt: true
     parameters:
