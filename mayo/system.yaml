@@ -49,6 +49,7 @@ search:
     max_steps: null
     max_epochs:
         profile: 1.0
+        fine_tune: 3.0
     accuracy:
         baseline: null
         tolerance: 0.99

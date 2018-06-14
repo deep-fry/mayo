@@ -54,7 +54,11 @@ class Search(Train):
         return True
 
     def fine_tune(self):
-        ...
+        self.estimator.flush('accuracy', 'train')
+        self._train_op = True
+        self.config.system.max_epochs = self.config.search.max_epochs.fine_tune
+        self._iteration()
+        return self.estimator.get_value('accuracy', 'train')
 
     def _step_forward(self, value, end, step, min_step):
         new_value = value + step
@@ -97,6 +101,7 @@ class Search(Train):
             log.info('Updated hyperparameter {} ')
             # fine-tuning with updated hyperparameter
             self.fine_tune()
+            import pdb; pdb.set_trace()
             # TODO continue here...
         log.info('Automated hyperparameter optimization done.')
 
