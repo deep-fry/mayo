@@ -33,6 +33,7 @@ class SearchBase(Train):
         targets = {}
         dtypes = {
             tf.int32: int,
+            tf.int32._as_ref: int,
             tf.float32: float,
             tf.float32._as_ref: float,
         }
@@ -59,6 +60,8 @@ class SearchBase(Train):
 
     def _init_search(self):
         self.targets = self._init_targets()
+        if not self.targets:
+            raise ValueError('No search target hyperparameter specified.')
         # initialize hyperparameters to starting positions
         # FIXME how can we continue search?
         for _, info in self.targets.items():
@@ -86,7 +89,7 @@ class SearchBase(Train):
         if step > 0 and new_value > end or step < 0 and new_value < end:
             # step size is too large, half it
             new_step = self._reduce_step(step, dtype)
-            if new_step < min_step:
+            if abs(new_step) < abs(min_step):
                 # cannot step further
                 return False
             return self._step_forward(value, end, new_step, min_step, dtype)
@@ -235,7 +238,7 @@ class Search(SearchBase):
         self.backtrack()
         for node, info in self.targets.items():
             new_step = self._reduce_step(info['step'], info['type'])
-            if new_step < info['min_step']:
+            if abs(new_step) < abs(info['min_step']):
                 log.debug(
                     'Stopping because of {!r}, as we cannot use smaller '
                     'increment/decrement.'.format(node_name))

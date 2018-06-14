@@ -1,0 +1,15 @@
+search:
+    mode: global
+    cost_key: memory
+    max_steps: null
+    max_epochs:
+        profile: 1.0
+        fine_tune: 10.0
+    accuracy:
+        baseline: null
+        tolerance: 0.001
+    variables:
+        weights/(DNS|DynamicNetworkSurgery)Pruner\.alpha$:
+            {from: -1, to: 2, step: 0.5, min_step: 0.1}
+        # weights/DGQuantizer\.width$:
+        #     {from: 12, to: 1, step: -4, min_step: -1}
