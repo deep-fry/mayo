@@ -9,9 +9,7 @@ _overrider:
         weights: $(_overrider.weights)
         biases: $(_overrider.biases)
         activation: $(_overrider.activation)
-        gradient:
-            weights: $(_overrider.gradient)
-            biases: $(_overrider.gradient)
+        gradient: $(_overrider.gradient)
     # interfaces
     conv: {<<: *overrider}
     fc: {<<: *overrider}

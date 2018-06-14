@@ -2,7 +2,6 @@ import functools
 from collections import Sequence, namedtuple
 
 import tensorflow as tf
-from tensorflow.python.ops.init_ops import Initializer
 
 from mayo.log import log
 from mayo.util import memoize_property, ShapeError
@@ -62,6 +61,7 @@ class Parameter(object):
             kwargs[key] = value
         kwargs['name'] = self.name
         init = kwargs.pop('initial')
+        from tensorflow.python.ops.init_ops import Initializer
         if init is not None and not isinstance(init, Initializer):
             init = tf.constant_initializer(
                 value=init, dtype=self.dtype, verify_shape=True)
@@ -124,6 +124,10 @@ class OverriderBase(object):
             if isinstance(value, Parameter):
                 params[value.name] = value
         return params
+
+    @property
+    def parameter_variables(self):
+        return self._parameter_variables.values()
 
     def assign_parameters(self):
         for name, value in self._parameter_variables_assignment.items():
@@ -278,6 +282,13 @@ class ChainOverrider(OverriderBase, Sequence):
 
     def __len__(self):
         return len(self._overriders)
+
+    @property
+    def parameter_variables(self):
+        variables = []
+        for o in self._overriders:
+            variables += o.parameter_variables
+        return variables
 
     def assign_parameters(self):
         for o in self._overriders:

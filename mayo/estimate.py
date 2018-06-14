@@ -171,7 +171,7 @@ class ResourceEstimator(object):
             del self.statistics[node or 'global'][name]
 
     def flush_all(self, name):
-        for node, stats in self.statistics.items():
+        for _, stats in self.statistics.items():
             for stat_name in list(stats):
                 if stat_name == name:
                     del stats[name]

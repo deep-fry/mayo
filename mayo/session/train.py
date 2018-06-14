@@ -144,7 +144,7 @@ class Train(SessionBase):
         log.info('Resetting overriders internal variables...')
         self._overriders_call('reset')
 
-    def _iteration(self):
+    def _iteration(self, max_epochs=None):
         system = self.config.system
         epoch = self.once()
         floor_epoch = math.floor(epoch)
@@ -155,22 +155,23 @@ class Train(SessionBase):
             with log.demote():
                 self.save_checkpoint(floor_epoch)
             self._checkpoint_epoch = floor_epoch
-        if system.max_epochs and epoch >= system.max_epochs:
+        max_epochs = max_epochs or system.max_epochs
+        if max_epochs and floor_epoch >= max_epochs:
             log.info(
-                'Maximum epoch count {} reached.'.format(system.max_epochs))
+                'Maximum epoch count {} reached.'.format(max_epochs))
             if self._checkpoint_epoch and floor_epoch > self._checkpoint_epoch:
                 log.info('Saving final checkpoint...')
                 self.save_checkpoint(floor_epoch)
             return False
         return True
 
-    def train(self):
+    def train(self, max_epochs=None):
         # final debug outputs
         lr = self.run(self.learning_rate)
         log.info('Training start with a learning rate {}.'.format(lr))
         try:
             # train iterations
-            while self._iteration():
+            while self._iteration(max_epochs=max_epochs):
                 pass
         except KeyboardInterrupt:
             log.info('Stopped.')

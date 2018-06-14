@@ -4,6 +4,8 @@ from tensorflow.contrib import slim
 
 from mayo.net.tf.base import TFNetBase
 from mayo.net.tf.transform import use_name_not_scope
+from mayo.override.prune.base import PrunerBase
+from mayo.override.quantize.base import QuantizerBase
 
 
 class Layers(TFNetBase):
@@ -80,12 +82,52 @@ class Layers(TFNetBase):
         macs.append(self.estimator._kernel_size(params))
         return self.estimator._multiply(macs)
 
+    def estimate_memory(self, node):
+        num_bits = 0
+        for overrider in self.overriders[node]:
+            bitwidth = 32
+            density = 1.0
+            num_elements = tf.size(overrider.after).eval()
+            if 'weights' in overrider.name:
+                if isinstance(overrider, PrunerBase):
+                    density = overrider.info().density
+                if isinstance(overrider, QuantizerBase):
+                    bitwidth = overrider.info().width
+            if 'biases' in overrider.name:
+                if isinstance(overrider, PrunerBase):
+                    density = overrider.info().density
+                if isinstance(overrider, QuantizerBase):
+                    bitwidth = overrider.info().width
+            num_bits += num_elements * density * bitwidth
+        return num_bits
+
+    def estimate_bitops(self, node, macs):
+        bitops = 0
+        for overrider in self.overriders[node]:
+            bitwidth = 32
+            density = 1.0
+            if 'weights' in overrider.name:
+                if isinstance(overrider, PrunerBase):
+                    density = overrider.info().density
+                if isinstance(overrider, QuantizerBase):
+                    bitwidth = overrider.info().width
+            if 'biases' in overrider.name:
+                if isinstance(overrider, PrunerBase):
+                    density = overrider.info().density
+                if isinstance(overrider, QuantizerBase):
+                    bitwidth = overrider.info().width
+            bitops += macs * density * bitwidth
+        return bitops
+
     def estimate_convolution(
             self, node, info, input_shape, output_shape, params):
         macs = self._estimate_depthwise_convolution(output_shape, params)
         # input channel size C_in
         macs *= input_shape[-1]
-        return self.estimator._apply_input_sparsity(info, {'macs': macs})
+        node_info = {'macs': macs,
+                     'memory': self.estimate_memory(node),
+                     'bitops': self.estimate_bitops(node, macs)}
+        return self.estimator._apply_input_sparsity(info, node_info)
 
     def instantiate_depthwise_convolution(self, node, tensor, params):
         multiplier = params.pop('depth_multiplier', 1)
@@ -95,7 +137,10 @@ class Layers(TFNetBase):
     def estimate_depthwise_convolution(
             self, node, info, input_shape, output_shape, params):
         macs = self._estimate_depthwise_convolution(output_shape, params)
-        layer_info = self.estimator._apply_input_sparsity(info, {'macs': macs})
+        node_info = {'macs': macs,
+                     'memory': self.estimate_memory(node),
+                     'bitops': self.estimate_bitops(node, macs)}
+        layer_info = self.estimator._apply_input_sparsity(info, node_info)
         return self.estimator._mask_passthrough(info, layer_info)
 
     @staticmethod
@@ -143,7 +188,10 @@ class Layers(TFNetBase):
 
     def estimate_fully_connected(
             self, node, info, input_shape, output_shape, params):
-        return {'macs': input_shape[-1] * output_shape[-1]}
+        macs = input_shape[-1] * output_shape[-1]
+        return {'macs': macs,
+                'memory': self.estimate_memory(node),
+                'bitops': self.estimate_bitops(node, macs)}
 
     def instantiate_softmax(self, node, tensor, params):
         return slim.softmax(tensor, **params)

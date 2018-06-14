@@ -2,12 +2,18 @@
 _import: ../_global.yaml
 _overrider:
     weights: &quantizer
+        dns:
+            type: mayo.override.DynamicNetworkSurgeryPruner
+            alpha: 0
+            should_update: true
+            _priority: 100
         dynamic:
             type: mayo.override.DGQuantizer
             width: 8
             overflow_rate: 0.0
             should_update: true
             stochastic: false
+            _priority: 90
     biases: {<<: *quantizer}
     activation: {<<: *quantizer}
     gradient: {<<: *quantizer}

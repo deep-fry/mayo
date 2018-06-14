@@ -173,6 +173,10 @@ class SessionBase(object, metaclass=SessionMeta):
         return tf.trainable_variables()
 
     @property
+    def variables(self):
+        return self.task.nets[0].variables
+
+    @property
     def overriders(self):
         return self.task.nets[0].overriders
 
