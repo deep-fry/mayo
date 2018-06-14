@@ -54,5 +54,5 @@ search:
         baseline: null
         tolerance: 0.99
     variables:
-        'weights/(DNS|DynamicNetworSurgery)Pruner.alpha$':
+        weights/(DNS|DynamicNetworSurgery)Pruner\.alpha$:
             {from: -1, to: 2, step: 0.5, min_step: 0.1}

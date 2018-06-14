@@ -89,8 +89,9 @@ class Search(Train):
             return baseline
         self.reset_num_epochs()
         log.info('Profiling baseline accuracy...')
-        total_accuracy = step = epoch = 0
-        while epoch < self.config.search.profile_epochs:
+        total_accuracy = 0
+        step = epoch = 0
+        while epoch < self.config.search.max_epochs.profile:
             epoch = self.run([self.num_epochs], batch=True)
             total_accuracy += self.estimator.get_value('accuracy', 'train')
             step += 1
