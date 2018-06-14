@@ -59,7 +59,6 @@ class SearchBase(Train):
 
     def _init_search(self):
         self.targets = self._init_targets()
-        self.backtrack_targets = None
         # initialize hyperparameters to starting positions
         # FIXME how can we continue search?
         for _, info in self.targets.items():
@@ -68,17 +67,18 @@ class SearchBase(Train):
             # unable to use overrider-based hyperparameter assignment, but it
             # shouldn't be a problem
             self.assign(var, start)
-        # save a starting checkpoint for backtracking
-        self.save_checkpoint('backtrack')
+        self.set_backtrack_to_here()
 
     def _reduce_step(self, step, dtype):
         if dtype is float:
             return step / 2
         if dtype is int:
+            sign = 1 if step > 0 else -1
+            step = abs(step)
             new_step = int(math.ceil(step / 2))
             if new_step == step:
-                return step - 1
-            return new_step
+                return sign * (step - 1)
+            return sign * new_step
         raise TypeError('Unrecognized data type.')
 
     def _step_forward(self, value, end, step, min_step, dtype):
@@ -93,11 +93,9 @@ class SearchBase(Train):
         return new_value
 
     def backtrack(self):
-        if not self.backtrack_targets:
-            return False
+        log.debug('Reverting to the last hyperparameters.')
         self.targets = self.backtrack_targets
         self.load_checkpoint('backtrack')
-        return True
 
     def set_backtrack_to_here(self):
         self.backtrack_targets = {}
@@ -114,9 +112,16 @@ class SearchBase(Train):
             epoch, _ = self.run([self.num_epochs, self._train_op], batch=True)
             total_accuracy += self.estimator.get_value('accuracy', 'train')
             step += 1
-        return total_accuracy / step
+        accuracy = total_accuracy / step
+        if accuracy >= self.tolerable_baseline:
+            log.debug(
+                'Fine-tuned accuracy {!r} found tolerable.'
+                .format(accuracy))
+            self.set_backtrack_to_here()
+            return True
+        return False
 
-    def kernel(self, blacklist):
+    def kernel(self):
         raise NotImplementedError
 
     def search(self):
@@ -127,17 +132,20 @@ class SearchBase(Train):
         # main procedure
         max_steps = self.config.search.max_steps
         step = 0
-        blacklist = set()
         while True:
             if max_steps and step > max_steps:
                 break
             step += 1
-            if not self.kernel(blacklist):
+            if not self.kernel():
                 break
-        log.info('Automated hyperparameter optimization done.')
+        log.info('Automated hyperparameter optimization complete.')
 
 
 class Search(SearchBase):
+    def _init_search(self):
+        super()._init_search()
+        self.blacklist = set()
+
     def _priority(self, blacklist=None):
         key = self.config.search.cost_key
         info = self.task.nets[0].estimate()
@@ -150,8 +158,8 @@ class Search(SearchBase):
             priority.append((node, stats[key]))
         return list(reversed(sorted(priority, key=lambda v: v[1])))
 
-    def kernel(self, blacklist):
-        priority = self._priority(blacklist)
+    def kernel(self):
+        priority = self._priority(self.blacklist)
         if not priority:
             log.debug('All nodes blacklisted.')
             return False
@@ -169,7 +177,7 @@ class Search(SearchBase):
             log.debug(
                 'Blacklisting {!r} as we cannot further '
                 'increment/decrement {!r}.'.format(node_name, var))
-            blacklist.add(node)
+            self.blacklist.add(node)
             return True
         self.assign(var, value)
         info['from'] = value
@@ -177,27 +185,26 @@ class Search(SearchBase):
             'Updated hyperparameter {} in layer {!r} with a new value {}.'
             .format(var, node_name, value))
         # fine-tuning with updated hyperparameter
-        accuracy = self.fine_tune()
-        if accuracy >= self.tolerable_baseline:
-            log.debug(
-                'Fine-tuned accuracy {!r} found tolerable.'
-                .format(accuracy))
-            self.set_backtrack_to_here()
+        tolerable = self.fine_tune()
+        if tolerable:
+            # satisfies the budget constraint
             return True
+        # fail to satisfy, backtrack and decrement step size
+        self.backtrack()
+        info = self.targets[node]
         new_step = self._reduce_step(info['step'], info['type'])
         if new_step < info['min_step']:
-            blacklist.add(node)
+            self.blacklist.add(node)
             log.debug(
                 'Blacklisting {!r} as we cannot use smaller '
                 'increment/decrement.'.format(node_name))
             return True
-        self.backtrack()
         info['step'] = new_step
         return True
 
 
 class GlobalSearch(SearchBase):
-    def kernel(self, blacklist):
+    def kernel(self):
         for node, info in self.targets.items():
             node_name = node.formatted_name()
             value = self._step_forward(
@@ -215,13 +222,10 @@ class GlobalSearch(SearchBase):
                 'Updated hyperparameter {} in layer {!r} with a new value {}.'
                 .format(var, node_name, value))
         # fine-tuning with updated hyperparameter
-        accuracy = self.fine_tune()
-        if accuracy >= self.tolerable_baseline:
-            log.debug(
-                'Fine-tuned accuracy {!r} found tolerable.'
-                .format(accuracy))
-            self.set_backtrack_to_here()
+        tolerable = self.fine_tune()
+        if tolerable:
             return True
+        self.backtrack()
         for node, info in self.targets.items():
             new_step = self._reduce_step(info['step'], info['type'])
             if new_step < info['min_step']:
@@ -230,5 +234,4 @@ class GlobalSearch(SearchBase):
                     'increment/decrement.'.format(node_name))
                 return False
             info['step'] = new_step
-        self.backtrack()
         return True
