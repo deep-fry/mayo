@@ -41,8 +41,8 @@ _horcuxes:
 model.layers:
     _playground: &playground
         # increment: *incremental
-        mixed: *mixed
-        # fixed: *fixed
+        # mixed: *mixed
+        fixed: *fixed
         # empty: {type: mayo.override.EmptyOverrider}
         # dns: {type: mayo.override.DynamicNetworkSurgeryPruner}
         # random_gate: {type: mayo.override.RandomChannelGater, ratio: 0.5}
@@ -51,8 +51,10 @@ model.layers:
         overrider:
             weights: *playground
             biases: *playground
-            gradient: {weights: *playground}
-            # activation: *playground
+            gradient:
+                weights: *playground
+                error: *playground
+            activation: *playground
             # activation:
             #     type: mayo.override.ChannelPruner
             #     density: 0.1
