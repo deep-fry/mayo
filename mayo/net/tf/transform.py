@@ -40,6 +40,12 @@ class ParameterTransformer(object):
             params[key] = cls(**p)
 
         def create_overrider(overriders):
+            for name, p in overriders.items():
+                if p.get('type'):
+                    continue
+                raise TypeError(
+                    'We expect a mapping of name-overrider pairs, overrider '
+                    'named {!r} does not have a type.'.format(name))
             if all(not p.get('_priority') for p in overriders.values()):
                 log.warn(
                     'Priority not specified for a sequence of overriders '
