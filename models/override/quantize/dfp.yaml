@@ -12,4 +12,5 @@ _overrider:
     biases: {<<: *quantizer}
     activation: {<<: *quantizer}
     gradient:
-      weights: {<<: *quantizer}
+      weights: *quantizer
+      error: *quantizer

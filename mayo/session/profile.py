@@ -72,7 +72,8 @@ class Profile(Train):
         self._run(max_epochs=profile_params.profile.end, reset=False)
         meta_params = {}
         targets = {}
-        for o, key in self.generate_overriders(overriders, prod_key=True):
+        for variable, o, key in self.generate_overriders(
+                overriders, prod_key=True, label_o=True):
             # construct after, overrde again
             params = {}
             avg = self.estimator.get_value('avg_' + o.name, node=key)
@@ -86,7 +87,7 @@ class Profile(Train):
             # find a target -> suggested value dict
             target = o.search(params)
             # map this dict accroding to overriders
-            targets[o] = target
+            targets[o] = [target, variable]
         return targets
 
     def register_values(
@@ -128,14 +129,14 @@ class Profile(Train):
         return
 
     def present(self, overriders, target_values, export_ckpt):
-        table = Table(['variable', 'suggested value'])
+        table = Table(['variable', 'name', 'suggested value'])
         for o in self.generate_overriders(overriders):
             name = o.name
             if len(name) > 4:
                 name = o.name.split('/')
                 name = '/'.join(name[-4:])
             table.add_row((
-                name, target_values[o]))
+                name, target_values[o][1], target_values[o][0]))
         print(table.format())
         if export_ckpt:
             model_name = self.config.model.name
