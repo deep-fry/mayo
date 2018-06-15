@@ -9,7 +9,7 @@ profile:
             #     targets: ['exponent_bias']
             #     percentile: 95
             DGQuantizer:
-                targets: ['width']
+                targets: ['point']
                 percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'default': 50}
             # FloatingPointQuantizer:
             #     targets: ['mantissa_width', 'exponent_bias']

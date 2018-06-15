@@ -18,14 +18,14 @@ class Profile(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
-    def _run(self, reset=True):
+    def _run(self, max_epochs, reset=True):
         log.info('Start profiling ...')
         self.config.system.checkpoint.save = False
         # reset num_epochs and stop at 1 epoch
         if reset:
             self.reset_num_epochs()
         # start training
-        self.train()
+        self.train(max_epochs=max_epochs)
 
     def profile_multi_epochs(self):
         print('Profile progressing ...')
@@ -60,18 +60,16 @@ class Profile(Train):
         profile_params = self.config.profile.parameters
         self._run_train_ops = True
 
-        self.config.system.max_epochs = profile_params.profile.start
         # empty run to speed to warm up
         for o, key in self.generate_overriders(overriders, prod_key=True):
             o.enable = False
             o.width = 8
-        self._run()
+        self._run(max_epochs=profile_params.profile.start)
         # lets profile the values
         self.register_values(
             overriders, samples=profile_params.samples,
             rules=rules)
-        self.config.system.max_epochs = profile_params.profile.end
-        self._run(reset=False)
+        self._run(max_epochs=profile_params.profile.end, reset=False)
         meta_params = {}
         targets = {}
         for o, key in self.generate_overriders(overriders, prod_key=True):
@@ -94,7 +92,8 @@ class Profile(Train):
     def register_values(
             self, overriders, reg_avg=True, reg_max=True, samples=10,
             rules=None):
-        for o, key in self.generate_overriders(overriders, prod_key=True):
+        for variable, o, key in self.generate_overriders(
+                overriders, prod_key=True, label_o=True):
             name = type(o).__name__
             if reg_avg:
                 self.estimator.register(
@@ -107,13 +106,16 @@ class Profile(Train):
                     percentile = p_dict
                 else:
                     default_percentile = p_dict.get('default', 99)
-                    if 'gradients' in o.name:
+                    if 'gradient' in variable:
                         percentile = p_dict.get(
                             'gradients', default_percentile)
-                    if 'weights' in o.name:
+                    if 'weights' in variable:
                         percentile = p_dict.get('weights', default_percentile)
-                    if 'biases' in o.name:
+                    if 'biases' in variable:
                         percentile = p_dict.get('biases', default_percentile)
+                    if 'activation' in variable:
+                        percentile = p_dict.get(
+                            'activations', default_percentile)
                     else:
                         percentile = default_percentile
                 percentile = tf.contrib.distributions.percentile(
@@ -137,14 +139,20 @@ class Profile(Train):
         print(table.format())
         if export_ckpt:
             model_name = self.config.model.name
-            model_name += '_profile_' + self.config.search.search_mode
+            model_name += '_profiled'
             self.save_checkpoint(model_name)
         return
 
-    def generate_overriders(self, overriders, prod_key=False):
+    def generate_overriders(self, overriders, prod_key=False, label_o=False):
         for key, os in overriders.items():
-            for o in os:
+            for variable, o in os.items():
                 if prod_key:
-                    yield (o, key)
+                    if label_o:
+                        yield [variable, o, key]
+                    else:
+                        yield (o, key)
                 else:
-                    yield o
+                    if label_o:
+                        yield (variable, o)
+                    else:
+                        yield o

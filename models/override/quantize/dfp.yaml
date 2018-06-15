@@ -11,4 +11,5 @@ _overrider:
             _priority: 90
     biases: {<<: *quantizer}
     activation: {<<: *quantizer}
-    gradient: {<<: *quantizer}
+    gradient:
+      weights: {<<: *quantizer}
