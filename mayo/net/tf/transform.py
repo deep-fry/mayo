@@ -24,8 +24,8 @@ class ParameterTransformer(object):
         self.overriders = {}
         self.variables = {}
 
-    def _add_overrider(self, node, overrider):
-        self.overriders.setdefault(node, []).append(overrider)
+    def _add_overrider(self, node, name, overrider):
+        self.overriders.setdefault(node, {})[name] = overrider
         variables = self.variables.setdefault(node, {})
         for var in overrider.parameter_variables:
             variables[var.op.name] = var
@@ -86,7 +86,7 @@ class ParameterTransformer(object):
         if activation_overrider:
             override_fn = lambda x: activation_overrider.apply(
                 node, 'activations', tf.get_variable, x)
-            self._add_overrider(node, activation_overrider)
+            self._add_overrider(node, 'activation', activation_overrider)
         else:
             override_fn = None
         # produce a default ReLU activation for overrider specifically
@@ -135,7 +135,7 @@ class ParameterTransformer(object):
                 log.debug(
                     'Overriding {!r} with {!r}.'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
-                self._add_overrider(node, overrider)
+                self._add_overrider(node, name, overrider)
             # gradient overrider
             overrider = gradient_overriders.get(key)
             if overrider and self.is_training:
@@ -145,7 +145,8 @@ class ParameterTransformer(object):
                 gradient_map = {'Identity': gradient_name}
                 with self.session.tf_graph.gradient_override_map(gradient_map):
                     v = tf.identity(v)
-                self._add_overrider(node, overrider)
+                self._add_overrider(
+                    node, 'gradient.{}'.format(name), overrider)
             self.variables.setdefault(node, {})[name] = v
             return v
 

@@ -122,14 +122,14 @@ class Train(SessionBase):
     def once(self):
         train_op = self._train_op if self._run_train_ops else []
         tasks = [train_op, self.num_epochs]
-        noop, num_epochs = self.run(tasks, batch=True)
+        _, num_epochs = self.run(tasks, batch=True)
         return num_epochs
 
     def _overriders_call(self, func_name):
         # it is sufficient to use the first net, as overriders
         # share internal variables
-        for node, overriders in self.task.nets[0].overriders.items():
-            for o in overriders:
+        for _, overriders in self.task.nets[0].overriders.items():
+            for o in overriders.values():
                 getattr(o, func_name)()
 
     def overriders_assign(self):

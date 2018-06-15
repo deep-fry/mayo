@@ -145,7 +145,7 @@ class TFNetBase(NetBase):
         log.debug(
             'Estimated statistics for {!r}: {}.'
             .format(node.formatted_name(), layer_info))
-        for o in self.overriders.get(node, []):
+        for o in self.overriders.get(node, {}).values():
             layer_info = o.estimate(layer_info, info)
             log.debug(
                 'Overrider {!r} modified statistics: {}.'

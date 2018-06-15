@@ -284,7 +284,7 @@ class SessionBase(object, metaclass=SessionMeta):
         info_dict = {}
         overriders = []
         for each in self.overriders.values():
-            overriders += each
+            overriders += list(each.values())
         if plumbing:
             for o in flatten(overriders):
                 info = list(o.info())
@@ -301,7 +301,7 @@ class SessionBase(object, metaclass=SessionMeta):
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
         for _, overriders in self.overriders.items():
-            for o in overriders:
+            for o in overriders.values():
                 o.assign_parameters()
 
     @contextmanager
