@@ -25,7 +25,8 @@ class GetterInvokedOutsideApplyError(OverriderError):
 
 def _getter_not_initialized(*args, **kwargs):
     raise GetterInvokedOutsideApplyError(
-        'The function `getter()` should only be invoked in `.apply()`.')
+        'The function `getter()` should only be invoked in `.apply()`. '
+        'It is most likely that the overrider is not applied.')
 
 
 class Parameter(object):
@@ -130,6 +131,8 @@ class OverriderBase(object):
         return self._parameter_variables.values()
 
     def assign_parameters(self):
+        if not self._applied:
+            return
         for name, value in self._parameter_variables_assignment.items():
             if value is None:
                 continue
@@ -139,8 +142,6 @@ class OverriderBase(object):
             log.debug(
                 'Assigning overrider parameter: {}.{} = {}'
                 .format(self, name, value_desc))
-            # ensure variable is instantiated
-            self.parameters[name].__get__(self, None)
             # assignment
             var = self._parameter_variables[name]
             try:
@@ -237,6 +238,8 @@ class OverriderBase(object):
         return self._info_tuple()
 
     def info(self):
+        if not self._applied:
+            return None
         return self._info()
 
     def estimate(self, layer_info, info):
