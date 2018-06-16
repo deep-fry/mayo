@@ -40,6 +40,7 @@ class ParameterTransformer(object):
             params[key] = cls(**p)
 
         def create_overrider(overriders):
+            # TODO _add_overrider here
             for name, p in overriders.items():
                 if p.get('type'):
                     continue
@@ -112,6 +113,7 @@ class ParameterTransformer(object):
         # gradient of error
         gradient_overrider = params.get('overrider.gradient.error')
         if gradient_overrider:
+            self._add_overrider(node, 'gradient.error', gradient_overrider)
             gradient_name = '{}/activations/gradient'.format(
                 node.formatted_name())
             gradient_func = self.custom_gradient(
