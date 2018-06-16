@@ -63,7 +63,6 @@ class Profile(Train):
         # empty run to speed to warm up
         for o, key in self.generate_overriders(overriders, prod_key=True):
             o.enable = False
-            o.width = 8
         self._run(max_epochs=profile_params.profile.start)
         # lets profile the values
         self.register_values(
