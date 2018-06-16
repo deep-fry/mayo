@@ -1,0 +1,10 @@
+profile:
+    num_epochs: 1.0
+    export_ckpt: true
+    parameters:
+        profile: {'start': 0.1, 'end': 0.15}
+        samples: 10
+        overriders:
+            DGQuantizer:
+                targets: ['point']
+                percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'activation': 90}
