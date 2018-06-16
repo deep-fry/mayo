@@ -292,6 +292,8 @@ class SessionBase(object, metaclass=SessionMeta):
         else:
             for o in flatten(overriders):
                 info = o.info()
+                if not info:
+                    continue
                 table = info_dict.setdefault(o.__class__, Table(info._fields))
                 table.add_row(info)
             for cls, table in info_dict.items():
@@ -300,7 +302,7 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
-        for _, overriders in self.overriders.items():
+        for overriders in self.overriders.values():
             for o in overriders.values():
                 o.assign_parameters()
 
