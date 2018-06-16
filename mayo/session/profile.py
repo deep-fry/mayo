@@ -138,10 +138,18 @@ class Profile(Train):
                 name, target_values[o][1], target_values[o][0]))
         print(table.format())
         if export_ckpt:
+            self._assign_targets(overriders, target_values)
             model_name = self.config.model.name
             model_name += '_profiled'
             self.save_checkpoint(model_name)
         return
+
+    def _assign_targets(self, overriders, target_values):
+        for node, name_to_overrider in overriders.items():
+            for name, overrider in name_to_overrider.items():
+                target = target_values[overrider][0]
+                for target_name, target_value in target.items():
+                    setattr(overrider, target_name, target_value)
 
     def generate_overriders(self, overriders, prod_key=False, label_o=False):
         for key, os in overriders.items():
