@@ -208,7 +208,7 @@ class ShiftQuantizer(FloatingPointQuantizer):
         max_exponent = int(2 ** width)
         for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
             max_value = 2 ** (exp + 1)
-            if max_value is not None:
+            if profiled_max is not None:
                 if profiled_max < max_value:
                     return exp
             else:
