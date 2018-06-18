@@ -7,4 +7,4 @@ profile:
         overriders:
             DGQuantizer:
                 targets: ['point']
-                percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'activation': 90}
+                percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'activations': 90}
