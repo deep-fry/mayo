@@ -147,6 +147,7 @@ class Profile(Train):
     def _assign_targets(self, overriders, target_values):
         for node, name_to_overrider in overriders.items():
             for name, overrider in name_to_overrider.items():
+                overrider.enable = True
                 target = target_values[overrider][0]
                 for target_name, target_value in target.items():
                     setattr(overrider, target_name, target_value)

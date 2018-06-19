@@ -1,24 +1,21 @@
-def mobilenet_shift(overriders, variables):
-    before = {}
-    after = {}
-    useful_info = {}
-    bn_avgs = {}
-    for overrider in overriders:
-        name = overrider.name
-        if 'weights' in name or 'biases' in name:
-            before[name] = overrider.before.eval()
-            after[name] = overrider.after.eval()
-            useful_info[name] = {}
-            if hasattr(overrider, 'quantizer'):
-                useful_info['exp_bias'] = \
-                    overrider.quantizer.exponent_bias.eval()
-    for variable in variables:
-        if 'moving' in variable.name:
-            bn_avgs[variable.name] = variable.eval()
-    raw = (before, after, useful_info, bn_avgs)
+def mobilenet_shift(overriders, global_vars):
+    save_dir = '/local/scratch-3/yaz21/tmp/'
+    meta = {}
+    for node, overrider_dict in overriders.items():
+        name = node.formatted_name()
+        meta[name] = {}
+        for target_name, overrider in overrider_dict.items():
+            meta[name][target_name]={
+                'before': overrider.before.eval(),
+                'after': overrider.after.eval(),
+            }
+        for variable in global_vars:
+            if 'moving' in variable.name:
+                meta[name][variable.name] = variable.eval()
     STORE = True
     if STORE:
         import pickle
-        with open('mobilenet.pkl', 'wb') as f:
-            pickle.dump(raw, f)
-    return raw
+        save_dir += 'mobilenet.pkl'
+        with open(save_dir, 'wb') as f:
+            pickle.dump(meta, f)
+    return meta 
