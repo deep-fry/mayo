@@ -182,7 +182,8 @@ class OverriderBase(object):
         """
         if self._applied:
             raise OverrideAlreadyAppliedError(
-                'Overrider has already been applied to {!r}'.format(value))
+                'Overrider has already been applied to {!r}.'
+                .format(self.name))
         self._applied = True
         self.node = node
         self.name = value.op.name
