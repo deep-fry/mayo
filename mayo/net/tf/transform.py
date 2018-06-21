@@ -26,12 +26,6 @@ class ParameterTransformer(object):
         self.overriders = {}
         self.variables = {}
 
-    def _add_overrider(self, node, name, overrider):
-        self.overriders.setdefault(node, {})[name] = overrider
-        variables = self.variables.setdefault(node, {})
-        for var in overrider.parameter_variables:
-            variables[var.op.name] = var
-
     def _create_hyperobjects(self, layer_node, params):
         suffixes = ['regularizer', 'initializer']
         for key, p in params.items():
@@ -42,7 +36,6 @@ class ParameterTransformer(object):
             params[key] = cls(**p)
 
         def create_overrider(overriders):
-            # TODO _add_overrider here
             for name, p in overriders.items():
                 if p.get('type'):
                     continue
@@ -70,11 +63,13 @@ class ParameterTransformer(object):
             if not p:
                 del overrider_params[key]
                 continue
+            overriders = self.overriders.setdefault(layer_node, {})
             if key == 'gradient':
                 for grad_key, grad_p in p.items():
-                    p[grad_key] = create_overrider(grad_p)
+                    q = overriders.setdefault('gradient', {})
+                    p[grad_key] = q[grad_key] = create_overrider(grad_p)
                 continue
-            overrider_params[key] = create_overrider(p)
+            overrider_params[key] = overriders[key] = create_overrider(p)
 
     def _apply_gradient_overrider(self, node, name, overrider, tensor):
         @tf.custom_gradient
@@ -109,7 +104,6 @@ class ParameterTransformer(object):
         # gradient of error
         gradient_overrider = params.get('overrider.gradient.error')
         if gradient_overrider and self.is_training:
-            self._add_overrider(node, 'gradient.error', gradient_overrider)
             def gradient_fn(v):
                 name = '{}/errors'.format(node.formatted_name())
                 return self._apply_gradient_overrider(
@@ -118,7 +112,6 @@ class ParameterTransformer(object):
         # activation
         activation_overrider = params.get('overrider.activation', None)
         if activation_overrider:
-            self._add_overrider(node, 'activation', activation_overrider)
             override_fn = lambda x: activation_overrider.apply(
                 node, 'activations', tf.get_variable, x)
             activation_functions.append(override_fn)
@@ -156,13 +149,10 @@ class ParameterTransformer(object):
                 log.debug(
                     'Overriding {!r} with {!r}.'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
-                self._add_overrider(node, name, overrider)
             # gradient overrider
             overrider = gradient_overriders.get(key)
             if overrider and self.is_training:
                 v = self._apply_gradient_overrider(node, name, overrider, v)
-                self._add_overrider(
-                    node, 'gradient.{}'.format(name), overrider)
             self.variables.setdefault(node, {})[name] = v
             return v
 
