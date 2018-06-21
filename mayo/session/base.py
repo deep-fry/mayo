@@ -5,11 +5,9 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_property, flatten, object_from_params,
-    Change, Table, Percent, unknown, format_shape)
+    memoize_property, flatten, object_from_params, Change, Table, Percent)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
-from mayo.net.base import LayerNode, JoinNode
 from mayo.session.checkpoint import CheckpointHandler
 
 
@@ -227,78 +225,7 @@ class SessionBase(object, metaclass=SessionMeta):
         self.checkpoint.save(name)
 
     def info(self, plumbing=False):
-        net = self.task.nets[0]
-        info_dict = net.info(plumbing)
-        # layer info
-        stats = net.estimate()
-        if plumbing:
-            layer_info = {}
-            for node, shape in net.shapes.items():
-                stat = stats.get(node, {})
-                stat['shape'] = list(shape)
-                layer_info[node.formatted_name()] = stat
-            info_dict['layers'] = layer_info
-        else:
-            keys = set()
-            for node, stat in stats.items():
-                if isinstance(stat, list):
-                    for each in stat:
-                        keys |= set(each)
-                elif isinstance(stat, dict):
-                    keys |= set(stat)
-                else:
-                    raise TypeError('Unrecognized type.')
-            keys = sorted(k for k in keys if not k.startswith('_'))
-            layer_info = Table(['layer', 'shape'] + keys)
-            for node, shape in net.shapes.items():
-                if isinstance(node, LayerNode):
-                    values = stats.get(node, {})
-                    values = tuple(values.get(k, unknown) for k in keys)
-                else:
-                    values = tuple([unknown] * len(keys))
-                if isinstance(node, JoinNode):
-                    shape = ', '.join(format_shape(s) for s in shape)
-                else:
-                    shape = format_shape(shape)
-                layer_info.add_row((node.formatted_name(), shape) + values)
-            try:
-                macs = sum(layer_info.get_column('macs'))
-            except ValueError:
-                pass
-            else:
-                formatted_footer = [''] * len(keys)
-                formatted_footer[keys.index('macs')] = macs
-                layer_info.set_footer(['', ''] + formatted_footer)
-            info_dict['layers'] = layer_info
-        if self.overriders:
-            info_dict['overriders'] = self._overrider_info(plumbing)
-        return info_dict
-
-    def _overrider_info(self, plumbing=False):
-        def flatten(overriders):
-            for o in overriders:
-                if isinstance(o, ChainOverrider):
-                    yield from flatten(o)
-                else:
-                    yield o
-        info_dict = {}
-        overriders = []
-        for each in self.overriders.values():
-            overriders += list(each.values())
-        if plumbing:
-            for o in flatten(overriders):
-                info = list(o.info())
-                info_dict.setdefault(o.__class__, []).append(info)
-        else:
-            for o in flatten(overriders):
-                info = o.info()
-                if not info:
-                    continue
-                table = info_dict.setdefault(o.__class__, Table(info._fields))
-                table.add_row(info)
-            for cls, table in info_dict.items():
-                cls.finalize_info(table)
-        return info_dict
+        return self.task.nets[0].info(plumbing)
 
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders

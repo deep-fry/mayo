@@ -3,8 +3,9 @@ import collections
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import Table, object_from_params
-from mayo.net.base import NetBase
+from mayo.util import Table, object_from_params, unknown, format_shape
+from mayo.override import ChainOverrider
+from mayo.net.base import LayerNode, JoinNode, NetBase
 from mayo.net.tf.transform import ParameterTransformer
 
 
@@ -38,32 +39,83 @@ class TFNetBase(NetBase):
     def variables(self):
         return self._transformer.variables
 
-    def info(self, plumbing):
-        def shape(v):
-            return [int(s) for s in v.shape]
-        info_dict = super().info()
-        trainable_vars = tf.trainable_variables()
-        if not plumbing:
-            # trainable table
-            trainable = Table(['trainable', 'shape'])
-            trainable.add_rows((v, v.shape) for v in trainable_vars)
-            trainable.add_column(
-                'count', lambda row: trainable[row, 'shape'].num_elements())
-            trainable.set_footer(
-                ['', '    total:', sum(trainable.get_column('count'))])
-            # nontrainable table
-            nontrainable = Table(['nontrainable', 'shape'])
-            for var in tf.global_variables():
-                if var not in trainable_vars:
-                    nontrainable.add_row((var, var.shape))
-        else:
-            trainable = {v.op.name: shape(v) for v in trainable_vars}
-            nontrainable = {
-                v.op.name: shape(v) for v in tf.global_variables()
-                if v not in trainable_vars}
-        info_dict['trainables'] = trainable
-        info_dict['nontrainables'] = nontrainable
+    def _layer_info(self):
+        stats = self.estimate()
+        keys = set()
+        for node, stat in stats.items():
+            if isinstance(stat, list):
+                for each in stat:
+                    keys |= set(each)
+            elif isinstance(stat, dict):
+                keys |= set(stat)
+            else:
+                raise TypeError('Unrecognized type.')
+        keys = sorted(k for k in keys if not k.startswith('_'))
+        layer_info = Table(['layer', 'shape'] + keys)
+        for node, shape in self.shapes.items():
+            if isinstance(node, LayerNode):
+                values = stats.get(node, {})
+                values = tuple(values.get(k, unknown) for k in keys)
+            else:
+                values = tuple([unknown] * len(keys))
+            if isinstance(node, JoinNode):
+                shape = ', '.join(format_shape(s) for s in shape)
+            else:
+                shape = format_shape(shape)
+            layer_info.add_row((node.formatted_name(), shape) + values)
+        layer_info.footer_sum('macs')
+        return layer_info
+
+    def _overrider_info(self):
+        def flatten(overriders):
+            for o in overriders:
+                if isinstance(o, ChainOverrider):
+                    yield from flatten(o)
+                else:
+                    yield o
+        info_dict = {}
+        overriders = []
+        for each in self.overriders.values():
+            overriders += list(each.values())
+        for o in flatten(overriders):
+            info = o.info()
+            if not info:
+                continue
+            table = info_dict.setdefault(o.__class__, Table(info._fields))
+            table.add_row(info)
+        for cls, table in info_dict.items():
+            cls.finalize_info(table)
         return info_dict
+
+    def _variable_info(self):
+        trainable_vars = tf.trainable_variables()
+        # trainable table
+        trainable = Table(['trainable', 'shape'])
+        trainable.add_rows((v, v.shape) for v in trainable_vars)
+        trainable.add_column(
+            'count', lambda row: trainable[row, 'shape'].num_elements())
+        trainable.footer_sum('count')
+        # nontrainable table
+        nontrainable = Table(['nontrainable', 'shape'])
+        for var in tf.global_variables():
+            if var not in trainable_vars:
+                nontrainable.add_row((var, var.shape))
+        return trainable, nontrainable
+
+    def info(self, plumbing):
+        trainable, nontrainable = self._variable_info()
+        info = {
+            'layers': self._layer_info(),
+            'trainables': trainable,
+            'nontrainables': nontrainable,
+            'overriders': self._overrider_info(),
+        }
+        if plumbing:
+            for k in ['layers', 'trainables', 'nontrainables']:
+                info[k] = info[k].plumb()
+            info['overriders'] = {
+                k: t.plumb() for k, t in info['overriders'].items()}
+        return info
 
     @property
     def shapes(self):
