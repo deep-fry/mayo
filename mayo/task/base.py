@@ -1,16 +1,19 @@
+import os
 import collections
 from contextlib import contextmanager
 
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.error import NotImplementedError
+from mayo.util import memoize_property
 from mayo.net.tf import TFNet
 from mayo.session.test import Test
 
 
 class TFTaskBase(object):
     """Specifies common training and evaluation tasks.  """
+    debug = False
+
     def __init__(self, session):
         super().__init__()
         self.is_test = isinstance(session, Test)
@@ -33,6 +36,17 @@ class TFTaskBase(object):
             with self._gpu_context(i):
                 yield func(net, prediction, truth)
 
+    @staticmethod
+    def _test_files(folder):
+        suffixes = ['.jpg', '.jpeg', '.png']
+        files = [
+            name for name in sorted(os.listdir(folder))
+            if any(name.endswith(s) for s in suffixes)]
+        log.debug(
+            'Running in folder {!r} on images: {}'
+            .format(folder, ', '.join(files)))
+        return [os.path.join(folder, name) for name in files]
+
     def _instantiate_nets(self):
         nets = []
         inputs = []
@@ -40,14 +54,10 @@ class TFTaskBase(object):
         truths = []
         names = []
         model = self.config.model
-        if self.is_test:
-            folder = self.config.system.search_path.run.inputs[0]
-            iterer = self.augment(folder)
-        else:
-            iterer = self.generate()
+        iterer = self.generate()
         for i, (data, additional) in enumerate(iterer):
             if self.is_test:
-                name, truth = additional, None
+                name, truth = additional[0], None
             else:
                 name, truth = None, additional
             log.debug('Instantiating graph for GPU #{}...'.format(i))
@@ -57,7 +67,7 @@ class TFTaskBase(object):
             prediction = net.outputs()
             data, prediction, truth = self.transform(
                 net, data, prediction, truth)
-            if i == 0:
+            if i == 0 and self.debug:
                 self._register_estimates(prediction, truth)
             inputs.append(data)
             predictions.append(prediction)
@@ -89,25 +99,20 @@ class TFTaskBase(object):
             'Please implement .generate() which produces training/validation '
             'samples and the expected truth results.')
 
-    def augment(self, serialized):
-        raise NotImplementedError(
-            'Please implement .augment() which augments input tensors.')
-
     def train(self, net, prediction, truth):
         raise NotImplementedError(
             'Please implement .train() which returns the loss tensor.')
 
-    def eval(self, net, prediction, truth):
+    def eval(self):
         raise NotImplementedError(
-            'Please implement .eval() which returns the evaluation metrics.')
+            'Please implement .eval() which registers the evaluation metrics.')
 
-    def test(self, name, inputs, prediction):
+    def post_eval(self):
+        raise NotImplementedError(
+            'Please impelement .post_eval() which computes an info dict '
+            'for the evaluation metrics.')
+
+    def test(self, name, prediction):
         raise NotImplementedError(
             'Please implement .test() which produces human-readable output '
             'for a given input.')
-
-    def map_train(self):
-        return list(self.map(self.train))
-
-    def map_eval(self):
-        return list(self.map(self.eval))

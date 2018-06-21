@@ -1,14 +1,14 @@
 import tensorflow as tf
 import numpy as np
 
-from mayo.error import ShapeError
+from mayo.util import ShapeError
 
 
 def box_to_corners(box, unstack=True, stack=True):
     if unstack:
         box = tf.unstack(box, axis=-1)
-    y, x, h, w = box
-    h_half, w_half = h / 2, w / 2
+    x, y, w, h = box
+    w_half, h_half = w / 2, h / 2
     corners = [y - h_half, x - w_half, y + h_half, x + w_half]
     if stack:
         return tf.stack(corners, axis=-1)
@@ -23,7 +23,7 @@ def corners_to_box(corners, unstack=True, stack=True):
     x = (x_min + x_max) / 2
     h = y_max - y_min
     w = x_max - x_min
-    box = [y, x, h, w]
+    box = [x, y, w, h]
     if stack:
         return tf.stack(box, axis=-1)
     return box
@@ -73,7 +73,7 @@ def iou(boxes1, boxes2, anchors=False):
 
     boxes1, boxes2:
         a (... x 4) tensor, where the last dimension contains the
-        coordinates (y, x, h, w), respectively denote the center of the
+        coordinates (x, y, w, h), respectively denote the center of the
         box and its height and width.
     anchors:
         boxes1 and 2 to be (... x 2) tensors containing only
@@ -93,8 +93,8 @@ def iou(boxes1, boxes2, anchors=False):
     with tf.control_dependencies([shape]):
         boxes1 = tf.identity(boxes1)
     if anchors:
-        h1, w1 = tf.unstack(boxes1, axis=-1)
-        h2, w2 = tf.unstack(boxes2, axis=-1)
+        w1, h1 = tf.unstack(boxes1, axis=-1)
+        w2, h2 = tf.unstack(boxes2, axis=-1)
         y1_max, x1_max = h1 / 2, w1 / 2
         y2_max, x2_max = h2 / 2, w2 / 2
         y1_min, x1_min, y2_min, x2_min = -y1_max, -x1_max, -y2_max, -x2_max
@@ -102,10 +102,10 @@ def iou(boxes1, boxes2, anchors=False):
         y1_min, x1_min, y1_max, x1_max = box_to_corners(boxes1, stack=False)
         y2_min, x2_min, y2_max, x2_max = box_to_corners(boxes2, stack=False)
     # intersect corners
-    yi_max = tf.minimum(y1_max, y2_max)
-    xi_max = tf.minimum(x1_max, x2_max)
     yi_min = tf.maximum(y1_min, y2_min)
     xi_min = tf.maximum(x1_min, x2_min)
+    yi_max = tf.minimum(y1_max, y2_max)
+    xi_max = tf.minimum(x1_max, x2_max)
     # areas
     area_intersect = area(yi_min, xi_min, yi_max, xi_max)
     area1 = area(y1_min, x1_min, y1_max, x1_max)
@@ -117,16 +117,14 @@ def np_iou(a, b):
     """
     A re-implementation of iou() for numpy...
 
-    a: a box, (N, 4) numpy array of float: y, x, h, w
+    a: a box, (N, 4) numpy array of float: x, y, w, h
     b: corner vertices,  (K, 4) numpy array of float.
     returns: a (N, K) ndarray of IOU between boxes and query_boxes.
 
     reference: https://github.com/rbgirshick/py-faster-rcnn.
     """
-    # iw = np.minimum(a[:, 3], b[:, 3]) - np.maximum(a[:, 1], b[:, 1])
-    # ih = np.minimum(a[:, 2], b[:, 2]) - np.maximum(a[:, 0], b[:, 0])
-    ay, ax, ah, aw = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
-    by, bx, bh, bw = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
+    ax, ay, aw, ah = a[:, 0], a[:, 1], a[:, 2], a[:, 3]
+    bx, by, bw, bh = b[:, 0], b[:, 1], b[:, 2], b[:, 3]
     iw = (ax >= bx) * ((bx + bw / 2) - (ax - aw / 2)) + \
         (ax < bx) * ((ax + aw / 2) - (bx - bw / 2))
     ih = (ax >= bx) * ((by + bh / 2) - (ay - ah / 2)) + \
@@ -135,8 +133,7 @@ def np_iou(a, b):
     ih = np.maximum(ih, 0)
 
     area = bh * bw
-    ua = np.expand_dims(
-        (ah * aw), axis=1) + area - iw * ih
+    ua = np.expand_dims(ah * aw, axis=1) + area - iw * ih
     ua = np.maximum(ua, np.finfo(float).eps)
 
     intersection = iw * ih

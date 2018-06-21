@@ -5,8 +5,9 @@ import itertools
 
 def main():
     configdir = 'configs'
-    storedir = 'checkpoints/fixedpoint'
-    max_epochs = 1
+    storedir = 'checkpoints/cifar_fixedpoint'
+    # max_epochs = 310
+    max_epochs = 500
     bitwidths = reversed([4, 8, 16, 32])
     wa_width, gwidth = combinations(bitwidths)
     # points = [2] * len(wa_width)
@@ -33,20 +34,23 @@ def main():
             subprocess.run('mv checkpoints/cifarnet/cifar10/checkpoint-{}.* {}'.format(
                 max_epochs, storebit_dir), shell=True)
     else:
-        for p, b in zip([4, 3, 2, 1], [32, 16, 8, 4]):
+        for p, b in zip([4, 3, 3, 1], [24, 20, 12, 2]):
             print('Generate a custom yaml at {}'.format(configdir))
             name = generate_yaml(b, p, configdir, grad=GRADIENTS)
             print('Training starts for {} bits'.format(b))
-            lenet_command = './my datasets/mnist.yaml {} models/override/lenet5.yaml models/override/_global.yaml trainers/lenet5.yaml system.checkpoint.load=pretrained system.max_epochs={} reset-num-epochs train'.format(
+            lenet_command = './my datasets/mnist.yaml {} models/override/lenet5.yaml models/override/_global.yaml trainers/lenet5.yaml system.checkpoint.load=pretrained  system.checkpoint.save.interval=10 system.num_gpus=4 system.batch_size_per_gpu=10000 train.learning_rate.decay_steps=200 system.max_epochs={} reset-num-epochs train'.format(
                 name, max_epochs)
-            cifar_command = ('./my datasets/cifar10.yaml {} models/cifarnet.yaml trainers/cifarnet.yaml system.checkpoint.load=null system.checkpoint.save.interval=10 system.num_gpus=4 system.batch_size_per_gpu=1024 system.max_epochs={} reset-num-epochs train'.format(
+            cifar_command = ('./my datasets/cifar10.yaml {} models/override/cifarnet.yaml models/override/_global.yaml trainers/cifarnet.yaml system.checkpoint.load=pretrained system.checkpoint.save.interval=10 system.num_gpus=4 system.batch_size_per_gpu=1024 train.learning_rate.decay_steps=100 system.max_epochs={} reset-num-epochs train'.format(
                 name, max_epochs))
+            # subprocess.run(lenet_command, shell=True)
             subprocess.run(lenet_command, shell=True)
             print('Training done')
             storebit_dir = '{}/{}bit'.format(storedir, str(b))
             if not os.path.exists(storebit_dir):
                 os.mkdir(storebit_dir)
-            subprocess.run('mv checkpoints/cifarnet/cifar10/checkpoint-{}.* {}'.format(
+            # subprocess.run('mv checkpoints/cifarnet/cifar10/checkpoint-{}.* {}'.format(
+            #     max_epochs, storebit_dir), shell=True)
+            subprocess.run('mv checkpoints/lenet5/mnist/checkpoint-{}.* {}'.format(
                 max_epochs, storebit_dir), shell=True)
 
 
@@ -90,14 +94,7 @@ _overrider:
             point: {1}
             should_update: true
             stochastic: false
-    biases: *quantizer
-    activation:
-        fixed:
-            type: mayo.override.FixedPointQuantizer
-            width: {2}
-            point: {3}
-            should_update: true
-            stochastic: false""".format(bitwidth, point, bitwidth, point)
+    biases: *quantizer""".format(bitwidth, point)
     name = filename + '/' + 'custom{}.yaml'.format(bitwidth)
     with open(name, 'w') as f:
         f.write(yaml_str)

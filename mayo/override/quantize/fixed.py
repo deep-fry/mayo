@@ -19,8 +19,8 @@ class FixedPointQuantizer(QuantizerBase):
     References:
         [1] https://arxiv.org/pdf/1604.03168
     """
-    width = Parameter('width', 32, [], 'int')
-    point = Parameter('point', 2, [], 'int')
+    width = Parameter('width', 64, [], 'int')
+    point = Parameter('point', 8, [], 'int')
 
     def __init__(self, session, point=None, width=None, should_update=True,
                  stochastic=None):
@@ -97,6 +97,27 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
 
     def _update(self):
         self.point = self._update_policy(self.eval(self.before))
+
+    def search(self, params):
+        max_bound = params.get('max')
+        if max_bound is None:
+            raise ValueError(
+                'require max value to search for {}', self.__name__)
+        targets = params.get('targets')
+        if targets is None or 'point' not in targets:
+            raise ValueError(
+                'Required targets are not specified')
+        w = self.eval(self.width)
+        max_value = 2 ** (w - 1)
+        for p in range(-2 * w, w + 1):
+            shift = 2.0 ** (p)
+            if max_bound <= max_value * shift:
+                return {'point': w + p}
+        log.warn(
+            'Cannot find a binary point position that satisfies the '
+            'overflow_rate budget, using integer (point at the right '
+            'of LSB) instead.')
+        return {'point': w}
 
 
 class CourbariauxQuantizer(DynamicFixedPointQuantizerBase):

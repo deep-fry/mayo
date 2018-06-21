@@ -6,6 +6,7 @@ dataset:
         num_classes: 21
         background_class: {has: true}
         anchors:
+            # defined in (width, height) order
             - [1.08, 1.19]
             - [3.42, 4.41]
             - [6.63, 11.38]

@@ -4,6 +4,7 @@ import tensorflow as tf
 from mayo.override import util
 from mayo.override.base import Parameter
 from mayo.override.quantize.base import QuantizerBase
+from mayo.log import log
 
 
 class FloatingPointQuantizer(QuantizerBase):
@@ -118,18 +119,24 @@ class FloatingPointQuantizer(QuantizerBase):
         with tf.control_dependencies([assertion]):
             return value + tf.stop_gradient(quantized - value)
 
-    def _bias(self, value, exponent_width):
+    def _bias(self, value, exponent_width, profiled_max=None):
         max_exponent = int(2 ** exponent_width)
         for exponent in range(min(-max_exponent, -4), max(max_exponent, 4)):
             max_value = 2 ** (exponent + 1)
-            overflows = util.logical_or(value < -max_value, value > max_value)
-            if self._overflow_rate(overflows) <= self.overflow_rate:
-                break
+            if profiled_max is not None:
+                if profiled_max < max_value:
+                    return 2 ** exponent_width - 1 - exponent
+            else:
+                overflows = util.logical_or(
+                    value < -max_value, value > max_value)
+                if self._overflow_rate(overflows) <= self.overflow_rate:
+                    break
         return 2 ** exponent_width - 1 - exponent
 
     def compute_quantization_loss(
-            self, value, exponent_width, mantissa_width, overflow_rate):
-        exponent_bias = self._bias(value, exponent_width)
+            self, value, exponent_width, mantissa_width, overflow_rate,
+            profiled_max=None):
+        exponent_bias = self._bias(value, exponent_width, profiled_max)
         quantized = self._quantize(
             value, exponent_width, mantissa_width, exponent_bias)
         # mean squared loss
@@ -149,6 +156,36 @@ class FloatingPointQuantizer(QuantizerBase):
         exponent_width = self.eval(self.width) - self.eval(self.mantissa_width)
         self.exponent_bias = self._bias(value, exponent_width)
 
+    def search(self, params):
+        max_bound = params.get('max')
+        if max_bound is None:
+            raise ValueError(
+                'require max value to search for {}', self.__name__)
+        samples = params.get('samples')
+        if samples is None:
+            raise ValueError(
+                'require max value to search for {}', self.__name__)
+        targets = params.get('targets')
+        if targets is None or 'mantissa_width' not in targets or \
+                'exponent_bias' not in targets:
+            raise ValueError(
+                'Required targets are not specified')
+        w = int(self.eval(self.width))
+        loss_meta = []
+        for mantissa in range(w + 1):
+            exp = w - mantissa
+            loss, bias = self.compute_quantization_loss(
+                samples.flatten(), mantissa, exp, 0, max_bound)
+            loss_meta.append([loss, [exp, mantissa, bias]])
+        loss_meta.sort(key=lambda x: x[0])
+        # pick the one that has smallest quantization loss
+        exp, mantissa, bias = loss_meta[0][1]
+        selected_targets = {
+            'mantissa_width': mantissa,
+            'exponent_bias': bias,
+        }
+        return selected_targets
+
 
 class ShiftQuantizer(FloatingPointQuantizer):
     def __init__(
@@ -166,16 +203,42 @@ class ShiftQuantizer(FloatingPointQuantizer):
         # mantissa == 1
         return self._represent(sign, exponent, 1)
 
-    def find_shift_exp(self, value):
+    def find_shift_exp(self, value, profiled_max=None):
         width = self.eval(self.width)
         max_exponent = int(2 ** width)
         for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
             max_value = 2 ** (exp + 1)
-            overflows = util.logical_or(value < -max_value, value > max_value)
-            if self._overflow_rate(overflows) <= self.overflow_rate:
-                break
+            if profiled_max is not None:
+                if profiled_max < max_value:
+                    return exp
+            else:
+                overflows = util.logical_or(
+                    value < -max_value, value > max_value)
+                if self._overflow_rate(overflows) <= self.overflow_rate:
+                    break
         return exp
 
     def _update(self):
         max_exponent = self.find_shift_exp(self.eval(self.before))
         self.exponent_bias = 2 ** self.eval(self.width) - 1 - max_exponent
+
+    def search(self, params):
+        max_bound = params.get('max')
+        if max_bound is None:
+            raise ValueError(
+                'require max value to search for {}', self.__name__)
+        samples = params.get('samples')
+        if samples is None:
+            raise ValueError(
+                'require max value to search for {}', self.__name__)
+        targets = params.get('targets')
+        if targets is None or 'exponent_bias' not in targets:
+            raise ValueError(
+                'Required targets are not specified')
+        max_exponent = self.find_shift_exp(samples, profiled_max=max_bound)
+        bias = 2 ** self.eval(self.width) - 1 - max_exponent
+        # pick the one that has smallest quantization loss
+        selected_targets = {
+            'exponent_bias': bias,
+        }
+        return selected_targets

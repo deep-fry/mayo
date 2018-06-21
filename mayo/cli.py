@@ -9,8 +9,7 @@ from docopt import docopt
 
 from mayo.log import log
 from mayo.config import Config
-from mayo.session import (
-    Test, Evaluate, Train, LayerwiseRetrain, GlobalRetrain, Profile)
+from mayo.session import Test, Evaluate, Train, Search, Profile
 
 _root = os.path.dirname(__file__)
 
@@ -127,20 +126,21 @@ Arguments:
         'train.learning_rate',
         'train.optimizer',
     ]
+    _search_keys = [
+        'search',
+    ]
 
     _session_map = {
         'train': Train,
-        'profile': Profile,
-        'retrain-layer': LayerwiseRetrain,
-        'retrain-global': GlobalRetrain,
+        'search': Search,
         'test': Test,
         'validate': Evaluate,
+        'profile': Profile,
     }
     _keys_map = {
         'train': _train_keys,
+        'search': _train_keys,
         'profile': _train_keys,
-        'retrain-layer': _train_keys,
-        'retrain-global': _train_keys,
         'test': _test_keys,
         'validate': _validate_keys,
     }
@@ -166,10 +166,6 @@ Arguments:
             log.info('Starting a {} session...'.format(action))
             self.session = cls(self.config)
         return self.session
-
-    def cli_profile(self):
-        """Performs training profiling for run-time statistics.  """
-        return self._get_session('profile').profile()
 
     def cli_profile_timeline(self):
         """Performs training profiling to produce timeline.json.  """
@@ -201,13 +197,13 @@ Arguments:
         """Performs training.  """
         return self._get_session('train').train()
 
-    def cli_retrain_layer(self):
-        """Performs retraining.  """
-        return self._get_session('retrain-layer').retrain()
+    def cli_search(self):
+        """Performs searching.  """
+        return self._get_session('search').search()
 
-    def cli_retrain_global(self):
-        """Performs retraining.  """
-        return self._get_session('retrain-global').retrain()
+    def cli_profile(self):
+        """Performs profiling.  """
+        return self._get_session('profile').profile()
 
     def cli_eval(self):
         """Evaluates the accuracy of a saved model.  """
@@ -232,6 +228,7 @@ Arguments:
     def cli_overriders_assign(self):
         """Assign overridden values to original parameters.  """
         self._get_session('train').overriders_assign()
+        self._get_session('train').save_checkpoint('assigned')
 
     def cli_overriders_reset(self):
         """Reset the internal state of overriders.  """

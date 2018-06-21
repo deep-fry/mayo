@@ -4,10 +4,12 @@ _overrider:
     weights: {}
     biases: {}
     activation: {}
+    gradient: {}
     _overrider: &overrider
         weights: $(_overrider.weights)
         biases: $(_overrider.biases)
         activation: $(_overrider.activation)
+        gradient: $(_overrider.gradient)
     # interfaces
     conv: {<<: *overrider}
     fc: {<<: *overrider}
@@ -17,5 +19,7 @@ _overrider:
     expand1: {<<: *overrider}
     expand3: {<<: *overrider}
     # mobilenet
-    depthwise: {<<: *overrider}
+    depthwise:
+        <<: *overrider
+        depthwise_weights: $(_overrider.weights)
     pointwise: {<<: *overrider}

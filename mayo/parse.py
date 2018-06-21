@@ -187,10 +187,18 @@ class _DotDict(collections.MutableMapping):
                 'current object {!r} is not key-addressable.'
                 .format(dot_path_key, key, keyable))
         try:
-            *dot_path, final_key = dot_path_key.split('.')
+            dot_path = dot_path_key.split('.')
         except AttributeError:
             raise KeyError(
                 'Key path {!r} is not a string'.format(dot_path_key))
+        # escape \.
+        new_dot_path = []
+        for v in dot_path:
+            if new_dot_path and new_dot_path[-1].endswith('\\'):
+                new_dot_path[-1] += '.' + v
+            else:
+                new_dot_path.append(v)
+        *dot_path, final_key = new_dot_path
         keyable = dictionary
         for index, key in enumerate(dot_path):
             try:

@@ -122,14 +122,15 @@ class Train(SessionBase):
     def once(self):
         train_op = self._train_op if self._run_train_ops else []
         tasks = [train_op, self.num_epochs]
-        noop, num_epochs = self.run(tasks, batch=True)
+        _, num_epochs = self.run(tasks, batch=True)
         return num_epochs
 
     def _overriders_call(self, func_name):
         # it is sufficient to use the first net, as overriders
         # share internal variables
-        for o in self.task.nets[0].overriders:
-            getattr(o, func_name)()
+        for _, overriders in self.task.nets[0].overriders.items():
+            for o in overriders.values():
+                getattr(o, func_name)()
 
     def overriders_assign(self):
         log.info('Assigning overridden values of parameters to parameters...')
@@ -143,7 +144,7 @@ class Train(SessionBase):
         log.info('Resetting overriders internal variables...')
         self._overriders_call('reset')
 
-    def _iteration(self):
+    def _iteration(self, max_epochs=None):
         system = self.config.system
         epoch = self.once()
         floor_epoch = math.floor(epoch)
@@ -154,22 +155,23 @@ class Train(SessionBase):
             with log.demote():
                 self.save_checkpoint(floor_epoch)
             self._checkpoint_epoch = floor_epoch
-        if system.max_epochs and floor_epoch >= system.max_epochs:
+        max_epochs = max_epochs or system.max_epochs
+        if max_epochs and epoch >= max_epochs:
             log.info(
-                'Maximum epoch count {} reached.'.format(system.max_epochs))
+                'Maximum epoch count {} reached.'.format(max_epochs))
             if self._checkpoint_epoch and floor_epoch > self._checkpoint_epoch:
                 log.info('Saving final checkpoint...')
                 self.save_checkpoint(floor_epoch)
             return False
         return True
 
-    def train(self):
+    def train(self, max_epochs=None):
         # final debug outputs
         lr = self.run(self.learning_rate)
         log.info('Training start with a learning rate {}.'.format(lr))
         try:
             # train iterations
-            while self._iteration():
+            while self._iteration(max_epochs=max_epochs):
                 pass
         except KeyboardInterrupt:
             log.info('Stopped.')

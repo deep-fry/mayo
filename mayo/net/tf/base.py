@@ -12,6 +12,7 @@ class TFNetBase(NetBase):
     """Instantiates a TensorFlow network from the DAG graph.  """
     def __init__(self, session, model, inputs, reuse):
         self.session = session
+        self.estimator = self.session.estimator
         self.is_training = session.is_training
         self._transformer = ParameterTransformer(session, reuse)
         super().__init__(model, inputs)
@@ -66,7 +67,7 @@ class TFNetBase(NetBase):
 
     @property
     def shapes(self):
-        unify = lambda t: tuple(int(s) for s in t.shape)
+        unify = lambda t: tuple(s.value for s in t.shape)
         shapes = {}
         for node, tensors in self._tensors.items():
             if isinstance(tensors, collections.Sequence):
@@ -85,9 +86,9 @@ class TFNetBase(NetBase):
             arguments.append('{}={}'.format(k, v))
         return '    ' + '\n    '.join(arguments)
 
-    def _instantiate_layer(self, node, tensors, params):
+    def _instantiate_layer(self, node, tensors):
         # transform parameters
-        params, scope = self._transformer.transform(node, params)
+        params, scope = self._transformer.transform(node, node.params)
         with scope:
             tensors = self.instantiate_numeric_padding(node, tensors, params)
             layer_type = params['type']
@@ -135,3 +136,18 @@ class TFNetBase(NetBase):
         if isinstance(tensors, collections.Sequence):
             return [tf.pad(t, paddings) for t in tensors]
         return tf.pad(tensors, paddings)
+
+    def _estimate_layer(self, node, info):
+        # info pass-through
+        if node.params['type'] in ['identity', 'dropout']:
+            return self.estimator._mask_passthrough(info, {})
+        layer_info = super()._estimate_layer(node, info)
+        log.debug(
+            'Estimated statistics for {!r}: {}.'
+            .format(node.formatted_name(), layer_info))
+        for o in self.overriders.get(node, {}).values():
+            layer_info = o.estimate(layer_info, info)
+            log.debug(
+                'Overrider {!r} modified statistics: {}.'
+                .format(o, layer_info))
+        return layer_info

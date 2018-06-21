@@ -4,9 +4,10 @@ _overrider:
     weights: &quantizer
         float:
             type: mayo.override.FloatingPointQuantizer
-            width: 4
+            width: 8
             exponent_bias: 2
             mantissa_width: 2
             should_update: true
-            stochastic: false 
+            stochastic: false
     biases: {<<: *quantizer}
+    # activation: {<<: *quantizer}

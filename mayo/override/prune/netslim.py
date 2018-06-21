@@ -104,3 +104,17 @@ class NetworkSlimmer(ChannelPrunerBase):
         if self.incremental:
             return util.logical_and(mask, new_mask)
         return new_mask
+
+    def estimate(self, layer_info, info):
+        mask = [self.session.run(self.mask)]
+        macs = layer_info.get('macs', 0)
+        density = self.session.estimator._mask_density(mask)
+        update = {
+            '_mask': mask,
+            'density': density,
+            'macs': int(macs * density),
+        }
+        if '_original_macs' not in layer_info:
+            update['_original_macs'] = macs
+        layer_info.update(update)
+        return layer_info

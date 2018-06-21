@@ -1,0 +1,24 @@
+profile:
+    num_epochs: 1.0
+    export_ckpt: true
+    parameters:
+        profile: {'start': 0.1, 'end': 0.15}
+        samples: 10
+        overriders:
+            # ShiftQuantizer:
+            #     targets: ['exponent_bias']
+            #     percentile: 95
+            DGQuantizer:
+                targets: ['point']
+                percentile: {'weights': 99, 'biass': 99, 'gradients:': 99, 'activation': 90}
+            # FloatingPointQuantizer:
+            #     targets: ['mantissa_width', 'exponent_bias']
+            #     percentile: 95
+        # type: mayo.override.FloatingPointQuantizer
+        # target_range: {'point': {from: 2, to: -2, scale: -1}}
+        # targets: ['mantissa_width', 'exponent_bias']
+        # link_width: [0, 1]
+        # target: width
+        # range: [{from: 8, to: 1, scale: -2, min_scale: -1, scale_update_factor: 0.5}]
+        # overriders: true
+        # update: true
