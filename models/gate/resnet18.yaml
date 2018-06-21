@@ -7,7 +7,7 @@ _gate:
     density: 1.0
     pool: avg
     regularizer:
-        # l1: 0.00000001
+        # l1: 0.000001
         # moe: 0.01
         null
     threshold: online
