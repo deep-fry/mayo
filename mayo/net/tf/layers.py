@@ -85,8 +85,7 @@ class Layers(TFNetBase):
 
     def _estimate_memory_bitops(self, node, info):
         # FIXME use overrider.estimate
-        name = '{}/weights'.format(node.formatted_name())
-        o = self.overriders.get(node, {}).get(name)
+        o = self.overriders.get(node, {}).get('weights')
         if not o:
             return info
         num_elements = o.after.shape.num_elements()

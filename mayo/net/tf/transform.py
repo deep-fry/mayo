@@ -1,4 +1,5 @@
 import copy
+import functools
 import contextlib
 
 import tensorflow as tf
@@ -6,7 +7,8 @@ from tensorflow.contrib import slim
 
 from mayo.log import log
 from mayo.util import (
-    import_from_string, object_from_params, multi_objects_from_params)
+    import_from_string, object_from_params, multi_objects_from_params,
+    compose_functions)
 from mayo.override import ChainOverrider
 
 
@@ -24,12 +26,6 @@ class ParameterTransformer(object):
         self.overriders = {}
         self.variables = {}
 
-    def _add_overrider(self, node, name, overrider):
-        self.overriders.setdefault(node, {})[name] = overrider
-        variables = self.variables.setdefault(node, {})
-        for var in overrider.parameter_variables:
-            variables[var.op.name] = var
-
     def _create_hyperobjects(self, layer_node, params):
         suffixes = ['regularizer', 'initializer']
         for key, p in params.items():
@@ -40,7 +36,6 @@ class ParameterTransformer(object):
             params[key] = cls(**p)
 
         def create_overrider(overriders):
-            # TODO _add_overrider here
             for name, p in overriders.items():
                 if p.get('type'):
                     continue
@@ -68,24 +63,29 @@ class ParameterTransformer(object):
             if not p:
                 del overrider_params[key]
                 continue
+            overriders = self.overriders.setdefault(layer_node, {})
             if key == 'gradient':
                 for grad_key, grad_p in p.items():
-                    p[grad_key] = create_overrider(grad_p)
+                    q = overriders.setdefault('gradient', {})
+                    p[grad_key] = q[grad_key] = create_overrider(grad_p)
                 continue
-            overrider_params[key] = create_overrider(p)
+            overrider_params[key] = overriders[key] = create_overrider(p)
 
-    @staticmethod
-    def custom_gradient(node, name, overrider):
-        def wrapped(op, grad):
-            log.debug(
-                'Overriding the gradient of {!r} from {!r} with {!r}.'
-                .format(name, grad, overrider))
-            # when overriding gradient, we are not inside any variable
-            # scope, so we use the full name for overrider hyperparameter
-            # instantiation
-            scope = '{}/gradient'.format(name)
-            return overrider.apply(node, scope, tf.get_variable, grad)
-        return wrapped
+    def _apply_gradient_overrider(self, node, name, overrider, tensor):
+        @tf.custom_gradient
+        def wrapped(v):
+            def gradient(grad):
+                log.debug(
+                    'Overriding the gradient of {!r} from {!r} with {!r}.'
+                    .format(name, grad, overrider))
+                # when overriding gradient, we are not inside any variable
+                # scope, so we use the full name for overrider hyperparameter
+                # instantiation
+                with tf.variable_scope(name, reuse=tf.AUTO_REUSE):
+                    return overrider.apply(
+                        node, 'gradient', tf.get_variable, grad)
+            return v, gradient
+        return wrapped(tensor)
 
     def _config_layer(self, node, params):
         # normalizer_fn and activation_fn
@@ -100,41 +100,31 @@ class ParameterTransformer(object):
         if params.get('normalizer_fn', None):
             norm_params = params.setdefault('normalizer_params', {})
             norm_params['is_training'] = self.is_training
+        activation_functions = []
+        # gradient of error
+        gradient_overrider = params.get('overrider.gradient.error')
+        if gradient_overrider and self.is_training:
+            def gradient_fn(v):
+                name = '{}/errors'.format(node.formatted_name())
+                return self._apply_gradient_overrider(
+                    node, name, gradient_overrider, v)
+            activation_functions.append(gradient_fn)
         # activation
         activation_overrider = params.get('overrider.activation', None)
         if activation_overrider:
             override_fn = lambda x: activation_overrider.apply(
                 node, 'activations', tf.get_variable, x)
-            self._add_overrider(node, 'activation', activation_overrider)
-        else:
-            override_fn = None
-        # produce a default ReLU activation for overrider specifically
-        default_fn = tf.nn.relu if override_fn else None
-        # gradient of error
-        gradient_overrider = params.get('overrider.gradient.error')
-        if gradient_overrider:
-            self._add_overrider(node, 'gradient.error', gradient_overrider)
-            gradient_name = '{}/activations/gradient'.format(
-                node.formatted_name())
-            gradient_func = self.custom_gradient(
-                node, gradient_name, gradient_overrider)
-            tf.RegisterGradient(gradient_name)(gradient_func)
-            gradient_map = {'Identity': gradient_name}
-
-            def gradient_fn(v):
-                with self.session.tf_graph.gradient_override_map(gradient_map):
-                    return tf.identity(v)
-        else:
-            gradient_fn = None
+            activation_functions.append(override_fn)
+        # produce a default ReLU activation when overriders are used
+        default_fn = tf.nn.relu if activation_functions else None
         activation_fn = params.get('activation_fn', default_fn)
-        activation_params = params.pop('activation_params', {})
-        if override_fn or activation_fn or gradient_fn:
-            identity_fn = lambda x: x
-            gradient_fn = gradient_fn or identity_fn
-            override_fn = override_fn or identity_fn
-            activation_fn = activation_fn or identity_fn
-            params['activation_fn'] = lambda x: \
-                activation_fn(override_fn(gradient_fn(x)), **activation_params)
+        if activation_fn:
+            activation_params = params.pop('activation_params', {})
+            activation_fn = functools.partial(
+                activation_fn, **activation_params)
+            activation_functions.append(activation_fn)
+        if activation_functions:
+            params['activation_fn'] = compose_functions(activation_functions)
         # set up other parameters
         params['scope'] = node.name
         try:
@@ -159,18 +149,10 @@ class ParameterTransformer(object):
                 log.debug(
                     'Overriding {!r} with {!r}.'.format(name, overrider))
                 v = overrider.apply(node, name, getter, v)
-                self._add_overrider(node, name, overrider)
             # gradient overrider
             overrider = gradient_overriders.get(key)
             if overrider and self.is_training:
-                gradient_name = '{}/gradient'.format(name)
-                gradient_func = self.custom_gradient(node, name, overrider)
-                tf.RegisterGradient(gradient_name)(gradient_func)
-                gradient_map = {'Identity': gradient_name}
-                with self.session.tf_graph.gradient_override_map(gradient_map):
-                    v = tf.identity(v)
-                self._add_overrider(
-                    node, 'gradient.{}'.format(name), overrider)
+                v = self._apply_gradient_overrider(node, name, overrider, v)
             self.variables.setdefault(node, {})[name] = v
             return v
 

@@ -55,3 +55,9 @@ def memoize_method(func):
 
 def memoize_property(func):
     return property(memoize_method(func))
+
+
+def compose_functions(functions):
+    def compose(f, g):
+        return lambda x: g(f(x))
+    return functools.reduce(compose, functions, lambda x: x)

@@ -1,6 +1,8 @@
-def mobilenet_shift(overriders, global_vars):
+def mobilenet_shift(base, global_vars):
     save_dir = '/local/scratch-3/yaz21/tmp/'
     meta = {}
+    overriders = base.task.nets[0].overriders
+    meta['input'] = base.task.nets[0].inputs()['input'].eval()
     for node, overrider_dict in overriders.items():
         name = node.formatted_name()
         meta[name] = {}
@@ -9,8 +11,18 @@ def mobilenet_shift(overriders, global_vars):
                 'before': overrider.before.eval(),
                 'after': overrider.after.eval(),
             }
+            print(target_name)
+            if 'weight' in target_name or 'bias' in target_name:
+                meta[name][target_name]['bias'] = \
+                    overrider.quantizer.exponent_bias.eval()
+                meta[name][target_name]['width'] = \
+                    overrider.quantizer.width.eval()
+
+            else:
+                meta[name][target_name]['point'] = overrider.point.eval()
+                meta[name][target_name]['width'] = overrider.width.eval()
         for variable in global_vars:
-            if 'moving' in variable.name:
+            if 'moving' in variable.name and name in variable.name:
                 meta[name][variable.name] = variable.eval()
     STORE = True
     if STORE:

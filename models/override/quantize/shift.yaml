@@ -8,7 +8,7 @@ _overrider:
             bias: 2
             overflow_rate: 0.0
             should_update: true
-            stochastic: ulp
+            stochastic: False
             _priority: 100
     biases: {<<: *weights}
     activation: {<<: *weights}
