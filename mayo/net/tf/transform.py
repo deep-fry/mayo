@@ -153,7 +153,7 @@ class ParameterTransformer(object):
             overrider = gradient_overriders.get(key)
             if overrider and self.is_training:
                 v = self._apply_gradient_overrider(node, name, overrider, v)
-            self.variables.setdefault(node, {})[name] = v
+            self.variables.setdefault(node, {})[key] = v
             return v
 
         @contextlib.contextmanager
