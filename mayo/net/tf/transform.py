@@ -139,6 +139,12 @@ class ParameterTransformer(object):
 
         forward_overriders = params.pop('overrider', None) or {}
         gradient_overriders = forward_overriders.pop('gradient', {})
+        for key, overrider in gradient_overriders.items():
+            if params.pop('{}_regularizer'.format(key), None):
+                log.warn(
+                    'Regularizer for \'{}/{}\' is for now disabled as we '
+                    'override its gradient with {!r}.'
+                    .format(node.formatted_name(), key, overrider))
 
         def custom_getter(getter, name, *args, **kwargs):
             v = getter(name, *args, **kwargs)
