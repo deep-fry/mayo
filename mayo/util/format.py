@@ -115,6 +115,8 @@ class Table(collections.Sequence):
             value = value.name
         elif isinstance(value, tf.TensorShape):
             value = format_shape(value)
+        elif isinstance(value, (list, tuple)):
+            value = ', '.join(self._format_value(v) for v in value)
         else:
             value = str(value)
         if width:
@@ -131,23 +133,6 @@ class Table(collections.Sequence):
             x = self._format_value(x, formatters[h], width)
             new_row.append(x)
         return new_row
-
-    def _column_widths(self):
-        row_widths = []
-        others = [self._headers]
-        for row in self._rows + others:
-            if row is None:
-                continue
-            if len(row) != self.num_columns:
-                raise ValueError(
-                    'Number of columns in row {} does not match headers {}.'
-                    .format(row, self._headers))
-            formatters = self._formatters
-            if row in others:
-                formatters = self._empty_formatters
-            row = self._format_row(row, formatters)
-            row_widths.append(len(e) for e in row)
-        return [max(col) for col in zip(*row_widths)]
 
     def _get_footers(self):
         footer = [None] * self.num_columns
@@ -168,30 +153,55 @@ class Table(collections.Sequence):
             footer[index] = value
         return footer
 
-    def _plumb_row(self, row):
-        info = {}
-        for key, value in zip(self._headers, row):
-            if value is None or isinstance(value, (int, float)):
-                pass
-            elif isinstance(value, tf.Variable):
-                value = value.name
-            elif isinstance(value, tf.TensorShape):
-                value = [int(s) for s in value]
-            else:
-                value = str(value)
-            info[key] = value
-        return info
+    def _plumb_value(self, value):
+        if value is None or value is unknown:
+            return
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, (list, tuple)):
+            return [self._plumb_value(v) for v in value]
+        if isinstance(value, tf.Variable):
+            return value.name
+        if isinstance(value, tf.TensorShape):
+            return [int(s) for s in value]
+        return str(value)
 
     def plumb(self):
         infos = {'items': []}
         for row in self._rows:
-            infos['items'].append(self._plumb_row(row))
+            info = {
+                self._plumb_value(k): self._plumb_value(v)
+                for k, v in zip(self._headers, row)}
+            infos['items'].append(info)
         if self._footers:
             footer = self._get_footers()
             infos['footer'] = {
                 key: value for key, value in zip(self._headers, footer)
                 if value is not None}
         return infos
+
+    def _footer_row(self, widths=None):
+        if not self._footers:
+            return
+        footer = self._get_footers()
+        return self._format_row(footer, self._empty_formatters, widths=widths)
+
+    def _column_widths(self):
+        row_widths = []
+        others = [self._headers, self._footer_row()]
+        for row in self._rows + others:
+            if row is None:
+                continue
+            if len(row) != self.num_columns:
+                raise ValueError(
+                    'Number of columns in row {} does not match headers {}.'
+                    .format(row, self._headers))
+            formatters = self._formatters
+            if row in others:
+                formatters = self._empty_formatters
+            row = self._format_row(row, formatters)
+            row_widths.append(len(e) for e in row)
+        return [max(col) for col in zip(*row_widths)]
 
     def format(self):
         widths = self._column_widths()
@@ -203,10 +213,10 @@ class Table(collections.Sequence):
         # rows
         for row in self._rows:
             table.append(self._format_row(row, self._formatters, widths))
-        if self._footers:
+        # footer
+        footer = self._footer_row(widths)
+        if footer:
             self.add_rule()
-            footer = self._get_footers()
-            footer = self._format_row(footer, self._empty_formatters, widths)
             table.append(footer)
         # lines
         lined_table = []

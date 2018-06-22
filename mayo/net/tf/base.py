@@ -3,7 +3,7 @@ import collections
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import Table, object_from_params, unknown, format_shape
+from mayo.util import Table, object_from_params, unknown
 from mayo.override import ChainOverrider
 from mayo.net.base import LayerNode, JoinNode, NetBase
 from mayo.net.tf.transform import ParameterTransformer
@@ -52,32 +52,32 @@ class TFNetBase(NetBase):
                 raise TypeError('Unrecognized type.')
         keys = sorted(k for k in keys if not k.startswith('_'))
         layer_info = Table(['layer', 'shape'] + keys)
-        for node, shape in self.shapes.items():
+        for node, shape in self.shapes(unified=False).items():
             if isinstance(node, LayerNode):
                 values = stats.get(node, {})
                 values = tuple(values.get(k, unknown) for k in keys)
             else:
                 values = tuple([unknown] * len(keys))
-            if isinstance(node, JoinNode):
-                shape = ', '.join(format_shape(s) for s in shape)
-            else:
-                shape = format_shape(shape)
             layer_info.add_row((node.formatted_name(), shape) + values)
         layer_info.footer_sum('macs')
         return layer_info
 
     def _overrider_info(self):
-        def flatten(overriders):
-            for o in overriders:
-                if isinstance(o, ChainOverrider):
-                    yield from flatten(o)
-                else:
-                    yield o
-        info_dict = {}
         overriders = []
-        for each in self.overriders.values():
-            overriders += list(each.values())
-        for o in flatten(overriders):
+        for os in self.overriders.values():
+            for k, o in os.items():
+                if k == 'gradient':
+                    overriders += list(o.values())
+                else:
+                    overriders.append(o)
+        flatten_overriders = []
+        for o in overriders:
+            if isinstance(o, ChainOverrider):
+                flatten_overriders += list(o._overriders)
+            else:
+                flatten_overriders.append(o)
+        info_dict = {}
+        for o in flatten_overriders:
             info = o.info()
             if not info:
                 continue
@@ -85,7 +85,7 @@ class TFNetBase(NetBase):
             table.add_row(info)
         for cls, table in info_dict.items():
             cls.finalize_info(table)
-        return info_dict
+        return {cls.__name__: table for cls, table in info_dict.items()}
 
     def _variable_info(self):
         trainable_vars = tf.trainable_variables()
@@ -117,9 +117,9 @@ class TFNetBase(NetBase):
                 k: t.plumb() for k, t in info['overriders'].items()}
         return info
 
-    @property
-    def shapes(self):
-        unify = lambda t: tuple(s.value for s in t.shape)
+    def shapes(self, unified=True):
+        unify = lambda t: \
+            tuple(s.value for s in t.shape) if unified else t.shape
         shapes = {}
         for node, tensors in self._tensors.items():
             if isinstance(tensors, collections.Sequence):
@@ -197,7 +197,10 @@ class TFNetBase(NetBase):
         log.debug(
             'Estimated statistics for {!r}: {}.'
             .format(node.formatted_name(), layer_info))
-        for o in self.overriders.get(node, {}).values():
+        for k, o in self.overriders.get(node, {}).items():
+            if k == 'gradient':
+                # gradient is not used for layer estimation
+                continue
             layer_info = o.estimate(layer_info, info)
             log.debug(
                 'Overrider {!r} modified statistics: {}.'

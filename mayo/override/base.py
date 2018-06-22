@@ -229,10 +229,9 @@ class OverriderBase(object):
 
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
-        cls = self.__class__.__name__
-        cls_name = '{}Info'.format(cls)
-        Tuple = namedtuple(cls_name, [cls] + list(kwargs))
-        kwargs[cls] = self.name
+        cls_name = '{}Info'.format(self.__class__.__name__)
+        Tuple = namedtuple(cls_name, ['name'] + list(kwargs))
+        kwargs['name'] = self.name
         return Tuple(**kwargs)
 
     def _info(self):

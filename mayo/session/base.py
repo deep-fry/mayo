@@ -230,8 +230,12 @@ class SessionBase(object, metaclass=SessionMeta):
     def _overrider_assign_parameters(self):
         # parameter assignments in overriders
         for overriders in self.overriders.values():
-            for o in overriders.values():
-                o.assign_parameters()
+            for k, o in overriders.items():
+                if k == 'gradient':
+                    for each in o.values():
+                        each.assign_parameters()
+                else:
+                    o.assign_parameters()
 
     @contextmanager
     def ensure_graph_unchanged(self, func_name):
