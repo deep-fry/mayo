@@ -71,7 +71,7 @@ class NetBase(object):
         if len(pred_nodes) > 1:
             raise IndexError(
                 'Number of predecessors of {!r} must be 1 '
-                'for a {!r}.'.format(node.__class__.__name__))
+                'for a {!r}.'.format(node, node.__class__.__name__))
         pred_node = pred_nodes[0]
         if isinstance(pred_node, SplitNode):
             values = []
