@@ -21,7 +21,8 @@ _overrider:
         stochastic: false
     recentralizer:
         type: mayo.override.Recentralizer
-        quantizer: $(_overrider.shift_quantizer)
+        # quantizer: $(_overrider.shift_quantizer)
+        quantizer: $(_overrider.float_quantizer)
         mean_quantizer: $(_overrider.shift_quantizer)
         reg: 0.00001
     incre_quantizer:

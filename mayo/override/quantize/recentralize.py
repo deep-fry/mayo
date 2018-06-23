@@ -130,4 +130,5 @@ class Recentralizer(OverriderBase):
                 for key, value in param_info._asdict().items()
             }
             info.update(param_info)
+        info.pop('name')
         return self._info_tuple(**info)
