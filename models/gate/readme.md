@@ -134,3 +134,17 @@ Actually, since we've changed overriders data strucutre in Mayo, this script mig
 
 Anyway, the idea is to reform a checkpoint from this pseudo-network slimming, then you would have to write another network description yaml with the correct number of channels.
 I might put something to automate this in the future.
+
+
+## Checkpoint locations
+* A collection of resutls are on this [google sheet](https://docs.google.com/spreadsheets/d/17GBaod6og99f5ud1rh0kF0A07XcXuMP01HryuCRpxaY/edit?usp=sharing)
+
+* Slimmed resnets: heimdall (/local/scratch/yaz21/mayo-dev/checkpoints/resnet18/imagenet/slimed)
+
+* Gated resnet: heimdall
+(/local/scratch/yaz21/mayo-dev/checkpoints/resnet18/imagenet/gate80, gate60, slimed_gate_40)
+
+* Slimmed vgg16: heimdall
+(/local/scratch/yaz21/mayo-dev/checkpoints/vgg16_bn/imagenet/slimed)
+
+* Slimmed vgg16: heimdall(/local/scratch/yaz21/mayo-dev/checkpoints/checkpoints/vgg16_bn/imagenet/slimed_gate)
