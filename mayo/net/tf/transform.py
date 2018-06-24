@@ -35,7 +35,7 @@ class ParameterTransformer(object):
             for k, o in os.items():
                 if k == 'gradient':
                     nos[k] = {gk: go for gk, go in o.items() if go._applied}
-                if o._applied:
+                elif o._applied:
                     nos[k] = o
         return overriders
 
