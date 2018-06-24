@@ -23,8 +23,19 @@ class ParameterTransformer(object):
         self.session = session
         self.is_training = session.is_training
         self.reuse = reuse
-        self.overriders = {}
+        self._overriders = {}
         self.variables = {}
+
+    @property
+    def overriders(self):
+        # only return applied overriders
+        overriders = {}
+        for k, o in self._overriders.items():
+            if k == 'gradient':
+                overriders[k] = {gk: go for gk, go in o.items() if go._applied}
+            if o._applied:
+                overriders[k] = o
+        return overriders
 
     def _create_hyperobjects(self, layer_node, params):
         suffixes = ['regularizer', 'initializer']
@@ -63,7 +74,7 @@ class ParameterTransformer(object):
             if not p:
                 del overrider_params[key]
                 continue
-            overriders = self.overriders.setdefault(layer_node, {})
+            overriders = self._overriders.setdefault(layer_node, {})
             if key == 'gradient':
                 for grad_key, grad_p in p.items():
                     q = overriders.setdefault('gradient', {})
