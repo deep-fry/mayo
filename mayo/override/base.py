@@ -138,7 +138,7 @@ class OverriderBase(object):
                 continue
             value_desc = str(value).split('\n')
             multiline = len(value_desc) > 1
-            value_desc = value_desc[0] + ('...' if multiline else '')
+            value_desc = value_desc[0] + ('...' if multiline else '.')
             log.debug(
                 'Assigning overrider parameter: {}.{} = {}'
                 .format(self, name, value_desc))

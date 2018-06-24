@@ -128,7 +128,7 @@ class Train(SessionBase):
     def _overriders_call(self, func_name):
         # it is sufficient to use the first net, as overriders
         # share internal variables
-        for _, overriders in self.task.nets[0].overriders.items():
+        for _, overriders in self.overriders.items():
             for o in overriders.values():
                 getattr(o, func_name)()
 

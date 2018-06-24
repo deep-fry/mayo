@@ -108,12 +108,13 @@ class SessionBase(object, metaclass=SessionMeta):
         self.task = task_cls(self, **task_params)
 
     def _finalize(self):
-        # ensure configuration variable is instantiated
-        self._config_var
+        # dump configuration to ensure we always know how
+        # this checkpoint is trained
+        self.assign(self._config_var, self.config.to_yaml())
         # invoke finalizers
         for name, finalizer in self.finalizers.items():
             log.debug(
-                'Finalizing session with finalizer {!r}: {!r}'
+                'Finalizing session with finalizer {!r}: {!r}.'
                 .format(name, finalizer))
             finalizer()
 
@@ -202,6 +203,7 @@ class SessionBase(object, metaclass=SessionMeta):
             self._assign_operators[var] = op, placeholder
         run_func = self.raw_run if raw_run else self.run
         if isinstance(tensor, (tf.Variable, tf.Tensor)):
+            # FIXME how is this necessary?
             tensor = run_func(tensor)
         run_func(op, feed_dict={placeholder: tensor})
 
@@ -219,9 +221,6 @@ class SessionBase(object, metaclass=SessionMeta):
         return self._tf_scalar('mayo/config', dtype=tf.string)
 
     def save_checkpoint(self, name):
-        # dump configuration to ensure we always know how
-        # this checkpoint is trained
-        self.assign(self._config_var, self.config.to_yaml())
         self.checkpoint.save(name)
 
     def info(self, plumbing=False):
