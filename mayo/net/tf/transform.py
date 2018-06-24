@@ -30,11 +30,13 @@ class ParameterTransformer(object):
     def overriders(self):
         # only return applied overriders
         overriders = {}
-        for k, o in self._overriders.items():
-            if k == 'gradient':
-                overriders[k] = {gk: go for gk, go in o.items() if go._applied}
-            if o._applied:
-                overriders[k] = o
+        for n, os in self._overriders.items():
+            nos = overriders.setdefault(n, {})
+            for k, o in os.items():
+                if k == 'gradient':
+                    nos[k] = {gk: go for gk, go in o.items() if go._applied}
+                if o._applied:
+                    nos[k] = o
         return overriders
 
     def _create_hyperobjects(self, layer_node, params):
