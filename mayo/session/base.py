@@ -71,6 +71,7 @@ class SessionBase(object, metaclass=SessionMeta):
         self.tf_graph = tf.Graph()
         self.initialized_variables = []
         self._assign_operators = {}
+        self._assign_values = {}
         tf_config = tf.ConfigProto(allow_soft_placement=True)
         tf_config.gpu_options.allow_growth = True
         self.tf_session = tf.Session(graph=self.tf_graph, config=tf_config)
@@ -201,11 +202,7 @@ class SessionBase(object, metaclass=SessionMeta):
                 var.dtype, shape=var.get_shape(), name=name)
             op = tf.assign(var, placeholder)
             self._assign_operators[var] = op, placeholder
-        run_func = self.raw_run if raw_run else self.run
-        if isinstance(tensor, (tf.Variable, tf.Tensor)):
-            # FIXME how is this necessary?
-            tensor = run_func(tensor)
-        run_func(op, feed_dict={placeholder: tensor})
+        self._assign_values[var] = tensor
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
@@ -277,6 +274,16 @@ class SessionBase(object, metaclass=SessionMeta):
 
         # assign overrider hyperparameters
         self._overrider_assign_parameters()
+
+        if self._assign_values:
+            assign_ops = []
+            assign_feed = {}
+            for var, value in self._assign_values.items():
+                op, placeholder = self._assign_operators[var]
+                assign_ops.append(op)
+                assign_feed[placeholder] = value
+            self.raw_run(assign_ops, feed_dict=assign_feed)
+            self._assign_values = {}
 
         # session run
         if batch:
