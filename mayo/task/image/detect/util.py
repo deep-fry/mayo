@@ -83,7 +83,7 @@ def iou(boxes1, boxes2, anchors=False):
     """
     expected_size = 2 if anchors else 4
     if boxes1.shape[-1] != expected_size or boxes2.shape[-1] != expected_size:
-        raise error.ShapeError(
+        raise ShapeError(
             'The number of values representing the bounding box should be {}.'
             .format(expected_size))
     shape1 = tf.shape(boxes1)
