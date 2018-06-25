@@ -180,29 +180,22 @@ class SessionBase(object, metaclass=SessionMeta):
     def overriders(self):
         return self.task.nets[0].overriders
 
+    def _overrider_assign_parameters(self):
+        # parameter assignments in overriders
+        for overriders in self.overriders.values():
+            for k, o in overriders.items():
+                if k == 'gradient':
+                    for each in o.values():
+                        each.assign_parameters()
+                else:
+                    o.assign_parameters()
+
     def get_collection(self, key, first_gpu=False):
         func = lambda net, *args: tf.get_collection(key)
         collections = list(self.task.map(func))
         if first_gpu:
             return collections[0]
         return flatten(collections)
-
-    def assign(self, var, tensor, raw_run=False):
-        """
-        Variable assignment.
-
-        It uses placeholder for feeding values to assign, by doing so it avoids
-        adding a `tf.assign` every time we make a new assignment.
-        """
-        try:
-            op, placeholder = self._assign_operators[var]
-        except KeyError:
-            name = 'mayo/placeholder/{}'.format(var.op.name)
-            placeholder = tf.placeholder(
-                var.dtype, shape=var.get_shape(), name=name)
-            op = tf.assign(var, placeholder)
-            self._assign_operators[var] = op, placeholder
-        self._assign_values[var] = tensor
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
@@ -222,16 +215,6 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def info(self, plumbing=False):
         return self.task.nets[0].info(plumbing)
-
-    def _overrider_assign_parameters(self):
-        # parameter assignments in overriders
-        for overriders in self.overriders.values():
-            for k, o in overriders.items():
-                if k == 'gradient':
-                    for each in o.values():
-                        each.assign_parameters()
-                else:
-                    o.assign_parameters()
 
     @contextmanager
     def ensure_graph_unchanged(self, func_name):
@@ -256,6 +239,23 @@ class SessionBase(object, metaclass=SessionMeta):
             raise ReadOnlyGraphChangedError(
                 '{} adds new operations {} to a read-only graph.'
                 .format(func_name, diff_ops))
+
+    def assign(self, var, tensor, raw_run=False):
+        """
+        Variable assignment.
+
+        It uses placeholder for feeding values to assign, by doing so it avoids
+        adding a `tf.assign` every time we make a new assignment.
+        """
+        try:
+            op, placeholder = self._assign_operators[var]
+        except KeyError:
+            name = 'mayo/placeholder/{}'.format(var.op.name)
+            placeholder = tf.placeholder(
+                var.dtype, shape=var.get_shape(), name=name)
+            op = tf.assign(var, placeholder)
+            self._assign_operators[var] = op, placeholder
+        self._assign_values[var] = tensor
 
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
