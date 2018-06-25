@@ -4,8 +4,8 @@ from contextlib import contextmanager
 
 import tensorflow as tf
 
+from mayo import error
 from mayo.log import log
-from mayo.util import memoize_property
 from mayo.net.tf import TFNet
 from mayo.session.test import Test
 
@@ -95,12 +95,12 @@ class TFTaskBase(object):
         return data, prediction, truth
 
     def generate(self):
-        raise NotImplementedError(
+        raise error.NotImplementedError(
             'Please implement .generate() which produces training/validation '
             'samples and the expected truth results.')
 
     def train(self, net, prediction, truth):
-        raise NotImplementedError(
+        raise error.NotImplementedError(
             'Please implement .train() which returns the loss tensor.')
 
     def eval(self):

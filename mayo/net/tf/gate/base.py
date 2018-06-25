@@ -2,11 +2,12 @@ import math
 
 import tensorflow as tf
 
+from mayo import error
 from mayo.util import memoize_method, memoize_property, null_scope
 from mayo.net.graph import LayerNode
 
 
-class GateError(Exception):
+class GateError(error.MayoError):
     """Gating-related exceptions.  """
 
 
@@ -73,7 +74,7 @@ class GatedConvolutionBase(object):
         for key, default in self._defaults.items():
             value = params.get(key, default)
             if value is self._must:
-                raise KeyError(
+                raise error.KeyError(
                     'Gate parameter {!r} must be specified.'.format(key))
             setattr(self, key, value)
         self._check_granularity()
@@ -245,7 +246,7 @@ class GatedConvolutionBase(object):
         # top_k, where k is the number of active channels
         top, _ = tf.nn.top_k(tensor, k=(num_active + 1))
         # disable channels with smaller responses
-        return tf.reduce_min(top, axis=[1], keep_dims=True)
+        return tf.reduce_min(top, axis=[1], keepdims=True)
 
     def _finalizer(self):
         if self.threshold == 'online':
@@ -257,7 +258,7 @@ class GatedConvolutionBase(object):
                 if node.params['gate_params'].get('enable', True):
                     outputs.append(tensor)
             if not outputs:
-                raise ValueError(
+                raise error.ValueError(
                     'Gated convolution did not register any gammas '
                     'for thresholding.')
             outputs = tf.concat(outputs, axis=-1)
@@ -335,7 +336,7 @@ class GatedConvolutionBase(object):
         self._regularization_losses.append(loss)
 
     def regularize(self):
-        raise NotImplementedError
+        raise error.NotImplementedError
 
     def _instantiate_regularization(self):
         losses = []
