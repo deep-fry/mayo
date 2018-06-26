@@ -71,6 +71,7 @@ class SessionBase(object, metaclass=SessionMeta):
         self.tf_graph = tf.Graph()
         self.initialized_variables = []
         self._assign_operators = {}
+        self._assign_values = {}
         tf_config = tf.ConfigProto(allow_soft_placement=True)
         tf_config.gpu_options.allow_growth = True
         self.tf_session = tf.Session(graph=self.tf_graph, config=tf_config)
@@ -179,33 +180,22 @@ class SessionBase(object, metaclass=SessionMeta):
     def overriders(self):
         return self.task.nets[0].overriders
 
+    def _overrider_assign_parameters(self):
+        # parameter assignments in overriders
+        for overriders in self.overriders.values():
+            for k, o in overriders.items():
+                if k == 'gradient':
+                    for each in o.values():
+                        each.assign_parameters()
+                else:
+                    o.assign_parameters()
+
     def get_collection(self, key, first_gpu=False):
         func = lambda net, *args: tf.get_collection(key)
         collections = list(self.task.map(func))
         if first_gpu:
             return collections[0]
         return flatten(collections)
-
-    def assign(self, var, tensor, raw_run=False):
-        """
-        Variable assignment.
-
-        It uses placeholder for feeding values to assign, by doing so it avoids
-        adding a `tf.assign` every time we make a new assignment.
-        """
-        try:
-            op, placeholder = self._assign_operators[var]
-        except KeyError:
-            name = 'mayo/placeholder/{}'.format(var.op.name)
-            placeholder = tf.placeholder(
-                var.dtype, shape=var.get_shape(), name=name)
-            op = tf.assign(var, placeholder)
-            self._assign_operators[var] = op, placeholder
-        run_func = self.raw_run if raw_run else self.run
-        if isinstance(tensor, (tf.Variable, tf.Tensor)):
-            # FIXME how is this necessary?
-            tensor = run_func(tensor)
-        run_func(op, feed_dict={placeholder: tensor})
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
@@ -225,16 +215,6 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def info(self, plumbing=False):
         return self.task.nets[0].info(plumbing)
-
-    def _overrider_assign_parameters(self):
-        # parameter assignments in overriders
-        for overriders in self.overriders.values():
-            for k, o in overriders.items():
-                if k == 'gradient':
-                    for each in o.values():
-                        each.assign_parameters()
-                else:
-                    o.assign_parameters()
 
     @contextmanager
     def ensure_graph_unchanged(self, func_name):
@@ -260,6 +240,23 @@ class SessionBase(object, metaclass=SessionMeta):
                 '{} adds new operations {} to a read-only graph.'
                 .format(func_name, diff_ops))
 
+    def assign(self, var, tensor, raw_run=False):
+        """
+        Variable assignment.
+
+        It uses placeholder for feeding values to assign, by doing so it avoids
+        adding a `tf.assign` every time we make a new assignment.
+        """
+        try:
+            op, placeholder = self._assign_operators[var]
+        except KeyError:
+            name = 'mayo/placeholder/{}'.format(var.op.name)
+            placeholder = tf.placeholder(
+                var.dtype, shape=var.get_shape(), name=name)
+            op = tf.assign(var, placeholder)
+            self._assign_operators[var] = op, placeholder
+        self._assign_values[var] = tensor
+
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
@@ -277,6 +274,16 @@ class SessionBase(object, metaclass=SessionMeta):
 
         # assign overrider hyperparameters
         self._overrider_assign_parameters()
+
+        if self._assign_values:
+            assign_ops = []
+            assign_feed = {}
+            for var, value in self._assign_values.items():
+                op, placeholder = self._assign_operators[var]
+                assign_ops.append(op)
+                assign_feed[placeholder] = value
+            self.raw_run(assign_ops, feed_dict=assign_feed)
+            self._assign_values = {}
 
         # session run
         if batch:

@@ -35,9 +35,8 @@ class ParameterTransformer(object):
             for k, o in os.items():
                 if k == 'gradient':
                     nos[k] = {gk: go for gk, go in o.items() if go._applied}
-                else:
-                    if o._applied:
-                        nos[k] = o
+                elif o._applied:
+                    nos[k] = o
         return overriders
 
     def _create_hyperobjects(self, layer_node, params):
