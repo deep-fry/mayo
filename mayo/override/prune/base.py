@@ -40,7 +40,7 @@ class PrunerBase(OverriderBase):
         count = table.get_column('count_')
         avg_density = sum(d * c for d, c in zip(densities, count)) / sum(count)
         footer = [None, '    overall: ', Percent(avg_density), None]
-        table.set_footer(footer)
+        table.add_row(footer)
         return footer
 
 
@@ -86,5 +86,5 @@ class ChannelPrunerBase(OverriderBase):
         count = table.get_column('count_')
         avg_density = sum(d * c for d, c in zip(densities, count)) / sum(count)
         footer = [None, '    overall: ', Percent(avg_density), None]
-        table.set_footer(footer)
+        table.add_row(footer)
         return footer
