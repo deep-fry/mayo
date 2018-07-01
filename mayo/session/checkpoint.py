@@ -149,5 +149,10 @@ class CheckpointHandler(object):
                 .format(key, cp_path))
         else:
             log.info('Saving checkpoint to {!r}...'.format(cp_path))
-        saver = tf.train.Saver(self._global_variables())
-        saver.save(self.tf_session, cp_path, write_meta_graph=False)
+        try:
+            saver = tf.train.Saver(self._global_variables())
+            saver.save(self.tf_session, cp_path, write_meta_graph=False)
+        except tf.errors.ResourceExhaustedError:
+            log.warn(
+                'Unable to save a checkpoint because we have '
+                'no space left on device.')
