@@ -53,7 +53,7 @@ def cartesian(tensor1, tensor2):
     *shape1, last1 = shape(tensor1)
     *shape2, last2 = shape(tensor2)
     if last1 != last2:
-        raise error.ShapeError(
+        raise ShapeError(
             'The last dimension of both tensors should be constant '
             'and should match.')
     ndims1 = len(shape1)
