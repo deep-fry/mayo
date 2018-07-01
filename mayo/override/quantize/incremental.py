@@ -10,12 +10,12 @@ class IncrementalQuantizer(OverriderBase):
     """
     https://arxiv.org/pdf/1702.03044.pdf
     """
-    interval = Parameter('interval', 0.1, [], 'float')
     mask = Parameter('mask', None, None, 'bool')
 
-    def __init__(self, session, quantizer, interval, count_zero=True,
-                 should_update=True):
-        super().__init__(session, should_update)
+    def __init__(
+            self, session, quantizer, interval, count_zero=True,
+            should_update=True, enable=True):
+        super().__init__(session, should_update, enable)
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(session, **params)
         self.count_zero = count_zero
@@ -75,9 +75,9 @@ class IncrementalQuantizer(OverriderBase):
         # reset index
         self.quantizer.update()
         # if chosen quantized, change it to zeros
-        value, quantized, mask, interval = self.session.run(
-            [self.before, self.quantizer.after, self.mask, self.interval])
-        new_mask = self._policy(value, quantized, mask, interval)
+        value, quantized, mask = self.session.run(
+            [self.before, self.quantizer.after, self.mask])
+        new_mask = self._policy(value, quantized, mask, self.interval)
         self.session.assign(self.mask, new_mask)
 
     def _info(self):
