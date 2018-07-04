@@ -79,3 +79,6 @@ class IncrementalQuantizer(OverriderBase):
             [self.before, self.quantizer.after, self.mask, self.interval])
         new_mask = self._policy(value, quantized, mask, interval)
         self.session.assign(self.mask, new_mask)
+
+    def _info(self):
+        return self.quantizer._info()
