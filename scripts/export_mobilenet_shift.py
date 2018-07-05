@@ -1,5 +1,6 @@
 def mobilenet_shift(base, global_vars):
     save_dir = '/local/scratch-3/yaz21/tmp/'
+    save_dir = './'
     meta = {}
     overriders = base.task.nets[0].overriders
     meta['input'] = base.task.nets[0].inputs()['input'].eval()
@@ -31,3 +32,4 @@ def mobilenet_shift(base, global_vars):
         with open(save_dir, 'wb') as f:
             pickle.dump(meta, f)
     return meta 
+# scp yaz21@heimdall.cl.cam.ac.uk:/local/scratch-3/yaz21/tmp/mobilenet.pkl .
