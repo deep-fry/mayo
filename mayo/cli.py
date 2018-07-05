@@ -198,7 +198,7 @@ Arguments:
         return self._get_session('train').train()
 
     def cli_search(self):
-        """Performs searching.  """
+        """Performs automated hyperparameter search.  """
         return self._get_session('search').search()
 
     def cli_profile(self):
@@ -219,6 +219,7 @@ Arguments:
             'Evaluation results saved in {!r}.'.format(file_name))
 
     def cli_test(self):
+        """Perform inference for custom test data.  """
         return self._get_session('test').test()
 
     def cli_overriders_update(self):
@@ -266,10 +267,11 @@ Arguments:
         """Saves the latest checkpoint.  """
         self.session.checkpoint.save('latest')
 
-    def _invalidate_session(self):
+    def _purge_session(self):
         if not self.session:
             return
-        log.debug('Invalidating session because config is updated.')
+        log.debug('Purging current session because config is updated.')
+        del self.session
         self.session = None
 
     def main(self, args=None):
@@ -284,11 +286,11 @@ Arguments:
             if any(each.endswith(suffix) for suffix in ('.yaml', '.yml')):
                 self.config.yaml_update(each)
                 log.key('Using config yaml {!r}...'.format(each))
-                self._invalidate_session()
+                self._purge_session()
             elif '=' in each:
                 self.config.override_update(*each.split('='))
                 log.key('Overriding config with {!r}...'.format(each))
-                self._invalidate_session()
+                self._purge_session()
             elif each in commands:
                 log.key('Executing command {!r}...'.format(each))
                 commands[each]()
