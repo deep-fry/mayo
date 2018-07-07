@@ -17,7 +17,9 @@ _overrider:
             overflow_rate: 0.0
             should_update: true
             stochastic: false
-    weights: &quantizer
+    depthwise:
+        shift: $(_overrider.quantizer)
+    pointwise: &quantizer
         dns: $(_overrider.pruner)
         shift: $(_overrider.quantizer)
     biases:
