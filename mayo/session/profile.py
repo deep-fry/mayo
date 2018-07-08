@@ -146,6 +146,7 @@ class Profile(Train):
         return
 
     def _assign_targets(self, overriders, target_values):
+        assignment_ops = []
         for node, name_to_overrider in overriders.items():
             for name, overrider in name_to_overrider.items():
                 if name == 'gradient':
@@ -159,6 +160,10 @@ class Profile(Train):
                 target = target_values[overrider][0]
                 for target_name, target_value in target.items():
                     setattr(overrider, target_name, target_value)
+                    op = getattr(overrider, target_name)
+                    assignment_ops.append(op)
+        # load the values
+        _ = self.run(assignment_ops)
 
     def generate_overriders(self, overriders, prod_key=False, label_o=False):
         for key, os in overriders.items():

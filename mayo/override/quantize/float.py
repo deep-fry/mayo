@@ -28,8 +28,9 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def __init__(
             self, session, width, exponent_bias, mantissa_width,
-            overflow_rate=0.0, should_update=True, stochastic=None):
-        super().__init__(session, should_update)
+            overflow_rate=0.0, should_update=True, stochastic=None, 
+            enable=True):
+        super().__init__(session, should_update, enable)
         self.width = width
         self.exponent_bias = exponent_bias
         self.mantissa_width = mantissa_width
@@ -189,12 +190,12 @@ class FloatingPointQuantizer(QuantizerBase):
 
 class ShiftQuantizer(FloatingPointQuantizer):
     def __init__(
-            self, session, overflow_rate, width=None, bias=None,
-            should_update=True, stochastic=None):
+            self, session, overflow_rate, width=None, exponent_bias=None,
+            should_update=True, stochastic=None, enable=True):
         super().__init__(
-            session=session, width=width, exponent_bias=bias,
+            session=session, width=width, exponent_bias=exponent_bias,
             mantissa_width=0, should_update=should_update,
-            stochastic=stochastic)
+            stochastic=stochastic, enable=enable)
         self.overflow_rate = overflow_rate
 
     def _quantize(self, value):
