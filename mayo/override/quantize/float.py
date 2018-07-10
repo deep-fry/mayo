@@ -28,7 +28,7 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def __init__(
             self, session, width, exponent_bias, mantissa_width,
-            overflow_rate=0.0, should_update=True, stochastic=None, 
+            overflow_rate=0.0, should_update=True, stochastic=None,
             enable=True):
         super().__init__(session, should_update, enable)
         self.width = width
