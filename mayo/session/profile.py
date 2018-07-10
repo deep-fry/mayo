@@ -82,7 +82,6 @@ class Profile(Train):
             params['avg'] = avg
             params['targets'] = \
                 profile_params.overriders.get(type(o).__name__).targets
-            params['samples'] = self.estimator.get_value(o.name, node=key)
             meta_params[o.name] = params
             # find a target -> suggested value dict
             target = o.search(params)
@@ -124,8 +123,6 @@ class Profile(Train):
                 self.estimator.register(
                     percentile, 'max_' + o.name, node=key,
                     history='running_mean')
-            self.estimator.register(
-                o.before, o.name, node=key, history=samples)
         return
 
     def present(self, overriders, target_values, export_ckpt):
