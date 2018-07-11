@@ -2,17 +2,17 @@
 """
 The universal deep learning framework saved model converter.
 Usage:
-    {executable} <from_file> info [options]
-    {executable} <from_file> to <to_file> [options]
-    {executable} <from_file> replace <to_file>
+    {executable} [options] <from_files>...
 
 Arguments:
-    * <from_file> can be:
+    * <from_files> is a list of files:
 {importers}
-    * <to_file> can be:
-{exporters}
 
 Options:
+    --interact          Interact with the imported tensors in IPython.
+    --to=<file>
+        The file path to save exported result, supports:
+{exporters}
     --dry-run           Performs a dry run, not actually changing anything
                         but shows things to be changed.
     --rules=<yaml>      See "Conversion Rules Definition YAML File" below.
@@ -26,7 +26,7 @@ Conversion Rules Definition YAML File:
         `<pattern>: <replacement>`
       which we will apply the substitution in the order of pattern and
       replacement pairs.
-    * The file could additionally contain a `permute` dictionary required by
+    * The file could additionally contain a `permute` mapping required by
       tensor permutation.
 """
 import os
@@ -61,11 +61,6 @@ class BaseImporter(object):
         super().__init__()
         log.key('Importing with {}...'.format(self.__class__.__name__))
         self.var_to_tensor = self._import(file, rules or {})
-
-    @property
-    def var_to_shape(self):
-        self.var_to_tensor.pop('mayo/config', None)
-        return {k: list(v.shape) for k, v in self.var_to_tensor.items()}
 
     def _import(self, file, rules):
         raise NotImplementedError
@@ -128,6 +123,10 @@ class HDF5Importer(BaseImporter):
         import h5py
         tensors = cls._traverse(h5py.File(file, 'r'))
         return {t.name: t[...] for t in tensors}
+
+
+def var_to_shape(var_to_tensor):
+    return {k: list(v.shape) for k, v in var_to_tensor.items()}
 
 
 def permute(var_to_tensor, rules):
@@ -273,51 +272,40 @@ def _porter(file, porters):
         raise ValueError('Unrecognized suffix {!r}'.format(suffix))
 
 
-def replace_vars(var_map, target_var_map):
-    for key, item in var_map.items():
-        target_var_map[key] = item
-    return target_var_map
-
-
 def main():
     args = docopt(usage(), version=__version__)
-    from_file = args['<from_file>']
+    from_files = args['<from_files>']
     rules = args['--rules']
     if rules:
         with open(rules, 'r') as f:
             rules = yaml.load(f)
     else:
         rules = {}
-    importer_cls = _porter(from_file, _importers)
-    importer = importer_cls(from_file, rules)
+    var_to_tensor = {}
+    for f in from_files:
+        importer_cls = _porter(f, _importers)
+        importer = importer_cls(f, rules)
+        var_to_tensor.update(importer.var_to_tensor)
     permute_rules = rules.get('permute')
     if permute_rules:
-        permute(importer.var_to_tensor, permute_rules)
-    if args['info']:
-        print(yaml.dump(importer.var_to_shape))
-    elif args['to']:
-        to_file = args['<to_file>']
+        permute(var_to_tensor, permute_rules)
+    if not args['--to']:
+        print(yaml.dump(var_to_shape(var_to_tensor)))
+    if args['--interact']:
+        tensors = var_to_tensor
+        print('Access imported tensors with variable name "tensors".')
+        from IPython import embed
+        embed()
+    to_file = args['--to']
+    if to_file:
         directory = os.path.split(to_file)[0]
         if directory:
             os.makedirs(directory, exist_ok=True)
         else:
             directory = '.'
         exporter_cls = _porter(to_file, _exporters)
-        exporter = exporter_cls(importer.var_to_tensor, rules)
+        exporter = exporter_cls(var_to_tensor, rules)
         exporter.export(to_file, args['--dry-run'])
-    elif args['replace']:
-        target_file = args['<to_file>']
-        # import target
-        importer_cls = _porter(target_file, _importers)
-        target_importer = importer_cls(target_file, rules)
-        # replace
-        replaced_var_to_tensor = replace_vars(
-            importer.var_to_tensor, target_importer.var_to_tensor)
-        exporter_cls = _porter(target_file, _exporters)
-        exporter = exporter_cls(replaced_var_to_tensor, rules)
-        exporter.export(target_file, args['--dry-run'])
-    else:
-        raise TypeError('Do not know what we should do.')
 
 
 if __name__ == "__main__":
