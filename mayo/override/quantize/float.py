@@ -122,7 +122,7 @@ class FloatingPointQuantizer(QuantizerBase):
 
     def _bias(self, value, exponent_width, profiled_max=None):
         max_exponent = int(2 ** exponent_width)
-        for exponent in range(min(-max_exponent, -4), max(max_exponent, 4)):
+        for exponent in range(min(-max_exponent, -4), max(max_exponent, 10)):
             max_value = 2 ** (exponent + 1)
             if profiled_max is not None:
                 if profiled_max < max_value:
@@ -162,10 +162,6 @@ class FloatingPointQuantizer(QuantizerBase):
         if max_bound is None:
             raise ValueError(
                 'require max value to search for {}', self.__name__)
-        samples = params.get('samples')
-        if samples is None:
-            raise ValueError(
-                'require max value to search for {}', self.__name__)
         targets = params.get('targets')
         if targets is None or 'mantissa_width' not in targets or \
                 'exponent_bias' not in targets:
@@ -176,7 +172,7 @@ class FloatingPointQuantizer(QuantizerBase):
         for mantissa in range(w + 1):
             exp = w - mantissa
             loss, bias = self.compute_quantization_loss(
-                samples.flatten(), mantissa, exp, 0, max_bound)
+                params['avg'].flatten(), mantissa, exp, 0, max_bound)
             loss_meta.append([loss, [exp, mantissa, bias]])
         loss_meta.sort(key=lambda x: x[0])
         # pick the one that has smallest quantization loss
@@ -207,7 +203,7 @@ class ShiftQuantizer(FloatingPointQuantizer):
     def find_shift_exp(self, value, profiled_max=None):
         width = self.eval(self.width)
         max_exponent = int(2 ** width)
-        for exp in range(min(-max_exponent, -4), max(max_exponent, 4)):
+        for exp in range(min(-max_exponent, -4), max(max_exponent, 10)):
             max_value = 2 ** (exp + 1)
             if profiled_max is not None:
                 if profiled_max < max_value:
@@ -228,15 +224,11 @@ class ShiftQuantizer(FloatingPointQuantizer):
         if max_bound is None:
             raise ValueError(
                 'require max value to search for {}', self.__name__)
-        samples = params.get('samples')
-        if samples is None:
-            raise ValueError(
-                'require max value to search for {}', self.__name__)
         targets = params.get('targets')
         if targets is None or 'exponent_bias' not in targets:
             raise ValueError(
                 'Required targets are not specified')
-        max_exponent = self.find_shift_exp(samples, profiled_max=max_bound)
+        max_exponent = self.find_shift_exp(params['avg'], profiled_max=max_bound)
         bias = 2 ** self.eval(self.width) - 1 - max_exponent
         # pick the one that has smallest quantization loss
         selected_targets = {
