@@ -181,6 +181,7 @@ class SessionBase(object, metaclass=SessionMeta):
         return self.task.nets[0].overriders
 
     def _overrider_assign_parameters(self):
+        # FIXME speghetti
         # parameter assignments in overriders
         for overriders in self.overriders.values():
             for k, o in overriders.items():
@@ -189,6 +190,7 @@ class SessionBase(object, metaclass=SessionMeta):
                         each.assign_parameters()
                 else:
                     o.assign_parameters()
+        self._run_assignments()
 
     def get_collection(self, key, first_gpu=False):
         func = lambda net, *args: tf.get_collection(key)
@@ -260,6 +262,18 @@ class SessionBase(object, metaclass=SessionMeta):
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
+    def _run_assignments(self):
+        if not self._assign_values:
+            return
+        assign_ops = []
+        assign_feed = {}
+        for var, value in self._assign_values.items():
+            op, placeholder = self._assign_operators[var]
+            assign_ops.append(op)
+            assign_feed[placeholder] = value
+        self.raw_run(assign_ops, feed_dict=assign_feed)
+        self._assign_values = {}
+
     def run(self, ops, batch=False, **kwargs):
         # ensure variables are initialized
         uninit_vars = []
@@ -274,16 +288,6 @@ class SessionBase(object, metaclass=SessionMeta):
 
         # assign overrider hyperparameters
         self._overrider_assign_parameters()
-
-        if self._assign_values:
-            assign_ops = []
-            assign_feed = {}
-            for var, value in self._assign_values.items():
-                op, placeholder = self._assign_operators[var]
-                assign_ops.append(op)
-                assign_feed[placeholder] = value
-            self.raw_run(assign_ops, feed_dict=assign_feed)
-            self._assign_values = {}
 
         # session run
         if batch:

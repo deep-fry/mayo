@@ -12,7 +12,7 @@ def _auto_select_gpus(num_gpus, memory_bound):
     try:
         info = subprocess.check_output(
             'nvidia-smi', shell=True, stderr=subprocess.STDOUT)
-        info = re.findall('(\d+)MiB\s/', info.decode('utf-8'))
+        info = re.findall(r'(\d+)MiB\s/', info.decode('utf-8'))
         log.debug('GPU memory usages (MB): {}'.format(', '.join(info)))
         info = [int(m) for m in info]
         gpus = [i for i in range(len(info)) if info[i] <= memory_bound]
