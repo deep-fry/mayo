@@ -8,10 +8,8 @@ def main():
     storedir = 'checkpoints/cifar_fixedpoint'
     # max_epochs = 310
     max_epochs = 500
-    bitwidths = reversed([4, 8, 16, 32])
-    wa_width, gwidth = combinations(bitwidths)
-    # points = [2] * len(wa_width)
-    points = [4, 3, 2, 1]
+    bitwidths = [4, 8, 10, 12, 16, 20, 24, 32]
+    points = [1, 2, 2, 4, 4, 4, 4, 4]
     if not os.path.exists(configdir):
         os.mkdir(configdir)
     if not os.path.exists(storedir):

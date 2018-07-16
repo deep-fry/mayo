@@ -255,8 +255,13 @@ class SessionBase(object, metaclass=SessionMeta):
             name = 'mayo/placeholder/{}'.format(var.op.name)
             placeholder = tf.placeholder(
                 var.dtype, shape=var.get_shape(), name=name)
-            op = tf.assign(var, placeholder)
-            self._assign_operators[var] = op, placeholder
+            if isinstance(var, tf.Variable):
+                op = tf.assign(var, placeholder)
+                self._assign_operators[var] = op, placeholder
+            else:
+                log.info(
+                    '{} has to be a variable for assginment, but is {}'.format(
+                    var, type(var)))
         self._assign_values[var] = tensor
 
     def raw_run(self, ops, **kwargs):
