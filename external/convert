@@ -126,7 +126,13 @@ class HDF5Importer(BaseImporter):
 
 
 def var_to_shape(var_to_tensor):
-    return {k: list(v.shape) for k, v in var_to_tensor.items()}
+    shapes = {}
+    for k, v in var_to_tensor.items():
+        try:
+            shapes[k] = list(v.shape)
+        except AttributeError:
+            shapes[k] = None
+    return shapes
 
 
 def permute(var_to_tensor, rules):
