@@ -1,5 +1,5 @@
 import functools
-from collections import Sequence, namedtuple
+import collections
 
 import tensorflow as tf
 
@@ -220,6 +220,11 @@ class OverriderBase(object):
 
     def assign(self):
         """Assign overridden values to parameters before overriding.  """
+        if not isinstance(self.before, tf.Variable):
+            log.warn(
+                'Overridden target {!r} of {!r} is not a variable, '
+                'cannot assign.'.format(self.before, self))
+            return
         self.session.assign(self.before, self.after)
 
     def reset(self):
@@ -230,7 +235,7 @@ class OverriderBase(object):
     def _info_tuple(self, **kwargs):
         # relies on dict ordering
         cls_name = '{}Info'.format(self.__class__.__name__)
-        Tuple = namedtuple(cls_name, ['name'] + list(kwargs))
+        Tuple = collections.namedtuple(cls_name, ['name'] + list(kwargs))
         kwargs['name'] = self.name
         return Tuple(**kwargs)
 
@@ -262,7 +267,7 @@ class EmptyOverrider(OverriderBase):
         return value
 
 
-class ChainOverrider(OverriderBase, Sequence):
+class ChainOverrider(OverriderBase, collections.Sequence):
     """ Composition of overriders.  """
     def __init__(self, session, overriders, should_update=True):
         super().__init__(session, should_update)

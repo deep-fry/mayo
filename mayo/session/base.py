@@ -213,6 +213,7 @@ class SessionBase(object, metaclass=SessionMeta):
         return self._tf_scalar('mayo/config', dtype=tf.string)
 
     def save_checkpoint(self, name):
+        self._run_assignments()
         self.checkpoint.save(name)
 
     def info(self, plumbing=False):
@@ -249,37 +250,24 @@ class SessionBase(object, metaclass=SessionMeta):
         It uses placeholder for feeding values to assign, by doing so it avoids
         adding a `tf.assign` every time we make a new assignment.
         """
+        if not isinstance(var, tf.Variable):
+            raise TypeError(
+                'Cannot assign to {} because it is not a variable.'
+                .format(var))
         try:
             op, placeholder = self._assign_operators[var]
         except KeyError:
             name = 'mayo/placeholder/{}'.format(var.op.name)
             placeholder = tf.placeholder(
                 var.dtype, shape=var.get_shape(), name=name)
-            if isinstance(var, tf.Variable):
-                op = tf.assign(var, placeholder)
-                self._assign_operators[var] = op, placeholder
-            else:
-                log.info(
-                    '{} has to be a variable for assginment, but is {}'.format(
-                    var, type(var)))
+            op = tf.assign(var, placeholder)
+            self._assign_operators[var] = op, placeholder
         self._assign_values[var] = tensor
 
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
-    def _run_assignments(self):
-        if not self._assign_values:
-            return
-        assign_ops = []
-        assign_feed = {}
-        for var, value in self._assign_values.items():
-            op, placeholder = self._assign_operators[var]
-            assign_ops.append(op)
-            assign_feed[placeholder] = value
-        self.raw_run(assign_ops, feed_dict=assign_feed)
-        self._assign_values = {}
-
-    def run(self, ops, batch=False, **kwargs):
+    def _initialize_variables(self):
         # ensure variables are initialized
         uninit_vars = []
         for var in self.global_variables():
@@ -291,9 +279,32 @@ class SessionBase(object, metaclass=SessionMeta):
             self.raw_run(tf.variables_initializer(uninit_vars))
             self.initialized_variables += uninit_vars
 
-        # assign overrider hyperparameters
-        self._overrider_assign_parameters()
+    def _run_assignments(self):
+        if not self._assign_values:
+            return
+        assign_ops = []
+        feed = {}
+        tensor_feed = {}
+        for var, value in self._assign_values.items():
+            op, placeholder = self._assign_operators[var]
+            assign_ops.append(op)
+            if isinstance(value, (tf.Variable, tf.Tensor)):
+                tensor_feed[placeholder] = value
+            else:
+                feed[placeholder] = value
 
+        # ensure variables are assigned for evaluating tensors
+        self._initialize_variables()
+        # eval tensors and update feed
+        tensor_feed = self.raw_run(tensor_feed)
+        feed.update(tensor_feed)
+        # assignment
+        self.raw_run(assign_ops, feed_dict=feed)
+        self._assign_values = {}
+
+    def run(self, ops, batch=False, **kwargs):
+        self._initialize_variables()
+        self._overrider_assign_parameters()
         # session run
         if batch:
             results, statistics = self.raw_run(
