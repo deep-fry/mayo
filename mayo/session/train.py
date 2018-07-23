@@ -129,8 +129,12 @@ class Train(SessionBase):
         # it is sufficient to use the first net, as overriders
         # share internal variables
         for _, overriders in self.overriders.items():
-            for o in overriders.values():
-                getattr(o, func_name)()
+            for k, o in overriders.items():
+                if k == 'gradient':
+                    for go in o.values():
+                        getattr(go, func_name)()
+                else:
+                    getattr(o, func_name)()
 
     def overriders_assign(self):
         log.info('Assigning overridden values of parameters to parameters...')
