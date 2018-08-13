@@ -30,7 +30,7 @@ Run a simple LeNet-5 validation with the MNIST dataset using:
 ```bash
 $ ./my \
     models/lenet5.yaml \
-    datasets/lenet5.yaml \
+    datasets/mnist.yaml \
     system.checkpoint.load=pretrained \
     eval
 ```
