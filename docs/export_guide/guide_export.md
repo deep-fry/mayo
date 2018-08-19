@@ -106,3 +106,6 @@ You can also find more information about the quantization by issuing:
     system.visible_gpus=[0,1] system.max_epochs=200 \
     system.checkpoint.save.interval=10 train overriders-update info
 ```
+
+Using `system.info.plumbing`, you can direct out the infomation in a yaml file
+which is the info.yaml under this directory.
