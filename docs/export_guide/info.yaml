@@ -1,0 +1,559 @@
+layers:
+  footer: {macs: 174301824}
+  items:
+  - bitops: null
+    layer: /input
+    macs: null
+    memory: null
+    shape: [1, 32, 32, 3]
+  - bitops: 24883200.0
+    layer: cifarnet/conv0
+    macs: 1555200
+    memory: 27648.0
+    shape: [1, 30, 30, 64]
+  - bitops: 530841600.0
+    layer: cifarnet/conv1
+    macs: 33177600
+    memory: 589824.0
+    shape: [1, 30, 30, 64]
+  - bitops: 265420800.0
+    layer: cifarnet/conv2
+    macs: 16588800
+    memory: 1179648.0
+    shape: [1, 15, 15, 128]
+  - bitops: 530841600.0
+    layer: cifarnet/conv3
+    macs: 33177600
+    memory: 2359296.0
+    shape: [1, 15, 15, 128]
+  - bitops: null
+    layer: cifarnet/dropout3
+    macs: null
+    memory: null
+    shape: [1, 15, 15, 128]
+  - bitops: 530841600.0
+    layer: cifarnet/conv4
+    macs: 33177600
+    memory: 2359296.0
+    shape: [1, 15, 15, 128]
+  - bitops: 226492416.0
+    layer: cifarnet/conv5
+    macs: 14155776
+    memory: 3538944.0
+    shape: [1, 8, 8, 192]
+  - bitops: 339738624.0
+    layer: cifarnet/conv6
+    macs: 21233664
+    memory: 5308416.0
+    shape: [1, 8, 8, 192]
+  - bitops: null
+    layer: cifarnet/dropout6
+    macs: null
+    memory: null
+    shape: [1, 8, 8, 192]
+  - bitops: 339738624.0
+    layer: cifarnet/conv7
+    macs: 21233664
+    memory: 5308416.0
+    shape: [1, 8, 8, 192]
+  - bitops: null
+    layer: cifarnet/pool7
+    macs: null
+    memory: null
+    shape: [1, 1, 1, 192]
+  - bitops: 30720.0
+    layer: cifarnet/logits
+    macs: 1920
+    memory: 30720.0
+    shape: [1, 1, 1, 10]
+  - bitops: null
+    layer: cifarnet/squeeze
+    macs: null
+    memory: null
+    shape: [1, 10]
+  - bitops: null
+    layer: /output
+    macs: null
+    memory: null
+    shape: [1, 10]
+nontrainables:
+  items:
+  - nontrainable: imgs_seen:0
+    shape: []
+  - nontrainable: cifarnet/conv0/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv0/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv0/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv0/BatchNorm/moving_mean:0
+    shape: [64]
+  - nontrainable: cifarnet/conv0/BatchNorm/moving_variance:0
+    shape: [64]
+  - nontrainable: cifarnet/conv0/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv0/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv0/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv1/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv1/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv1/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv1/BatchNorm/moving_mean:0
+    shape: [64]
+  - nontrainable: cifarnet/conv1/BatchNorm/moving_variance:0
+    shape: [64]
+  - nontrainable: cifarnet/conv1/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv1/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv1/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv2/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv2/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv2/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv2/BatchNorm/moving_mean:0
+    shape: [128]
+  - nontrainable: cifarnet/conv2/BatchNorm/moving_variance:0
+    shape: [128]
+  - nontrainable: cifarnet/conv2/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv2/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv2/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv3/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv3/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv3/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv3/BatchNorm/moving_mean:0
+    shape: [128]
+  - nontrainable: cifarnet/conv3/BatchNorm/moving_variance:0
+    shape: [128]
+  - nontrainable: cifarnet/conv3/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv3/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv3/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv4/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv4/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv4/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv4/BatchNorm/moving_mean:0
+    shape: [128]
+  - nontrainable: cifarnet/conv4/BatchNorm/moving_variance:0
+    shape: [128]
+  - nontrainable: cifarnet/conv4/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv4/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv4/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv5/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv5/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv5/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv5/BatchNorm/moving_mean:0
+    shape: [192]
+  - nontrainable: cifarnet/conv5/BatchNorm/moving_variance:0
+    shape: [192]
+  - nontrainable: cifarnet/conv5/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv5/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv5/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv6/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv6/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv6/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv6/BatchNorm/moving_mean:0
+    shape: [192]
+  - nontrainable: cifarnet/conv6/BatchNorm/moving_variance:0
+    shape: [192]
+  - nontrainable: cifarnet/conv6/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv6/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv6/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv7/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv7/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv7/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv7/BatchNorm/moving_mean:0
+    shape: [192]
+  - nontrainable: cifarnet/conv7/BatchNorm/moving_variance:0
+    shape: [192]
+  - nontrainable: cifarnet/conv7/activations/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv7/activations/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv7/activations/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/logits/weights/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/logits/weights/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/logits/weights/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: mayo/config:0
+    shape: []
+  - nontrainable: cifarnet/logits/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/logits/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/logits/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/logits/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/logits/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/logits/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv7/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv7/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv7/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv7/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv7/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv7/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv6/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv6/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv6/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv6/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv6/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv6/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv5/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv5/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv5/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv5/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv5/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv5/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv4/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv4/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv4/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv4/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv4/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv4/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv3/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv3/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv3/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv3/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv3/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv3/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv2/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv2/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv2/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv2/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv2/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv2/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv1/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv1/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv1/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv1/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv1/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv1/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv0/errors/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv0/errors/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv0/errors/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv0/weights/gradient/DGQuantizer.point:0
+    shape: []
+  - nontrainable: cifarnet/conv0/weights/gradient/DGQuantizer.width:0
+    shape: []
+  - nontrainable: cifarnet/conv0/weights/gradient/DGQuantizer.enable:0
+    shape: []
+  - nontrainable: cifarnet/conv0/weights/RMSProp:0
+    shape: [3, 3, 3, 64]
+  - nontrainable: cifarnet/conv0/weights/RMSProp_1:0
+    shape: [3, 3, 3, 64]
+  - nontrainable: cifarnet/conv0/BatchNorm/gamma/RMSProp:0
+    shape: [64]
+  - nontrainable: cifarnet/conv0/BatchNorm/gamma/RMSProp_1:0
+    shape: [64]
+  - nontrainable: cifarnet/conv0/BatchNorm/beta/RMSProp:0
+    shape: [64]
+  - nontrainable: cifarnet/conv0/BatchNorm/beta/RMSProp_1:0
+    shape: [64]
+  - nontrainable: cifarnet/conv1/weights/RMSProp:0
+    shape: [3, 3, 64, 64]
+  - nontrainable: cifarnet/conv1/weights/RMSProp_1:0
+    shape: [3, 3, 64, 64]
+  - nontrainable: cifarnet/conv1/BatchNorm/gamma/RMSProp:0
+    shape: [64]
+  - nontrainable: cifarnet/conv1/BatchNorm/gamma/RMSProp_1:0
+    shape: [64]
+  - nontrainable: cifarnet/conv1/BatchNorm/beta/RMSProp:0
+    shape: [64]
+  - nontrainable: cifarnet/conv1/BatchNorm/beta/RMSProp_1:0
+    shape: [64]
+  - nontrainable: cifarnet/conv2/weights/RMSProp:0
+    shape: [3, 3, 64, 128]
+  - nontrainable: cifarnet/conv2/weights/RMSProp_1:0
+    shape: [3, 3, 64, 128]
+  - nontrainable: cifarnet/conv2/BatchNorm/gamma/RMSProp:0
+    shape: [128]
+  - nontrainable: cifarnet/conv2/BatchNorm/gamma/RMSProp_1:0
+    shape: [128]
+  - nontrainable: cifarnet/conv2/BatchNorm/beta/RMSProp:0
+    shape: [128]
+  - nontrainable: cifarnet/conv2/BatchNorm/beta/RMSProp_1:0
+    shape: [128]
+  - nontrainable: cifarnet/conv3/weights/RMSProp:0
+    shape: [3, 3, 128, 128]
+  - nontrainable: cifarnet/conv3/weights/RMSProp_1:0
+    shape: [3, 3, 128, 128]
+  - nontrainable: cifarnet/conv3/BatchNorm/gamma/RMSProp:0
+    shape: [128]
+  - nontrainable: cifarnet/conv3/BatchNorm/gamma/RMSProp_1:0
+    shape: [128]
+  - nontrainable: cifarnet/conv3/BatchNorm/beta/RMSProp:0
+    shape: [128]
+  - nontrainable: cifarnet/conv3/BatchNorm/beta/RMSProp_1:0
+    shape: [128]
+  - nontrainable: cifarnet/conv4/weights/RMSProp:0
+    shape: [3, 3, 128, 128]
+  - nontrainable: cifarnet/conv4/weights/RMSProp_1:0
+    shape: [3, 3, 128, 128]
+  - nontrainable: cifarnet/conv4/BatchNorm/gamma/RMSProp:0
+    shape: [128]
+  - nontrainable: cifarnet/conv4/BatchNorm/gamma/RMSProp_1:0
+    shape: [128]
+  - nontrainable: cifarnet/conv4/BatchNorm/beta/RMSProp:0
+    shape: [128]
+  - nontrainable: cifarnet/conv4/BatchNorm/beta/RMSProp_1:0
+    shape: [128]
+  - nontrainable: cifarnet/conv5/weights/RMSProp:0
+    shape: [3, 3, 128, 192]
+  - nontrainable: cifarnet/conv5/weights/RMSProp_1:0
+    shape: [3, 3, 128, 192]
+  - nontrainable: cifarnet/conv5/BatchNorm/gamma/RMSProp:0
+    shape: [192]
+  - nontrainable: cifarnet/conv5/BatchNorm/gamma/RMSProp_1:0
+    shape: [192]
+  - nontrainable: cifarnet/conv5/BatchNorm/beta/RMSProp:0
+    shape: [192]
+  - nontrainable: cifarnet/conv5/BatchNorm/beta/RMSProp_1:0
+    shape: [192]
+  - nontrainable: cifarnet/conv6/weights/RMSProp:0
+    shape: [3, 3, 192, 192]
+  - nontrainable: cifarnet/conv6/weights/RMSProp_1:0
+    shape: [3, 3, 192, 192]
+  - nontrainable: cifarnet/conv6/BatchNorm/gamma/RMSProp:0
+    shape: [192]
+  - nontrainable: cifarnet/conv6/BatchNorm/gamma/RMSProp_1:0
+    shape: [192]
+  - nontrainable: cifarnet/conv6/BatchNorm/beta/RMSProp:0
+    shape: [192]
+  - nontrainable: cifarnet/conv6/BatchNorm/beta/RMSProp_1:0
+    shape: [192]
+  - nontrainable: cifarnet/conv7/weights/RMSProp:0
+    shape: [3, 3, 192, 192]
+  - nontrainable: cifarnet/conv7/weights/RMSProp_1:0
+    shape: [3, 3, 192, 192]
+  - nontrainable: cifarnet/conv7/BatchNorm/gamma/RMSProp:0
+    shape: [192]
+  - nontrainable: cifarnet/conv7/BatchNorm/gamma/RMSProp_1:0
+    shape: [192]
+  - nontrainable: cifarnet/conv7/BatchNorm/beta/RMSProp:0
+    shape: [192]
+  - nontrainable: cifarnet/conv7/BatchNorm/beta/RMSProp_1:0
+    shape: [192]
+  - nontrainable: cifarnet/logits/weights/RMSProp:0
+    shape: [1, 1, 192, 10]
+  - nontrainable: cifarnet/logits/weights/RMSProp_1:0
+    shape: [1, 1, 192, 10]
+  - nontrainable: cifarnet/logits/biases/RMSProp:0
+    shape: [10]
+  - nontrainable: cifarnet/logits/biases/RMSProp_1:0
+    shape: [10]
+overriders:
+  DGQuantizer:
+    items:
+    - {name: cifarnet/conv0/weights, point: 1, width: 16}
+    - {name: tower_0/cifarnet/conv0/IdentityN, point: 5, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet/conv0/Conv2D_grad/tuple/control_dependency_1,
+      point: -1, width: 16}
+    - {name: tower_0_2/gradients/AddN_14, point: -5, width: 16}
+    - {name: cifarnet/conv1/weights, point: 0, width: 16}
+    - {name: tower_0/cifarnet_1/conv1/IdentityN, point: 5, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_1/conv1/Conv2D_grad/tuple/control_dependency_1,
+      point: -2, width: 16}
+    - {name: tower_0_2/gradients/AddN_12, point: -4, width: 16}
+    - {name: cifarnet/conv2/weights, point: -1, width: 16}
+    - {name: tower_0/cifarnet_2/conv2/IdentityN, point: 4, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_2/conv2/Conv2D_grad/tuple/control_dependency_1,
+      point: -1, width: 16}
+    - {name: tower_0_2/gradients/AddN_10, point: -5, width: 16}
+    - {name: cifarnet/conv3/weights, point: -1, width: 16}
+    - {name: tower_0/cifarnet_3/conv3/IdentityN, point: 4, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_3/conv3/Conv2D_grad/tuple/control_dependency_1,
+      point: -2, width: 16}
+    - {name: tower_0_2/gradients/AddN_9, point: -4, width: 16}
+    - {name: cifarnet/conv4/weights, point: -1, width: 16}
+    - {name: tower_0/cifarnet_5/conv4/IdentityN, point: 4, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_5/conv4/Conv2D_grad/tuple/control_dependency_1,
+      point: -2, width: 16}
+    - {name: tower_0_2/gradients/AddN_6, point: -5, width: 16}
+    - {name: cifarnet/conv5/weights, point: -1, width: 16}
+    - {name: tower_0/cifarnet_6/conv5/IdentityN, point: 4, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_6/conv5/Conv2D_grad/tuple/control_dependency_1,
+      point: -2, width: 16}
+    - {name: tower_0_2/gradients/AddN_4, point: -4, width: 16}
+    - {name: cifarnet/conv6/weights, point: -2, width: 16}
+    - {name: tower_0/cifarnet_7/conv6/IdentityN, point: 4, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_7/conv6/Conv2D_grad/tuple/control_dependency_1,
+      point: -2, width: 16}
+    - {name: tower_0_2/gradients/AddN_3, point: -5, width: 16}
+    - {name: cifarnet/conv7/weights, point: -2, width: 16}
+    - {name: tower_0/cifarnet_9/conv7/IdentityN, point: 4, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_9/conv7/Conv2D_grad/tuple/control_dependency_1,
+      point: -1, width: 16}
+    - {name: tower_0_2/gradients/AddN_1, point: -5, width: 16}
+    - {name: cifarnet/logits/weights, point: 1, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_11/logits/Conv2D_grad/tuple/control_dependency_1,
+      point: 1, width: 16}
+    - {name: tower_0_2/gradients/tower_0/cifarnet_12/squeeze_grad/Reshape, point: 1,
+      width: 16}
+trainables:
+  footer: {count: 1296074}
+  items:
+  - count: 1728
+    shape: [3, 3, 3, 64]
+    trainable: cifarnet/conv0/weights:0
+  - count: 64
+    shape: [64]
+    trainable: cifarnet/conv0/BatchNorm/gamma:0
+  - count: 64
+    shape: [64]
+    trainable: cifarnet/conv0/BatchNorm/beta:0
+  - count: 36864
+    shape: [3, 3, 64, 64]
+    trainable: cifarnet/conv1/weights:0
+  - count: 64
+    shape: [64]
+    trainable: cifarnet/conv1/BatchNorm/gamma:0
+  - count: 64
+    shape: [64]
+    trainable: cifarnet/conv1/BatchNorm/beta:0
+  - count: 73728
+    shape: [3, 3, 64, 128]
+    trainable: cifarnet/conv2/weights:0
+  - count: 128
+    shape: [128]
+    trainable: cifarnet/conv2/BatchNorm/gamma:0
+  - count: 128
+    shape: [128]
+    trainable: cifarnet/conv2/BatchNorm/beta:0
+  - count: 147456
+    shape: [3, 3, 128, 128]
+    trainable: cifarnet/conv3/weights:0
+  - count: 128
+    shape: [128]
+    trainable: cifarnet/conv3/BatchNorm/gamma:0
+  - count: 128
+    shape: [128]
+    trainable: cifarnet/conv3/BatchNorm/beta:0
+  - count: 147456
+    shape: [3, 3, 128, 128]
+    trainable: cifarnet/conv4/weights:0
+  - count: 128
+    shape: [128]
+    trainable: cifarnet/conv4/BatchNorm/gamma:0
+  - count: 128
+    shape: [128]
+    trainable: cifarnet/conv4/BatchNorm/beta:0
+  - count: 221184
+    shape: [3, 3, 128, 192]
+    trainable: cifarnet/conv5/weights:0
+  - count: 192
+    shape: [192]
+    trainable: cifarnet/conv5/BatchNorm/gamma:0
+  - count: 192
+    shape: [192]
+    trainable: cifarnet/conv5/BatchNorm/beta:0
+  - count: 331776
+    shape: [3, 3, 192, 192]
+    trainable: cifarnet/conv6/weights:0
+  - count: 192
+    shape: [192]
+    trainable: cifarnet/conv6/BatchNorm/gamma:0
+  - count: 192
+    shape: [192]
+    trainable: cifarnet/conv6/BatchNorm/beta:0
+  - count: 331776
+    shape: [3, 3, 192, 192]
+    trainable: cifarnet/conv7/weights:0
+  - count: 192
+    shape: [192]
+    trainable: cifarnet/conv7/BatchNorm/gamma:0
+  - count: 192
+    shape: [192]
+    trainable: cifarnet/conv7/BatchNorm/beta:0
+  - count: 1920
+    shape: [1, 1, 192, 10]
+    trainable: cifarnet/logits/weights:0
+  - count: 10
+    shape: [10]
+    trainable: cifarnet/logits/biases:0
