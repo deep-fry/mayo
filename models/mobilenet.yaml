@@ -26,6 +26,7 @@ model:
             stride: 2
             padding: same
             normalizer_fn: tensorflow.contrib.slim.batch_norm
+            # normalizer_fn: mayo.objects.normalize.custom_batch_norm
             normalizer_params:
                 center: true
                 scale: true

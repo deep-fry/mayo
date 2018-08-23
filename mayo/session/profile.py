@@ -32,6 +32,7 @@ class Profile(Train):
         config = self.config.profile
         overriders = self.task.nets[0].overriders
         name_to_rules = config.parameters.overriders
+        import pdb; pdb.set_trace()
 
         export_ckpt = config.pop('export_ckpt', False)
         num_epochs = config.pop('num_epochs', 0.0)
