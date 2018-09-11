@@ -147,7 +147,7 @@ class GatedConvolutionBase(object):
                     padding_height = self.padding
                 else:
                     padding_height, _ = self.padding
-                padding = [self.padding, 0]
+                padding = [padding_height, 0]
             if isinstance(self.stride, int):
                 stride_height = self.stride
             else:
