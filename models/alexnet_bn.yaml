@@ -12,9 +12,10 @@ dataset:
                 # - {type: resize, height: 256, width: 256, fill: true}
                 # - {type: crop_or_pad, height: 224, width: 224}
                 - {type: central_crop, fraction: 0.875}
-            final_cpu: null
-            final_gpu:
+            final_cpu:
                 - {type: normalize_channels}
+            final_gpu:
+                null
 model:
     name: alexnet
     description: |
@@ -42,6 +43,8 @@ model:
                 epsilon: 0.00001
             padding: 2
             # weight_initializer defaults to xavier
+            weights_initializer: &initializer
+                type: tensorflow.variance_scaling_initializer
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.0001
@@ -50,7 +53,7 @@ model:
             type: fully_connected
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
-                stddev: 0.01
+                stddev: 0.09
             <<: *init
         conv1: {<<: *conv, kernel_size: 11, stride: 4, num_outputs: 64}
         pool1: &pool
