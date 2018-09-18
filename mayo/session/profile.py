@@ -18,7 +18,7 @@ class Profile(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
-    def _run(self, max_epochs, reset=True):
+    def _run(self, max_epochs, reset=False):
         log.info('Start profiling ...')
         self.config.system.checkpoint.save = False
         # reset num_epochs and stop at 1 epoch
