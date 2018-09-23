@@ -42,5 +42,5 @@ for index, value in enumerate(values):
     subprocess.call(cmd, cwd=mayo_dir, shell=True)
     subprocess.call(eval_cmd, cwd=mayo_dir, shell=True)
     subprocess.call("cp eval_all.csv eval_all{}.csv".format(index), cwd=mayo_dir, shell=True)
-    subprocess.call("cp models/cifarnet/cifar10/latest.index models/cifarnet/cifar10/latest{}.index".format(index), cwd=mayo_dir, shell=True)
-    subprocess.call("cp models/cifarnet/cifar10/latest.data-00000-of-00001 models/cifarnet/cifar10/latest{}.data-00000-of-00001".format(index), cwd=mayo_dir, shell=True)
+    subprocess.call("cp checkpoints/cifarnet/cifar10/latest.index checkpoints/cifarnet/cifar10/latest{}.index".format(index), cwd=mayo_dir, shell=True)
+    subprocess.call("cp checkpoints/cifarnet/cifar10/latest.data-00000-of-00001 checkpoints/cifarnet/cifar10/latest{}.data-00000-of-00001".format(index), cwd=mayo_dir, shell=True)
