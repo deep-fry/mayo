@@ -6,8 +6,8 @@ meta_yaml = yaml.load(open('cifarnet.yaml', 'rb'))
 mayo_dir = "../../"
 target_key = 'l1'
 gpus = [0, 1]
-cmd_formatter = './my datasets/cifar10.yaml {} trainers/cifarnet.yaml system.checkpoint.load=gate100 train.learning_rate._initial=0.1 train.decay_steps=50 system.max_epochs=180 system.checkpoint.save.interval=10 system.num_gpus=2 system.visible_gpus=[{},{}] reset-num-epochs train'
-eval_cmd_formatter = './my datasets/cifar10.yaml {} trainers/cifarnet.yaml system.checkpoint.load=gate100 train.learning_rate._initial=0.1 train.decay_steps=50 system.max_epochs=180 system.checkpoint.save.interval=10 system.num_gpus=2 system.visible_gpus=[{},{}] eval-all'
+cmd_formatter = './my datasets/cifar10.yaml {} trainers/cifarnet.yaml system.checkpoint.load=gate100 train.learning_rate._initial=0.01 train.learning_rate.decay_steps=50 system.max_epochs=180 system.checkpoint.save.interval=10 system.num_gpus=2 system.visible_gpus=[{},{}] reset-num-epochs train'
+eval_cmd_formatter = './my datasets/cifar10.yaml {} trainers/cifarnet.yaml system.checkpoint.load=gate100 train.learning_rate._initial=0.01 train.learning_rate.decay_steps=50 system.max_epochs=180 system.checkpoint.save.interval=10 system.num_gpus=2 system.visible_gpus=[{},{}] eval-all'
 
 
 regularizer = {
@@ -16,7 +16,7 @@ regularizer = {
 }
 
 # sweep values
-values = list(range(1,7))
+values = list(range(3,12))
 values = [0.1 / (10 ** v) for v in values]
 print(values)
 
