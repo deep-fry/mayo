@@ -5,11 +5,9 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_property, flatten, object_from_params,
-    Change, Table, Percent, unknown, format_shape)
+    memoize_property, flatten, object_from_params, Change, Table, Percent)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
-from mayo.net.base import LayerNode, JoinNode
 from mayo.session.checkpoint import CheckpointHandler
 
 
@@ -73,6 +71,7 @@ class SessionBase(object, metaclass=SessionMeta):
         self.tf_graph = tf.Graph()
         self.initialized_variables = []
         self._assign_operators = {}
+        self._assign_values = {}
         tf_config = tf.ConfigProto(allow_soft_placement=True)
         tf_config.gpu_options.allow_growth = True
         self.tf_session = tf.Session(graph=self.tf_graph, config=tf_config)
@@ -110,12 +109,13 @@ class SessionBase(object, metaclass=SessionMeta):
         self.task = task_cls(self, **task_params)
 
     def _finalize(self):
-        # ensure configuration variable is instantiated
-        self._config_var
+        # dump configuration to ensure we always know how
+        # this checkpoint is trained
+        self.assign(self._config_var, self.config.to_yaml())
         # invoke finalizers
         for name, finalizer in self.finalizers.items():
             log.debug(
-                'Finalizing session with finalizer {!r}: {!r}'
+                'Finalizing session with finalizer {!r}: {!r}.'
                 .format(name, finalizer))
             finalizer()
 
@@ -180,32 +180,24 @@ class SessionBase(object, metaclass=SessionMeta):
     def overriders(self):
         return self.task.nets[0].overriders
 
+    def _overrider_assign_parameters(self):
+        # FIXME speghetti
+        # parameter assignments in overriders
+        for overriders in self.overriders.values():
+            for k, o in overriders.items():
+                if k == 'gradient':
+                    for each in o.values():
+                        each.assign_parameters()
+                else:
+                    o.assign_parameters()
+        self._run_assignments()
+
     def get_collection(self, key, first_gpu=False):
         func = lambda net, *args: tf.get_collection(key)
         collections = list(self.task.map(func))
         if first_gpu:
             return collections[0]
         return flatten(collections)
-
-    def assign(self, var, tensor, raw_run=False):
-        """
-        Variable assignment.
-
-        It uses placeholder for feeding values to assign, by doing so it avoids
-        adding a `tf.assign` every time we make a new assignment.
-        """
-        try:
-            op, placeholder = self._assign_operators[var]
-        except KeyError:
-            name = 'mayo/placeholder/{}'.format(var.op.name)
-            placeholder = tf.placeholder(
-                var.dtype, shape=var.get_shape(), name=name)
-            op = tf.assign(var, placeholder)
-            self._assign_operators[var] = op, placeholder
-        run_func = self.raw_run if raw_run else self.run
-        if isinstance(tensor, (tf.Variable, tf.Tensor)):
-            tensor = run_func(tensor)
-        run_func(op, feed_dict={placeholder: tensor})
 
     def load_checkpoint(self, name):
         # flush overrider parameter assignment
@@ -221,90 +213,11 @@ class SessionBase(object, metaclass=SessionMeta):
         return self._tf_scalar('mayo/config', dtype=tf.string)
 
     def save_checkpoint(self, name):
-        # dump configuration to ensure we always know how
-        # this checkpoint is trained
-        self.assign(self._config_var, self.config.to_yaml())
+        self._run_assignments()
         self.checkpoint.save(name)
 
     def info(self, plumbing=False):
-        net = self.task.nets[0]
-        info_dict = net.info(plumbing)
-        # layer info
-        stats = net.estimate()
-        if plumbing:
-            layer_info = {}
-            for node, shape in net.shapes.items():
-                stat = stats.get(node, {})
-                stat['shape'] = list(shape)
-                layer_info[node.formatted_name()] = stat
-            info_dict['layers'] = layer_info
-        else:
-            keys = set()
-            for node, stat in stats.items():
-                if isinstance(stat, list):
-                    for each in stat:
-                        keys |= set(each)
-                elif isinstance(stat, dict):
-                    keys |= set(stat)
-                else:
-                    raise TypeError('Unrecognized type.')
-            keys = sorted(k for k in keys if not k.startswith('_'))
-            layer_info = Table(['layer', 'shape'] + keys)
-            for node, shape in net.shapes.items():
-                if isinstance(node, LayerNode):
-                    values = stats.get(node, {})
-                    values = tuple(values.get(k, unknown) for k in keys)
-                else:
-                    values = tuple([unknown] * len(keys))
-                if isinstance(node, JoinNode):
-                    shape = ', '.join(format_shape(s) for s in shape)
-                else:
-                    shape = format_shape(shape)
-                layer_info.add_row((node.formatted_name(), shape) + values)
-            try:
-                macs = sum(layer_info.get_column('macs'))
-            except ValueError:
-                pass
-            else:
-                formatted_footer = [''] * len(keys)
-                formatted_footer[keys.index('macs')] = macs
-                layer_info.set_footer(['', ''] + formatted_footer)
-            info_dict['layers'] = layer_info
-        if self.overriders:
-            info_dict['overriders'] = self._overrider_info(plumbing)
-        return info_dict
-
-    def _overrider_info(self, plumbing=False):
-        def flatten(overriders):
-            for o in overriders:
-                if isinstance(o, ChainOverrider):
-                    yield from flatten(o)
-                else:
-                    yield o
-        info_dict = {}
-        overriders = []
-        for each in self.overriders.values():
-            overriders += list(each.values())
-        if plumbing:
-            for o in flatten(overriders):
-                info = list(o.info())
-                info_dict.setdefault(o.__class__, []).append(info)
-        else:
-            for o in flatten(overriders):
-                info = o.info()
-                if not info:
-                    continue
-                table = info_dict.setdefault(o.__class__, Table(info._fields))
-                table.add_row(info)
-            for cls, table in info_dict.items():
-                cls.finalize_info(table)
-        return info_dict
-
-    def _overrider_assign_parameters(self):
-        # parameter assignments in overriders
-        for overriders in self.overriders.values():
-            for o in overriders.values():
-                o.assign_parameters()
+        return self.task.nets[0].info(plumbing)
 
     @contextmanager
     def ensure_graph_unchanged(self, func_name):
@@ -330,10 +243,31 @@ class SessionBase(object, metaclass=SessionMeta):
                 '{} adds new operations {} to a read-only graph.'
                 .format(func_name, diff_ops))
 
+    def assign(self, var, tensor, raw_run=False):
+        """
+        Variable assignment.
+
+        It uses placeholder for feeding values to assign, by doing so it avoids
+        adding a `tf.assign` every time we make a new assignment.
+        """
+        if not isinstance(var, tf.Variable):
+            raise TypeError(
+                'Cannot assign to {} because it is not a variable.'
+                .format(var))
+        try:
+            op, placeholder = self._assign_operators[var]
+        except KeyError:
+            name = 'mayo/placeholder/{}'.format(var.op.name)
+            placeholder = tf.placeholder(
+                var.dtype, shape=var.get_shape(), name=name)
+            op = tf.assign(var, placeholder)
+            self._assign_operators[var] = op, placeholder
+        self._assign_values[var] = tensor
+
     def raw_run(self, ops, **kwargs):
         return self.tf_session.run(ops, **kwargs)
 
-    def run(self, ops, batch=False, **kwargs):
+    def _initialize_variables(self):
         # ensure variables are initialized
         uninit_vars = []
         for var in self.global_variables():
@@ -345,9 +279,32 @@ class SessionBase(object, metaclass=SessionMeta):
             self.raw_run(tf.variables_initializer(uninit_vars))
             self.initialized_variables += uninit_vars
 
-        # assign overrider hyperparameters
-        self._overrider_assign_parameters()
+    def _run_assignments(self):
+        if not self._assign_values:
+            return
+        assign_ops = []
+        feed = {}
+        tensor_feed = {}
+        for var, value in self._assign_values.items():
+            op, placeholder = self._assign_operators[var]
+            assign_ops.append(op)
+            if isinstance(value, (tf.Variable, tf.Tensor)):
+                tensor_feed[placeholder] = value
+            else:
+                feed[placeholder] = value
 
+        # ensure variables are assigned for evaluating tensors
+        self._initialize_variables()
+        # eval tensors and update feed
+        tensor_feed = self.raw_run(tensor_feed)
+        feed.update(tensor_feed)
+        # assignment
+        self.raw_run(assign_ops, feed_dict=feed)
+        self._assign_values = {}
+
+    def run(self, ops, batch=False, **kwargs):
+        self._initialize_variables()
+        self._overrider_assign_parameters()
         # session run
         if batch:
             results, statistics = self.raw_run(

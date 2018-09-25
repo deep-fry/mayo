@@ -4,6 +4,18 @@ from mayo.override.base import Parameter
 from mayo.override.quantize.base import QuantizerBase
 
 
+class ThresholdBinarizer(QuantizerBase):
+    threshold = Parameter('threshold', 0, [], 'float')
+
+    def __init__(self, session, threshold=None, should_update=True, enable=True):
+        super().__init__(session, should_update, enable)
+        if threshold is not None:
+            self.threshold = threshold
+
+    def _apply(self, value):
+        return util.cast(value > self.threshold, float)
+
+
 class FixedPointQuantizer(QuantizerBase):
     """
     Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
@@ -22,9 +34,10 @@ class FixedPointQuantizer(QuantizerBase):
     width = Parameter('width', 64, [], 'int')
     point = Parameter('point', 8, [], 'int')
 
-    def __init__(self, session, point=None, width=None, should_update=True,
-                 stochastic=None):
-        super().__init__(session, should_update)
+    def __init__(
+            self, session, point=None, width=None, stochastic=None,
+            should_update=True, enable=True):
+        super().__init__(session, should_update, enable)
         if point is not None:
             self.point = point
         if width is not None:
@@ -84,11 +97,11 @@ class DynamicFixedPointQuantizerBase(FixedPointQuantizer):
             use this information to compute a corresponding binary point using
             an update policy.
     """
-    def __init__(self, session, width, overflow_rate, should_update=True,
-                 stochastic=None):
+    def __init__(
+            self, session, width, overflow_rate, stochastic=None,
+            should_update=True, enable=True):
         super().__init__(
-            session, None, width, should_update=should_update,
-            stochastic=stochastic)
+            session, None, width, stochastic, should_update, enable)
         self.overflow_rate = overflow_rate
         # self.sync_point = sync_point
 
@@ -168,9 +181,10 @@ class DGTrainableQuantizer(DGQuantizer):
 
 
 class LogQuantizer(QuantizerBase):
-    def __init__(self, session, width, overflow_rate, should_update=True,
-                 stochastic=None):
-        super().__init__(session, should_update)
+    def __init__(
+            self, session, width, overflow_rate, stochastic=None,
+            should_update=True, enable=True):
+        super().__init__(session, should_update, enable)
         self.width = width
         if width is not None and width < 1:
             raise ValueError(

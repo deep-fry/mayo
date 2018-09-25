@@ -8,7 +8,8 @@ def reform_weights(overriders):
     def netslim_convert(overriders):
         overriders_dict = {}
         mask_dict = {}
-        for overrider in overriders:
+        for node, overrider in overriders.items():
+            overrider = overrider['activation']
             value = overrider.after.eval()
             if 'conv5_3' in overrider.name:
                 mask = overrider.mask.eval()
@@ -52,7 +53,7 @@ def reform_weights(overriders):
         return new_weights
 
     import numpy as np
-    model = 'VGG'
+    model = 'Cifar'
     if model == 'Cifar':
         layer_names = ['conv0', 'conv1', 'conv2', 'conv3', 'conv4', 'conv5',
             'conv6', 'conv7', 'logits']
@@ -107,11 +108,19 @@ def reform_weights(overriders):
                 if name[2] in variable.name:
                     np_raw[variable.name] = variable.eval()[mask == 1]
     STORE = True
+    np_raw_new = {}
+    import re
+    for key, value in np_raw.items():
+        new_key = re.sub(':0', '', key)
+        np_raw_new[new_key] = value
+
     if STORE:
         import pickle
         with open('test2.pkl', 'wb') as f:
             pickle.dump((np_raw, np_trainables, mask_dict), f)
         with open('test.pkl', 'wb') as f:
             pickle.dump(np_raw, f)
+        with open('test3.pkl', 'wb') as f:
+            pickle.dump(np_raw_new, f)
     return (np_raw, np_trainables, mask_dict)
 # reform_weights(self.nets[0].overriders)

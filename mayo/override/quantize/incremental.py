@@ -10,17 +10,16 @@ class IncrementalQuantizer(OverriderBase):
     """
     https://arxiv.org/pdf/1702.03044.pdf
     """
-    interval = Parameter('interval', 0.1, [], 'float')
     mask = Parameter('mask', None, None, 'bool')
 
-    def __init__(self, session, quantizer, interval, count_zero=True,
-                 should_update=True):
-        super().__init__(session, should_update)
+    def __init__(
+            self, session, quantizer, interval, count_zero=True,
+            should_update=True, enable=True):
+        super().__init__(session, should_update, enable)
         cls, params = object_from_params(quantizer)
         self.quantizer = cls(session, **params)
         self.count_zero = count_zero
-        if interval is not None:
-            self.interval_val = interval
+        self.interval = interval
 
     def _quantize(self, value, mean_quantizer=False):
         quantizer = self.quantizer
@@ -35,8 +34,7 @@ class IncrementalQuantizer(OverriderBase):
             }
         }
         quantized_value = self._quantize(value)
-        off_mask = util.cast(
-            util.logical_not(util.cast(self.mask, bool)), float)
+        off_mask = util.cast(util.logical_not(self.mask), float)
         mask = util.cast(self.mask, float)
         # on mask indicates the quantized values
         return value * off_mask + quantized_value * mask
@@ -73,18 +71,14 @@ class IncrementalQuantizer(OverriderBase):
         super().assign_parameters()
         self.quantizer.assign_parameters()
 
-    def update_interval(self):
-        if not hasattr(self, 'interval_val'):
-            return False
-        self.session.assign(self.interval, self.interval_val)
-        return True
-
     def _update(self):
         # reset index
-        self.update_interval()
         self.quantizer.update()
         # if chosen quantized, change it to zeros
-        value, quantized, mask, interval = self.session.run(
-            [self.before, self.quantizer.after, self.mask, self.interval])
-        new_mask = self._policy(value, quantized, mask, interval)
+        value, quantized, mask = self.session.run(
+            [self.before, self.quantizer.after, self.mask])
+        new_mask = self._policy(value, quantized, mask, self.interval)
         self.session.assign(self.mask, new_mask)
+
+    def _info(self):
+        return self.quantizer._info()

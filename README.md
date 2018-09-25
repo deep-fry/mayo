@@ -30,7 +30,7 @@ Run a simple LeNet-5 validation with the MNIST dataset using:
 ```bash
 $ ./my \
     models/lenet5.yaml \
-    datasets/lenet5.yaml \
+    datasets/mnist.yaml \
     system.checkpoint.load=pretrained \
     eval
 ```
@@ -48,7 +48,7 @@ The Mayo command line interface works in a different way from most deep learning
 ```bash
 $ ./my \                                # Invocation of Mayo
     models/lenet5.yaml \                # Imports LeNet-5 network description
-    datasets/lenet5.yaml \              # Imports the dataset description
+    datasets/mnist.yaml \               # Imports the dataset description
     system.checkpoint.load=pretrained \ # Specify that we load the pretrained checkpoint
     eval                                # Starts model evaluation
 ```

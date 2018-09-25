@@ -164,6 +164,7 @@ class Plot(object):
                     label_keys.add(label)
                     lmap.setdefault(label, []).append(value)
         # average history
+        shapes = self.net.shapes(unified=True)
         for node, lmap in hmap.items():
             values = []
             for label in range(len(label_keys)):
@@ -171,7 +172,7 @@ class Plot(object):
                 try:
                     mean = np.mean(lmap[label], axis=0)
                 except KeyError:
-                    mean = np.zeros(self.net.shapes[node][-1])
+                    mean = np.zeros(shapes[node][-1])
                 values.append(mean)
             hmap[node] = np.stack(values, axis=0)
         return hmap

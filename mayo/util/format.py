@@ -32,7 +32,7 @@ class Table(collections.Sequence):
         self._formatters = formatters or self._empty_formatters
         self._rows = []
         self._rules = []
-        self._footers = None
+        self._footers = {}
         self.add_rule()
 
     def __getitem__(self, index):
@@ -43,6 +43,10 @@ class Table(collections.Sequence):
 
     def __len__(self):
         return len(self._rows)
+
+    @property
+    def num_columns(self):
+        return len(self._headers)
 
     @classmethod
     def from_namedtuples(cls, tuples, formatters=None):
@@ -81,11 +85,17 @@ class Table(collections.Sequence):
         self._headers.append(name)
         self._formatters[name] = formatter
 
-    def set_footer(self, footer):
-        self._footers = footer
+    def footer_sum(self, column):
+        self._footers[column] = {'method': 'sum'}
+
+    def footer_mean(self, column, weights=None):
+        self._footers[column] = {'method': 'mean', 'weights': weights}
 
     def get_column(self, name):
-        col_idx = self._headers.index(name)
+        try:
+            col_idx = self._headers.index(name)
+        except ValueError:
+            raise KeyError('Unable to find header named {!r}.'.format(name))
         return [row[col_idx] for row in self._rows]
 
     def _format_value(self, value, formatter=None, width=None):
@@ -105,6 +115,8 @@ class Table(collections.Sequence):
             value = value.name
         elif isinstance(value, tf.TensorShape):
             value = format_shape(value)
+        elif isinstance(value, (list, tuple)):
+            value = ', '.join(self._format_value(v) for v in value)
         else:
             value = str(value)
         if width:
@@ -122,14 +134,65 @@ class Table(collections.Sequence):
             new_row.append(x)
         return new_row
 
+    def _get_footers(self):
+        footer = [None] * self.num_columns
+        for column, prop in self._footers.items():
+            index = self._headers.index(column)
+            column = self.get_column(column)
+            if prop['method'] == 'sum':
+                value = sum(column)
+            elif prop['method'] == 'mean':
+                try:
+                    weights = self.get_column(prop.get('weights'))
+                except KeyError:
+                    weights = [1] * len(column)
+                value = sum(v * w for v, w in zip(column, weights))
+                value /= sum(weights)
+            else:
+                raise TypeError('Unrecognized method.')
+            footer[index] = value
+        return footer
+
+    def _plumb_value(self, value):
+        if value is None or value is unknown:
+            return
+        if isinstance(value, (int, float)):
+            return value
+        if isinstance(value, (list, tuple)):
+            return [self._plumb_value(v) for v in value]
+        if isinstance(value, tf.Variable):
+            return value.name
+        if isinstance(value, tf.TensorShape):
+            return [int(s) for s in value]
+        return str(value)
+
+    def plumb(self):
+        infos = {'items': []}
+        for row in self._rows:
+            info = {
+                self._plumb_value(k): self._plumb_value(v)
+                for k, v in zip(self._headers, row)}
+            infos['items'].append(info)
+        if self._footers:
+            footer = self._get_footers()
+            infos['footer'] = {
+                key: value for key, value in zip(self._headers, footer)
+                if value is not None}
+        return infos
+
+    def _footer_row(self, widths=None):
+        if not self._footers:
+            return
+        footer = self._get_footers()
+        return self._format_row(footer, self._empty_formatters, widths=widths)
+
     def _column_widths(self):
         row_widths = []
-        num_columns = len(self._headers)
-        others = [self._headers, self._footers]
+        others = [self._headers, self._footer_row()]
         for row in self._rows + others:
             if row is None:
                 continue
-            if len(row) != num_columns:
+            if len(row) != self.num_columns:
                 raise ValueError(
                     'Number of columns in row {} does not match headers {}.'
                     .format(row, self._headers))
@@ -150,10 +213,10 @@ class Table(collections.Sequence):
         # rows
         for row in self._rows:
             table.append(self._format_row(row, self._formatters, widths))
-        if self._footers:
+        # footer
+        footer = self._footer_row(widths)
+        if footer:
             self.add_rule()
-            footer = self._format_row(
-                self._footers, self._empty_formatters, widths)
             table.append(footer)
         # lines
         lined_table = []

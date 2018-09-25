@@ -28,11 +28,6 @@ class MeanStdPruner(PrunerBase):
         return self._info_tuple(
             mask=mask, alpha=alpha, density=density, count_=count)
 
-    @classmethod
-    def finalize_info(cls, table):
-        footer = super().finalize_info(table)
-        table.set_footer([None] + footer)
-
 
 class DynamicNetworkSurgeryPruner(MeanStdPruner):
     """

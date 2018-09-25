@@ -147,7 +147,7 @@ class GatedConvolutionBase(object):
                     padding_height = self.padding
                 else:
                     padding_height, _ = self.padding
-                padding = [self.padding, 0]
+                padding = [padding_height, 0]
             if isinstance(self.stride, int):
                 stride_height = self.stride
             else:
@@ -245,7 +245,7 @@ class GatedConvolutionBase(object):
         # top_k, where k is the number of active channels
         top, _ = tf.nn.top_k(tensor, k=(num_active + 1))
         # disable channels with smaller responses
-        return tf.reduce_min(top, axis=[1], keep_dims=True)
+        return tf.reduce_min(top, axis=[1], keepdims=True)
 
     def _finalizer(self):
         if self.threshold == 'online':

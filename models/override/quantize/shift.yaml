@@ -5,7 +5,7 @@ _overrider:
         shift:
             type: mayo.override.ShiftQuantizer
             width: 4
-            bias: 2
+            exponent_bias: 2
             overflow_rate: 0.0
             should_update: true
             stochastic: False

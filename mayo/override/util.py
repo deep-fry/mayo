@@ -235,11 +235,7 @@ def stochastic_round(tensor, stochastic):
         prob = (tensor - value_floor)
     else:
         raise TypeError(
-            'Stochastic argument {} not recognized.'.format(stochastic))
-    if is_tensor(tensor):
-        randoms = tf.random_uniform(shape=tensor.shape)
-    else:
-        randoms = np.random_uniform(shape=tensor.shape)
-    round_up = cast(randoms > prob, float)
-    round_down = cast(randoms <= prob, float)
-    return value_ceil * round_up + value_floor * round_down
+            'Stochastic mode {!r} not recognized.'.format(stochastic))
+    mod = tf if is_tensor(tensor) else np
+    randoms = mod.random_uniform(shape=tensor.shape)
+    return where(randoms > prob, value_floor, value_ceil)

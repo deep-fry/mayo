@@ -23,8 +23,21 @@ class ParameterTransformer(object):
         self.session = session
         self.is_training = session.is_training
         self.reuse = reuse
-        self.overriders = {}
+        self._overriders = {}
         self.variables = {}
+
+    @property
+    def overriders(self):
+        # only return applied overriders
+        overriders = {}
+        for n, os in self._overriders.items():
+            nos = overriders.setdefault(n, {})
+            for k, o in os.items():
+                if k == 'gradient':
+                    nos[k] = {gk: go for gk, go in o.items() if go._applied}
+                elif o._applied:
+                    nos[k] = o
+        return overriders
 
     def _create_hyperobjects(self, layer_node, params):
         suffixes = ['regularizer', 'initializer']
@@ -63,7 +76,7 @@ class ParameterTransformer(object):
             if not p:
                 del overrider_params[key]
                 continue
-            overriders = self.overriders.setdefault(layer_node, {})
+            overriders = self._overriders.setdefault(layer_node, {})
             if key == 'gradient':
                 for grad_key, grad_p in p.items():
                     q = overriders.setdefault('gradient', {})
@@ -139,6 +152,12 @@ class ParameterTransformer(object):
 
         forward_overriders = params.pop('overrider', None) or {}
         gradient_overriders = forward_overriders.pop('gradient', {})
+        for key, overrider in gradient_overriders.items():
+            if params.pop('{}_regularizer'.format(key), None):
+                log.warn(
+                    'Regularizer for \'{}/{}\' is for now disabled as we '
+                    'override its gradient with {!r}.'
+                    .format(node.formatted_name(), key, overrider))
 
         def custom_getter(getter, name, *args, **kwargs):
             v = getter(name, *args, **kwargs)
@@ -153,7 +172,7 @@ class ParameterTransformer(object):
             overrider = gradient_overriders.get(key)
             if overrider and self.is_training:
                 v = self._apply_gradient_overrider(node, name, overrider, v)
-            self.variables.setdefault(node, {})[name] = v
+            self.variables.setdefault(node, {})[key] = v
             return v
 
         @contextlib.contextmanager

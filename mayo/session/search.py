@@ -39,8 +39,10 @@ class SearchBase(Train):
         }
         for regex, info in self.config.search.variables.items():
             for node, node_variables in self.variables.items():
+                node_name = node.formatted_name()
                 for name, var in node_variables.items():
-                    if not re.search(regex, name):
+                    var_name = '{}/{}'.format(node_name, name)
+                    if not re.search(regex, var_name):
                         continue
                     if node in targets:
                         raise ValueError(
@@ -54,14 +56,16 @@ class SearchBase(Train):
                             'hyperparameters.')
                     targets[node] = dict(info, variable=var, type=dtype)
                     log.debug(
-                        'Targeted hyperparameter {} in {}: {}.'
-                        .format(var, node.formatted_name(), targets[node]))
+                        'Targeting hyperparameter {} in {}: {}...'
+                        .format(var, node_name, targets[node]))
         return targets
 
     def _init_search(self):
         self.targets = self._init_targets()
         if not self.targets:
-            raise ValueError('No search target hyperparameter specified.')
+            raise ValueError(
+                'No search target hyperparameter specified. '
+                'Perhaps your regex is not written correctly?')
         # initialize hyperparameters to starting positions
         # FIXME how can we continue search?
         for _, info in self.targets.items():

@@ -1,12 +1,10 @@
 ---
-# be careful, now it's gating on slimed model
-# _import: ../cifarnet_slim.yaml
-_import: ../cifarnet.yaml
+_import: ../models/cifarnet.yaml
 _trainable: true
 _gate:
     enable: true
     policy: parametric
-    density: 1.0
+    density: 0.5
     pool: avg
     regularizer:
         # l1: 0.00000001

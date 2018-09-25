@@ -18,7 +18,7 @@ class Profile(Train):
                 if log.countdown('Saving checkpoint', countdown):
                     self.save_checkpoint('latest')
 
-    def _run(self, max_epochs, reset=True):
+    def _run(self, max_epochs, reset=False):
         log.info('Start profiling ...')
         self.config.system.checkpoint.save = False
         # reset num_epochs and stop at 1 epoch
@@ -32,24 +32,26 @@ class Profile(Train):
         config = self.config.profile
         overriders = self.task.nets[0].overriders
         name_to_rules = config.parameters.overriders
+        import pdb; pdb.set_trace()
 
         export_ckpt = config.pop('export_ckpt', False)
         num_epochs = config.pop('num_epochs', 0.0)
-        macs = self.task.nets[0].estimate()
-        priority_ranks = [(key, macs[key]) for key, o in overriders.items()]
-        priority_ranks = sorted(
-            priority_ranks, key=lambda x:x[1]['macs'], reverse=True)
+        # macs = self.task.nets[0].estimate()
+        # priority_ranks = [(key, macs[key]) for key, o in overriders.items()]
+        # priority_ranks = sorted(
+        #     priority_ranks, key=lambda x:x[1]['macs'], reverse=True)
         target_values = {}
         if not num_epochs:
-            for key, _ in priority_ranks:
-                for o in overriders[key]:
-                    target_values[o] = {}
-                    o.update()
-                    for keyword, rules in name_to_rules.items():
-                        if keyword == type(o).__name__:
-                            for target in rules.targets:
-                                target_values[o][target] = self.run(
-                                    getattr(o, target))
+            # for key, _ in priority_ranks:
+            #     for o in overriders[key]:
+            for o, key in self.generate_overriders(overriders, prod_key=True):                
+                target_values[o] = {}
+                o.update()
+                for keyword, rules in name_to_rules.items():
+                    if keyword == type(o).__name__:
+                        for target in rules.targets:
+                            target_values[o][target] = self.run(
+                                getattr(o, target))
         else:
             target_values = self.profiled_search(overriders, name_to_rules)
         self.present(overriders, target_values, export_ckpt)
@@ -81,7 +83,6 @@ class Profile(Train):
             params['avg'] = avg
             params['targets'] = \
                 profile_params.overriders.get(type(o).__name__).targets
-            params['samples'] = self.estimator.get_value(o.name, node=key)
             meta_params[o.name] = params
             # find a target -> suggested value dict
             target = o.search(params)
@@ -123,8 +124,6 @@ class Profile(Train):
                 self.estimator.register(
                     percentile, 'max_' + o.name, node=key,
                     history='running_mean')
-            self.estimator.register(
-                o.before, o.name, node=key, history=samples)
         return
 
     def present(self, overriders, target_values, export_ckpt):
@@ -145,23 +144,48 @@ class Profile(Train):
         return
 
     def _assign_targets(self, overriders, target_values):
+        assignment_ops = []
         for node, name_to_overrider in overriders.items():
             for name, overrider in name_to_overrider.items():
+                if name == 'gradient':
+                    for g_name, g_overrider in overrider.items():
+                        g_overrider.enable = True
+                        target = target_values[g_overrider][0]
+                        for target_name, target_value in target.items():
+                            setattr(g_overrider, target_name, target_value)
+                    continue
                 overrider.enable = True
                 target = target_values[overrider][0]
                 for target_name, target_value in target.items():
                     setattr(overrider, target_name, target_value)
+                    op = getattr(overrider, target_name)
+                    assignment_ops.append(op)
+        # load the values
+        _ = self.run(assignment_ops)
 
     def generate_overriders(self, overriders, prod_key=False, label_o=False):
         for key, os in overriders.items():
             for variable, o in os.items():
-                if prod_key:
-                    if label_o:
-                        yield [variable, o, key]
-                    else:
-                        yield (o, key)
+                if isinstance(o, dict):
+                    for grad_variable, grad_o in o.items():
+                        if prod_key:
+                            if label_o:
+                                yield [grad_variable, grad_o, key]
+                            else:
+                                yield (grad_o, key)
+                        else:
+                            if label_o:
+                                yield (grad_variable, grad_o)
+                            else:
+                                yield grad_o
                 else:
-                    if label_o:
-                        yield (variable, o)
+                    if prod_key:
+                        if label_o:
+                            yield [variable, o, key]
+                        else:
+                            yield (o, key)
                     else:
-                        yield o
+                        if label_o:
+                            yield (variable, o)
+                        else:
+                            yield o
