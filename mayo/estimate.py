@@ -253,6 +253,8 @@ class ResourceEstimator(object):
     def _mask_passthrough(info, layer_info):
         if 'density' in info:
             layer_info['density'] = info['density']
+        if 'active' in info:
+            layer_info['active'] = info['active']
         if '_mask' in info:
             layer_info['_mask'] = info['_mask']
         return layer_info
@@ -261,7 +263,14 @@ class ResourceEstimator(object):
     def _apply_input_sparsity(info, layer_info):
         if '_mask' not in info:
             return layer_info
-        macs = layer_info['macs']
-        layer_info['macs'] = int(macs * info.get('density', 1))
-        layer_info['_original_macs'] = macs
+        # computation
+        if 'density' in info:
+            macs = layer_info['macs']
+            layer_info['macs'] = int(macs * info['density'])
+            layer_info['_original_macs'] = macs
+        # memory
+        if 'active' in info:
+            weights = layer_info['weights']
+            layer_info['weights'] = int(weights * info['active'])
+            layer_info['_original_weights'] = weights
         return layer_info

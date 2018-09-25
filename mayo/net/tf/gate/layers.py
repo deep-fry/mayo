@@ -1,4 +1,5 @@
 import math
+import functools
 
 import numpy as np
 
@@ -75,24 +76,37 @@ class GateLayers(object):
             raise GatePolicyTypeError('Unrecognized gated convolution policy.')
         return cls(self, node, params, gate_params, tensor).instantiate()
 
-    def _estimate_overhead(self, info, input_shape, output_shape, params):
-        in_channels = input_shape[-1]
-        out_channels = output_shape[-1]
+    def _estimate_overhead(
+            self, input_shape, output_shape,
+            in_density, active_density, params):
+        in_channels = int(input_shape[-1] * in_density)
+        out_channels = int(output_shape[-1] * active_density)
         factor = params.get('factor', 0)
         if factor <= 0:
             macs = in_channels * out_channels
+            # FC uses number of weights = (MACs + bias parameters)
+            weights = macs + out_channels
         else:
             mid_channels = math.ceil(params['num_outputs'] / factor)
             macs = in_channels * mid_channels
             macs += mid_channels * out_channels
+            weights = NotImplemented
         # gamma multiplication overhead
         macs += self.estimator._multiply(output_shape[1:])
-        return macs
+        return weights, macs
+
+    @staticmethod
+    def _mask_active(masks):
+        if not masks:
+            return np.ones(masks[0][0].shape, dtype=np.bool)
+        flat_masks = (m for mask in masks for m in mask)
+        return functools.reduce(np.logical_or, flat_masks)
 
     def estimate_gated_convolution(
             self, node, info, input_shape, output_shape, params):
         layer_info = self.estimate_convolution(
             node, info, input_shape, output_shape, params)
+        active_density = 1
         if params.get('enable', True):
             try:
                 mask = self.estimator.get_history('gate.active', node)
@@ -100,11 +114,19 @@ class GateLayers(object):
                 pass
             else:
                 density = self.estimator._mask_density(mask)
+                active = self._mask_active(mask)
                 layer_info['_mask'] = mask
+                layer_info['_active'] = active
+                active_density = Percent(np.sum(active) / active.size)
+                layer_info['active'] = active_density
                 layer_info['density'] = density
                 layer_info['macs'] = int(layer_info['macs'] * density)
-        overhead = self._estimate_overhead(
-            info, input_shape, output_shape, params)
-        layer_info['overhead'] = overhead
-        layer_info['macs'] += overhead
+                layer_info['weights'] = int(
+                    layer_info['weights'] * active_density)
+        in_density = info.get('density', 1)
+        oweights, omacs = self._estimate_overhead(
+            input_shape, output_shape, in_density, active_density, params)
+        # layer_info['overhead'] = overhead_macs
+        layer_info['weights'] += oweights
+        layer_info['macs'] += omacs
         return layer_info
