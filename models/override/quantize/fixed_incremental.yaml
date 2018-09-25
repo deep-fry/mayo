@@ -1,0 +1,28 @@
+---
+_import: ../_global.yaml
+_overrider:
+    weights: &quantizer
+       incremental: &incrementalshift
+            type: mayo.override.IncrementalQuantizer
+            interval: 0.25
+            count_zero: false
+            _priority: 100
+            quantizer:
+                type: mayo.override.FixedPointQuantizer
+                width: 8
+                point: 2
+                should_update: true
+                stochastic: false
+        biases: {<<: *quantizer}
+    activation:
+       incremental: &incrementalshift
+            type: mayo.override.IncrementalQuantizer
+            interval: 0.25
+            count_zero: false
+            _priority: 100
+            quantizer:
+                type: mayo.override.FixedPointQuantizer
+                width: 8
+                point: 2
+                should_update: true
+                stochastic: false
