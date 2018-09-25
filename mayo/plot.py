@@ -3,8 +3,8 @@ import math
 import numpy as np
 from PIL import Image
 
-from mayo import error
 from mayo.log import log
+from mayo.util import ShapeError
 from mayo.task.image.classify import Classify
 
 
@@ -21,7 +21,7 @@ class Plot(object):
         self.task = session.task
         self.net = session.task.nets[0]
         if not isinstance(session.task, Classify):
-            raise error.TypeError(
+            raise TypeError(
                 'We only support classification task for now.')
 
     @property
@@ -84,7 +84,7 @@ class Plot(object):
 
     def _plot_images(self, value, path):
         if len(value.shape) != 3:
-            raise error.ShapeError(
+            raise ShapeError(
                 'We expect number of dimensions to be 4 for image plotting.')
         height, width, channels = value.shape
         max_value = float(np.max(value))
@@ -140,6 +140,8 @@ class Plot(object):
             return
         gamma_heatmaps = self._heatmaps(gammas)
         active_heatmaps = self._heatmaps(actives)
+        self._save_heatmaps(gamma_heatmaps, 'gamma')
+        self._save_heatmaps(active_heatmaps, 'active')
 
         for node in gamma_heatmaps:
             gamma_path = path(node, 'gamma')
@@ -174,13 +176,17 @@ class Plot(object):
             hmap[node] = np.stack(values, axis=0)
         return hmap
 
+    def _save_heatmaps(self, heatmaps, name):
+        heatmaps = {n.formatted_name(): m for n, m in heatmaps.items()}
+        np.save(name, heatmaps)
+
     def _plot_heatmap(self, heatmap, path, vmin=None, vmax=None):
         if vmin is None:
             vmin = np.min(heatmap)
         if vmax is None:
             vmax = np.max(heatmap)
         if vmin >= vmax:
-            raise error.ValueError(
+            raise ValueError(
                 'The minimum value is not less than the maximum value.')
         heatmap = np.uint8((heatmap - vmin) / (vmax - vmin) * 255.0)
         image = Image.fromarray(heatmap)

@@ -1,7 +1,7 @@
 ---
 # be careful, now it's gating on slimed model
-_import: ../cifarnet_slim50.yaml
-# _import: ../cifarnet.yaml
+# _import: ../cifarnet_slim50.yaml
+_import: ../cifarnet.yaml
 _trainable: true
 _gate:
     enable: true
