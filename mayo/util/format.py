@@ -162,7 +162,7 @@ class Table(collections.Sequence):
     def _plumb_value(self, value):
         if value is None or value is unknown:
             return
-        if isinstance(value , Percent):
+        if isinstance(value, Percent):
             return float(value)
         if isinstance(value, (int, float)):
             return value
