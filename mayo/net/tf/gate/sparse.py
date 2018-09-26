@@ -35,6 +35,8 @@ class SparseRegularizedGatedConvolutionBase(GatedConvolutionBase):
         sparse = self.gate() * self.actives()
         # add regularization for each specified keys
         for key, weight in self.regularizer.items():
+            if isinstance(weight, str):
+                weight = float(weight)
             if weight <= 0:
                 continue
             self._add_regularization(func_map[key](sparse), weight)
