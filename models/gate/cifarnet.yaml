@@ -8,9 +8,7 @@ _gate:
     policy: parametric
     density: 1.0
     pool: avg
-    regularizer:
-        # l1: 0.00000001
-        moe: 0.01
+    regularizer: {}
     # factor: 2
     threshold: online
 model:

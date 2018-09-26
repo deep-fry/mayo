@@ -1,0 +1,34 @@
+---
+_import: ../vgg16_compact.yaml
+_gate:
+    enable: true
+    policy: parametric
+    density: 0.8
+    pool: avg
+    regularizer:
+        # l1: 0.00000001
+        moe: 0.0
+    threshold: online
+_trainable: true
+model:
+    name: vgg16_bn
+    layers:
+        _gated_conv: &gated_conv
+            type: gated_convolution
+            gate_params: $(_gate)
+        conv1_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv1_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv2_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv2_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv3_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv3_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv3_3: {<<: *gated_conv, trainable: $(_trainable)}
+        conv4_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv4_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv4_3: {<<: *gated_conv, trainable: $(_trainable)}
+        conv5_1: {<<: *gated_conv, trainable: $(_trainable)}
+        conv5_2: {<<: *gated_conv, trainable: $(_trainable)}
+        conv5_3: {<<: *gated_conv, trainable: $(_trainable)}
+        fc6: {trainable: $(_trainable)}
+        fc7: {trainable: $(_trainable)}
+        fc8: {trainable: $(_trainable)}

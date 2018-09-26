@@ -1,13 +1,11 @@
-import yaml
-import os
 import subprocess
 
-meta_yaml = yaml.load(open('cifarnet.yaml', 'rb'))
-mayo_dir = "../../"
+epochs = 300
+density = 1.0
 target_key = 'l1'
-gpus = [0, 1]
-cmd_formatter = './my datasets/cifar10.yaml {} trainers/cifarnet.yaml system.checkpoint.load=gate100 train.learning_rate._initial=0.01 train.learning_rate.decay_steps=50 system.max_epochs=180 system.checkpoint.save.interval=10 system.num_gpus=2 system.visible_gpus=[{},{}] reset-num-epochs train'
-eval_cmd_formatter = './my datasets/cifar10.yaml {} trainers/cifarnet.yaml system.checkpoint.load=gate100 train.learning_rate._initial=0.01 train.learning_rate.decay_steps=50 system.max_epochs=180 system.checkpoint.save.interval=10 system.num_gpus=2 system.visible_gpus=[{},{}] eval-all'
+mayo_dir = "../../"
+cmd_formatter = './my models/gate/cifarnet.yaml _gate.density={} _gate.regularizer.{}={} trainers/cifarnet.yaml datasets/cifar10.yaml system.checkpoint.load=gate100 train.learning_rate._initial=0.001 train.learning_rate.decay_steps=80 system.max_epochs={} system.checkpoint.save.interval=10 system.num_gpus=1 system.visible_gpus="2" system.pdb.use=false reset-num-epochs train'
+eval_cmd_formatter = './my models/gate/cifarnet.yaml _gate.density={} datasets/cifar10.yaml trainers/cifarnet.yaml eval-all'
 
 
 regularizer = {
@@ -16,31 +14,15 @@ regularizer = {
 }
 
 # sweep values
-values = list(range(3,12))
-values = [0.1 / (10 ** v) for v in values]
-print(values)
-
-config_dir = os.path.join(mayo_dir, 'gate_configs')
-if not os.path.exists(config_dir):
-    os.makedirs(config_dir)
-
-for index, value in enumerate(values):
-    meta_yaml['_gate']['regularizer'].update(regularizer)
-    regularizer[target_key] = value
-    with open(os.path.join(config_dir, 'gate'+str(index)+'.yaml'), 'w') as f:
-        yaml.dump(meta_yaml, f, default_flow_style=False)
-    cmd = cmd_formatter.format(
-        os.path.join('gate_configs', 'gate'+str(index)+'.yaml'),
-        gpus[0],
-        gpus[1]
-    )
-    eval_cmd = eval_cmd_formatter.format(
-        os.path.join('gate_configs', 'gate'+str(index)+'.yaml'),
-        gpus[0],
-        gpus[1]
-    )
+exps = list(reversed(range(2, 10, 2)))
+print(exps)
+for exp in exps:
+    value = 10 ** (-exp)
+    print(value)
+    cmd = cmd_formatter.format(density, target_key, value, epochs)
+    eval_cmd = eval_cmd_formatter.format(density)
     subprocess.call(cmd, cwd=mayo_dir, shell=True)
     subprocess.call(eval_cmd, cwd=mayo_dir, shell=True)
-    subprocess.call("cp eval_all.csv eval_all{}.csv".format(index), cwd=mayo_dir, shell=True)
-    subprocess.call("cp checkpoints/cifarnet/cifar10/latest.index checkpoints/cifarnet/cifar10/latest{}.index".format(index), cwd=mayo_dir, shell=True)
-    subprocess.call("cp checkpoints/cifarnet/cifar10/latest.data-00000-of-00001 checkpoints/cifarnet/cifar10/latest{}.data-00000-of-00001".format(index), cwd=mayo_dir, shell=True)
+    subprocess.call("cp eval_all.csv eval_all{}.csv".format(exp), cwd=mayo_dir, shell=True)
+    subprocess.call("cp checkpoints/cifarnet/cifar10/checkpoint-{}.index checkpoints/cifarnet/cifar10/latest{}.index".format(epochs, exp), cwd=mayo_dir, shell=True)
+    subprocess.call("cp checkpoints/cifarnet/cifar10/checkpoint-{}.data-00000-of-00001 checkpoints/cifarnet/cifar10/latest{}.data-00000-of-00001".format(epochs, exp), cwd=mayo_dir, shell=True)

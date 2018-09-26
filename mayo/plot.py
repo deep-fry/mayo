@@ -4,6 +4,7 @@ import numpy as np
 from PIL import Image
 
 from mayo.log import log
+from mayo.util import ShapeError
 from mayo.task.image.classify import Classify
 
 
@@ -20,7 +21,8 @@ class Plot(object):
         self.task = session.task
         self.net = session.task.nets[0]
         if not isinstance(session.task, Classify):
-            raise TypeError('We only support classification task for now.')
+            raise TypeError(
+                'We only support classification task for now.')
 
     @property
     def _path(self):
@@ -138,6 +140,8 @@ class Plot(object):
             return
         gamma_heatmaps = self._heatmaps(gammas)
         active_heatmaps = self._heatmaps(actives)
+        self._save_heatmaps(gamma_heatmaps, 'gamma')
+        self._save_heatmaps(active_heatmaps, 'active')
 
         for node in gamma_heatmaps:
             gamma_path = path(node, 'gamma')
@@ -172,6 +176,10 @@ class Plot(object):
                 values.append(mean)
             hmap[node] = np.stack(values, axis=0)
         return hmap
+
+    def _save_heatmaps(self, heatmaps, name):
+        heatmaps = {n.formatted_name(): m for n, m in heatmaps.items()}
+        np.save(name, heatmaps)
 
     def _plot_heatmap(self, heatmap, path, vmin=None, vmax=None):
         if vmin is None:
