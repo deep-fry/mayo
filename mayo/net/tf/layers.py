@@ -77,11 +77,16 @@ class Layers(TFNetBase):
         return output
 
     def _estimate_depthwise_convolution(self, output_shape, params):
-        # output feature map size (H x W x C_out)
+        # kernel size K_h x K_w
+        kernel = self.estimator._kernel_size(params)
+        # weights, K_h x K_w x C_out
+        weights = [kernel, output_shape[-1]]
+        weights = self.estimator._multiply(weights)
+        # macs, K_h x K_w x H x W x C_out
         macs = list(output_shape[1:])
-        # kernel size K_H x K_W
-        macs.append(self.estimator._kernel_size(params))
-        return self.estimator._multiply(macs)
+        macs.append(kernel)
+        macs = self.estimator._multiply(macs)
+        return {'weights': weights, 'macs': macs}
 
     def _estimate_memory_bitops(self, node, info):
         # FIXME use overrider.estimate
@@ -107,10 +112,14 @@ class Layers(TFNetBase):
 
     def estimate_convolution(
             self, node, info, input_shape, output_shape, params):
-        macs = self._estimate_depthwise_convolution(output_shape, params)
+        layer_info = self._estimate_depthwise_convolution(output_shape, params)
         # input channel size C_in
-        macs *= input_shape[-1]
-        layer_info = self._estimate_memory_bitops(node, {'macs': macs})
+        in_channels = input_shape[-1]
+        out_channels = output_shape[-1]
+        layer_info['macs'] *= in_channels
+        layer_info['weights'] = int(
+            in_channels * layer_info['weights'] + out_channels)
+        layer_info = self._estimate_memory_bitops(node, layer_info)
         return self.estimator._apply_input_sparsity(info, layer_info)
 
     def instantiate_depthwise_convolution(self, node, tensor, params):
@@ -120,8 +129,8 @@ class Layers(TFNetBase):
 
     def estimate_depthwise_convolution(
             self, node, info, input_shape, output_shape, params):
-        macs = self._estimate_depthwise_convolution(output_shape, params)
-        layer_info = self._estimate_memory_bitops(node, {'macs': macs})
+        layer_info = self._estimate_depthwise_convolution(output_shape, params)
+        layer_info = self._estimate_memory_bitops(node, layer_info)
         layer_info = self.estimator._apply_input_sparsity(info, layer_info)
         return self.estimator._mask_passthrough(info, layer_info)
 
@@ -205,8 +214,8 @@ class Layers(TFNetBase):
         mask = []
         for each in zip(*masks):
             mask.append(np.concatenate(each, axis=-1))
-        density = self.estimator._mask_density(mask)
-        return {'_mask': mask, 'density': density}
+        density, active = self.estimator._mask_density(mask)
+        return {'_mask': mask, 'density': density, 'active': active}
 
     def instantiate_space_to_depth(self, node, tensors, params):
         return tf.space_to_depth(tensors, **use_name_not_scope(params))
@@ -216,8 +225,8 @@ class Layers(TFNetBase):
 
     def _estimate_join(self, masks, reducer):
         mask = self.estimator._mask_join(masks, reducer)
-        density = self.estimator._mask_density(mask)
-        return {'_mask': mask, 'density': density}
+        density, active = self.estimator._mask_density(mask)
+        return {'_mask': mask, 'density': density, 'active': active}
 
     def _estimate_binary_elementwise(self, infos, input_shapes, reducer):
         mask_shape = input_shapes[0]

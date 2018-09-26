@@ -144,10 +144,16 @@ class Table(collections.Sequence):
             elif prop['method'] == 'mean':
                 try:
                     weights = self.get_column(prop.get('weights'))
+                    if isinstance(weights, str):
+                        weights = self.get_column(weights)
                 except KeyError:
                     weights = [1] * len(column)
-                value = sum(v * w for v, w in zip(column, weights))
-                value /= sum(weights)
+                value = sum(
+                    v * w for v, w in zip(column, weights)
+                    if unknown not in (v, w))
+                value /= sum(w for w in weights if w is not unknown)
+                if any(isinstance(c, Percent) for c in column):
+                    value = Percent(value)
             else:
                 raise TypeError('Unrecognized method.')
             footer[index] = value

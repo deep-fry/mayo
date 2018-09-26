@@ -108,13 +108,18 @@ class NetworkSlimmer(ChannelPrunerBase):
     def estimate(self, layer_info, info):
         mask = [self.session.run(self.mask)]
         macs = layer_info.get('macs', 0)
-        density = self.session.estimator._mask_density(mask)
+        weights = layer_info.get('weights', 0)
+        density, active = self.session.estimator._mask_density(mask)
         update = {
             '_mask': mask,
             'density': density,
+            'active': active,
             'macs': int(macs * density),
+            'weights': int(weights * active),
         }
         if '_original_macs' not in layer_info:
             update['_original_macs'] = macs
+        if '_original_weights' not in layer_info:
+            update['_original_weights'] = weights
         layer_info.update(update)
         return layer_info
