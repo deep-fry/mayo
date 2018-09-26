@@ -214,8 +214,8 @@ class Layers(TFNetBase):
         mask = []
         for each in zip(*masks):
             mask.append(np.concatenate(each, axis=-1))
-        density = self.estimator._mask_density(mask)
-        return {'_mask': mask, 'density': density}
+        density, active = self.estimator._mask_density(mask)
+        return {'_mask': mask, 'density': density, 'active': active}
 
     def instantiate_space_to_depth(self, node, tensors, params):
         return tf.space_to_depth(tensors, **use_name_not_scope(params))
@@ -225,8 +225,8 @@ class Layers(TFNetBase):
 
     def _estimate_join(self, masks, reducer):
         mask = self.estimator._mask_join(masks, reducer)
-        density = self.estimator._mask_density(mask)
-        return {'_mask': mask, 'density': density}
+        density, active = self.estimator._mask_density(mask)
+        return {'_mask': mask, 'density': density, 'active': active}
 
     def _estimate_binary_elementwise(self, infos, input_shapes, reducer):
         mask_shape = input_shapes[0]

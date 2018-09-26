@@ -95,13 +95,6 @@ class GateLayers(object):
         macs += self.estimator._multiply(output_shape[1:])
         return weights, macs
 
-    @staticmethod
-    def _mask_active(masks):
-        if not masks:
-            return np.ones(masks[0][0].shape, dtype=np.bool)
-        flat_masks = (m for mask in masks for m in mask)
-        return functools.reduce(np.logical_or, flat_masks)
-
     def estimate_gated_convolution(
             self, node, info, input_shape, output_shape, params):
         layer_info = self.estimate_convolution(
@@ -113,11 +106,8 @@ class GateLayers(object):
             except KeyError:
                 pass
             else:
-                density = self.estimator._mask_density(mask)
-                active = self._mask_active(mask)
+                density, active_density = self.estimator._mask_density(mask)
                 layer_info['_mask'] = mask
-                layer_info['_active'] = active
-                active_density = Percent(np.sum(active) / active.size)
                 layer_info['active'] = active_density
                 layer_info['density'] = density
                 layer_info['macs'] = int(layer_info['macs'] * density)

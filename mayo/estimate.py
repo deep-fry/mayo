@@ -233,10 +233,22 @@ class ResourceEstimator(object):
     @staticmethod
     def _mask_density(mask):
         if not mask:
-            return 1
+            return 1, 1
+        # mask
         valids = sum(np.sum(m.astype(np.int32)) for m in mask)
         totals = sum(m.size for m in mask)
-        return Percent(valids / totals)
+        density = Percent(valids / totals)
+        # active
+        for mm in mask:
+            if mm.ndim == 1:
+                # channel pruning, static mask
+                active = mm
+                break
+        else:
+            flat_masks = (m for mm in mask for m in mm)
+            active = functools.reduce(np.logical_or, flat_masks)
+        active = Percent(np.sum(active) / active.size)
+        return density, active
 
     @staticmethod
     def _mask_join(masks, reducer):
