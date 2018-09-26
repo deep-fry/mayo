@@ -24,5 +24,5 @@ for exp in exps:
     subprocess.call(cmd, cwd=mayo_dir, shell=True)
     subprocess.call(eval_cmd, cwd=mayo_dir, shell=True)
     subprocess.call("cp eval_all.csv eval_all{}.csv".format(exp), cwd=mayo_dir, shell=True)
-    subprocess.call("cp checkpoints/cifarnet/cifar10/{}.index checkpoints/cifarnet/cifar10/latest{}.index".format(epochs, exp), cwd=mayo_dir, shell=True)
-    subprocess.call("cp checkpoints/cifarnet/cifar10/{}.data-00000-of-00001 checkpoints/cifarnet/cifar10/latest{}.data-00000-of-00001".format(epochs, exp), cwd=mayo_dir, shell=True)
+    subprocess.call("cp checkpoints/cifarnet/cifar10/checkpoint-{}.index checkpoints/cifarnet/cifar10/latest{}.index".format(epochs, exp), cwd=mayo_dir, shell=True)
+    subprocess.call("cp checkpoints/cifarnet/cifar10/checkpoint-{}.data-00000-of-00001 checkpoints/cifarnet/cifar10/latest{}.data-00000-of-00001".format(epochs, exp), cwd=mayo_dir, shell=True)
