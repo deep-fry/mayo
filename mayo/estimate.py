@@ -233,10 +233,22 @@ class ResourceEstimator(object):
     @staticmethod
     def _mask_density(mask):
         if not mask:
-            return 1
+            return 1, 1
+        # mask
         valids = sum(np.sum(m.astype(np.int32)) for m in mask)
         totals = sum(m.size for m in mask)
-        return Percent(valids / totals)
+        density = Percent(valids / totals)
+        # active
+        for mm in mask:
+            if mm.ndim == 1:
+                # channel pruning, static mask
+                active = mm
+                break
+        else:
+            flat_masks = (m for mm in mask for m in mm)
+            active = functools.reduce(np.logical_or, flat_masks)
+        active = Percent(np.sum(active) / active.size)
+        return density, active
 
     @staticmethod
     def _mask_join(masks, reducer):
@@ -253,6 +265,8 @@ class ResourceEstimator(object):
     def _mask_passthrough(info, layer_info):
         if 'density' in info:
             layer_info['density'] = info['density']
+        if 'active' in info:
+            layer_info['active'] = info['active']
         if '_mask' in info:
             layer_info['_mask'] = info['_mask']
         return layer_info
@@ -261,7 +275,14 @@ class ResourceEstimator(object):
     def _apply_input_sparsity(info, layer_info):
         if '_mask' not in info:
             return layer_info
-        macs = layer_info['macs']
-        layer_info['macs'] = int(macs * info.get('density', 1))
-        layer_info['_original_macs'] = macs
+        # computation
+        if 'density' in info:
+            macs = layer_info['macs']
+            layer_info['macs'] = int(macs * info['density'])
+            layer_info['_original_macs'] = macs
+        # memory
+        if 'active' in info:
+            weights = layer_info['weights']
+            layer_info['weights'] = int(weights * info['active'])
+            layer_info['_original_weights'] = weights
         return layer_info

@@ -60,6 +60,7 @@ class TFNetBase(NetBase):
                 values = tuple([unknown] * len(keys))
             layer_info.add_row((node.formatted_name(), shape) + values)
         layer_info.footer_sum('macs')
+        layer_info.footer_sum('weights')
         return layer_info
 
     def _overrider_info(self):
