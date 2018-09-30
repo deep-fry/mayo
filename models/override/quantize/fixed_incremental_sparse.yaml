@@ -22,8 +22,9 @@ _overrider:
     biases:
         shift: $(_overrider.quantizer)
     activation:
-        type: mayo.override.FixedPointQuantizer
-        width: 8
-        point: 4
-        should_update: true
-        stochastic: false
+        fixed:
+            type: mayo.override.FixedPointQuantizer
+            width: 8
+            point: 4
+            should_update: true
+            stochastic: false
