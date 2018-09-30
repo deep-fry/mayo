@@ -18,6 +18,7 @@ _overrider:
                 point: 2
                 should_update: true
                 stochastic: false
+                _priority: 60
     biases:
         fixed: 
             type: mayo.override.IncrementalQuantizer
@@ -30,6 +31,7 @@ _overrider:
                 point: 2
                 should_update: true
                 stochastic: false
+                _priority: 60
     activation:
         fixed:
             type: mayo.override.FixedPointQuantizer
