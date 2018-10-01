@@ -13,6 +13,8 @@ from mayo.override.quantize import (
     Recentralizer,
     IncrementalQuantizer,
     MixedQuantizer,
+    TernaryQuantizer,
+    ChannelTernaryQuantizer,
 )
 from mayo.override.prune import (
     MeanStdPruner,
