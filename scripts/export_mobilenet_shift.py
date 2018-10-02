@@ -17,7 +17,6 @@ def mobilenet_shift(base):
                     overrider.quantizer.exponent_bias
                 meta[name][target_name]['width'] = \
                     overrider.quantizer.width
-
             else:
                 meta[name][target_name]['point'] = overrider.point
                 meta[name][target_name]['width'] = overrider.width
@@ -28,7 +27,10 @@ def mobilenet_shift(base):
     STORE = True
     if STORE:
         import pickle
-        save_dir += 'mobilenet.pkl'
-        with open(save_dir, 'wb') as f:
+        import os
+        save_path = os.path.join(save_dir, 'mobilenet_3bit.pkl')
+        # save_path = os.path.join('tmp', 'mobilenet3bit.pkl')
+        # save_dir += 'mobilenet_3bit.pkl'
+        with open(save_path, 'wb') as f:
             pickle.dump(meta, f)
     return meta
