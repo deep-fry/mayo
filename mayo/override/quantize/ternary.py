@@ -2,6 +2,7 @@ from mayo.log import log
 from mayo.override import util
 from mayo.override.base import Parameter
 from mayo.override.quantize.base import QuantizerBase
+import tensorflow as tf
 
 
 class TernaryQuantizer(QuantizerBase):
@@ -84,21 +85,19 @@ class ChannelTernaryQuantizer(TernaryQuantizer):
         base = util.cast(self.base if base is None else base, int)
         scale = util.cast(self.scale, float)
 
-        pos_values = value * util.cast((value > 0), int)
-        neg_values = value * util.cast((value < 0), int)
-        shift = 2.0 ** (util.round(base))
+        pos_values = util.cast((value > 0), float)
+        neg_values = util.cast((value < 0), float)
+        shift = util.cast(2 ** base, float)
         # hopefully this elementwise multiplication is broadcasting ?
         value = pos_values * shift * scale - neg_values * shift * scale
         return value
 
     def _apply(self, value):
-        import pdb; pdb.set_trace()
         self._parameter_config = {
             'scale': {
                 'initial': tf.ones_initializer(),
                 # a vector that has length matches the number of output channels
-                # TODO: fix this
-                'shape': value.shape,
+                'shape': value.shape[-1],
             }
         }
         return self._quantize(value)
