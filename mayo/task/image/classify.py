@@ -107,6 +107,7 @@ class Classify(ImageTaskBase):
                 total += len(h)
             stats[key] = Percent(valids / total)
             self.estimator.flush(key, 'eval')
+            self.estimator.add(stats, 'accuracy', 'eval')
             self._formatted_history = {}
         log.info(
             '    top1: {}, top5: {} [{} images]'

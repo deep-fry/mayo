@@ -28,6 +28,7 @@ for f, d in files:
     subprocess.call(cmd, cwd='../..', shell=True)
     with open('../../info.yaml', 'r') as y:
         i = yaml.load(y)
-    i = i['layers']['footer']
-    results.append((f, i['macs'], i['weights']))
-print(results)
+    s = i['layers']['footer']
+    a = i['accuracies']
+    results.append((f, s['macs'], s['weights'], a['top1'], a['top5']))
+    print(results)

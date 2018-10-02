@@ -162,10 +162,16 @@ class Table(collections.Sequence):
     def _plumb_value(self, value):
         if value is None or value is unknown:
             return
+        if isinstance(value, Percent):
+            return float(value)
         if isinstance(value, (int, float)):
             return value
         if isinstance(value, (list, tuple)):
             return [self._plumb_value(v) for v in value]
+        if isinstance(value, dict):
+            return {
+                self._plumb_value(k): self._plumb_value(v)
+                for k, v in value.items()}
         if isinstance(value, tf.Variable):
             return value.name
         if isinstance(value, tf.TensorShape):
@@ -175,15 +181,14 @@ class Table(collections.Sequence):
     def plumb(self):
         infos = {'items': []}
         for row in self._rows:
-            info = {
-                self._plumb_value(k): self._plumb_value(v)
-                for k, v in zip(self._headers, row)}
+            info = self._plumb_value({
+                k: v for k, v in zip(self._headers, row)})
             infos['items'].append(info)
         if self._footers:
             footer = self._get_footers()
-            infos['footer'] = {
+            infos['footer'] = self._plumb_value({
                 key: value for key, value in zip(self._headers, footer)
-                if value is not None}
+                if value is not None})
         return infos
 
     def _footer_row(self, widths=None):
