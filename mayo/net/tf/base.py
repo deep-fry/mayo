@@ -116,6 +116,13 @@ class TFNetBase(NetBase):
                 info[k] = info[k].plumb()
             info['overriders'] = {
                 k: t.plumb() for k, t in info['overriders'].items()}
+            try:
+                stats = self.session.estimator.get_value(
+                    'accuracy', 'eval')
+                info['accuracies'] = {
+                    k: float(v) for k, v in stats.items()}
+            except KeyError:
+                pass
         return info
 
     def shapes(self, unified=True):
