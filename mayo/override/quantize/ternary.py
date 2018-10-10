@@ -7,22 +7,15 @@ import tensorflow as tf
 
 class TernaryQuantizer(QuantizerBase):
     """
-    Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
-    dynamic range.
+    Ternary quantization, quantizes all values into the range:
+        {- 2^base * scale, 0, 2^base * scale}.
 
     Args:
-        - base:
-            The base shift number.
-            Consider we have symmetric ternary weights with a scaling of alpah.
-            base = 0:
-                {+- 2^(0) * alpha, 0}
-                {+- alpha, 0}
-            base = 1:
-                {+- 2^(1) * alpha, 0}
-                {+- 2*alpha, 0}
+        base: The universal coarse-grain scaling factor
+              applied to tenary weights.
     References:
-        [1] Extremely Low Bit Neural Network: Squeeze the Last Bit Out with ADMM
-        [2] TRAINED TERNARY QUANTIZATION
+        - Extremely Low Bit Neural Network: Squeeze the Last Bit Out with ADMM
+        - Trained Ternary Quantization
     """
     base = Parameter('base', 1, [], 'int', trainable=False)
     scale = Parameter('scale', 1.0, [], 'float', trainable=True)
@@ -34,22 +27,20 @@ class TernaryQuantizer(QuantizerBase):
         if base is not None:
             if base < 0:
                 raise ValueError(
-                    'Base of ternary quantization must be greater or equal than 0.')
-            self.base = base 
+                    'Base of ternary quantization must be '
+                    'greater or equal than 0.')
+            self.base = base
         if stochastic is not None:
-            raise ValueError(
-                'Ternary quantization has no stochastic mode.')
+            raise NotImplementedError(
+                'Ternary quantization does not implement stochastic mode.')
 
-    def _quantize(
-            self, value, base=None):
+    def _quantize(self, value, base=None):
+        scale = self.scale
         base = util.cast(self.base if base is None else base, int)
-        scale = util.cast(self.scale, float)
-
-        pos_values = util.cast((value > 0), float)
-        neg_values = util.cast((value < 0), float)
         shift = util.cast(2 ** base, float)
-        value = pos_values * shift * scale - neg_values * shift * scale
-        return value
+        positives = util.cast(value > 0, float)
+        negatives = util.cast(value < 0, float)
+        return positives * shift * scale - negatives * shift * scale
 
     def _apply(self, value):
         return self._quantize(value)
@@ -60,43 +51,26 @@ class TernaryQuantizer(QuantizerBase):
 
 
 class ChannelTernaryQuantizer(TernaryQuantizer):
-    """
-    Quantize inputs into 2's compliment n-bit fixed-point values with d-bit
-    dynamic range.
-
-    Args:
-        - base:
-            The base shift number.
-            Consider we have symmetric ternary weights with a scaling of alpah.
-            base = 0:
-                {+- 2^(0) * alpha, 0}
-                {+- alpha, 0}
-            base = 1:
-                {+- 2^(1) * alpha, 0}
-                {+- 2*alpha, 0}
-    References:
-        [1] Extremely Low Bit Neural Network: Squeeze the Last Bit Out with ADMM
-        [2] TRAINED TERNARY QUANTIZATION
-    """
+    """Same tenary quantization, but channel-wise scaling factors.  """
     scale = Parameter('scale', None, None, 'float', trainable=True)
 
-    def _quantize(
-            self, value, base=None):
+    def _quantize(self, value, base=None):
+        # @Aaron @Xitong FIXME possible redundancy:
+        # this code is idenitical to super()._quantize()
+        scale = self.scale
         base = util.cast(self.base if base is None else base, int)
-        scale = util.cast(self.scale, float)
-
-        pos_values = util.cast((value > 0), float)
-        neg_values = util.cast((value < 0), float)
         shift = util.cast(2 ** base, float)
-        # hopefully this elementwise multiplication is broadcasting ?
-        value = pos_values * shift * scale - neg_values * shift * scale
-        return value
+        positives = util.cast(value > 0, float)
+        negatives = util.cast(value < 0, float)
+        # FIXME verify this multiplication is broadcasting correctly
+        return positives * shift * scale - negatives * shift * scale
 
     def _apply(self, value):
         self._parameter_config = {
             'scale': {
                 'initial': tf.ones_initializer(),
-                # a vector that has length matches the number of output channels
+                # a vector that has a length matching
+                # the number of output channels
                 'shape': value.shape[-1],
             }
         }
