@@ -1,15 +1,14 @@
 ---
 _import: ../_global.yaml
 _overrider:
-    weights: &quantizer
-        fixed:
-            type: mayo.override.FixedPointQuantizer
-            width: 8
-            point: 2
+    weights: &weights
+        shift:
+            type: mayo.override.TernaryQuantizer
+            base: 0
             should_update: true
-            stochastic: false
             _priority: 100
-    biases: {<<: *quantizer}
+    depthwise_weights: {<<: *weights}
+    biases: {<<: *weights}
     activation:
         fixed:
             type: mayo.override.FixedPointQuantizer
