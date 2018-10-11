@@ -16,6 +16,7 @@ model:
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
+        prep: {type: identity}
         conv0: &conv
             <<: *init
             type: convolution
@@ -41,5 +42,6 @@ model:
             num_outputs: $(dataset.task.num_classes)
     graph:
         from: input
-        with: [conv0, pool0, conv1, pool1, flatten, dropout, fc1, logits]
+        with: [
+            prep, conv0, pool0, conv1, pool1, flatten, dropout, fc1, logits]
         to: output

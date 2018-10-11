@@ -264,4 +264,7 @@ class Layers(TFNetBase):
     estimate_activation = _estimate_unary_elementwise
 
     def instantiate_identity(self, node, tensors, params):
+        activation_fn = params.pop('activation_fn', None)
+        if activation_fn:
+            return activation_fn(tensors)
         return tensors

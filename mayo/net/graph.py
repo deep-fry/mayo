@@ -243,7 +243,8 @@ class Graph(object):
                         continue
                     raise EdgeError(
                         'Input name {!r} collides with output name {!r} '
-                        'for layer {!r}.'.format(layer_name))
+                        'for layer {!r}.'
+                        .format(input_names, output_names, layer_name))
                 layer_params = None
                 if layer_name is not None:
                     try:

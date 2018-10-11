@@ -1,6 +1,7 @@
 ---
 _import: ../lenet5.yaml
 model.layers:
+    prep: {overrider: $(_overrider.prep)}
     conv0: &conv {overrider: $(_overrider.conv)}
     conv1: {<<: *conv}
     fc1: {overrider: $(_overrider.fc)}
