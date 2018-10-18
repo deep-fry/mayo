@@ -174,7 +174,10 @@ class Plot(object):
                 except KeyError:
                     mean = np.zeros(shapes[node][-1])
                 values.append(mean)
-            hmap[node] = np.stack(values, axis=0)
+            nhmap = np.stack(values, axis=0)
+            # re-order
+            indices = np.argsort(np.mean(nhmap, axis=0))
+            hmap[node] = nhmap[:, indices]
         return hmap
 
     def _save_heatmaps(self, heatmaps, name):

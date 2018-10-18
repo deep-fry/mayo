@@ -7,6 +7,7 @@ from mayo.session.base import SessionBase
 
 class Evaluate(SessionBase):
     mode = 'validate'
+    is_training = True
 
     def _finalize(self):
         self.task.eval()

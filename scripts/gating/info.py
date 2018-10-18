@@ -4,7 +4,7 @@ import subprocess
 
 model = 'models/gate/cifarnet.yaml'
 dataset = 'datasets/cifar10.yaml'
-ckpt_base = 'gate'
+ckpt_base = 'l1/latest'
 files = [
     #  ('10', 0.1),
     #  ('20', 0.2),
@@ -15,7 +15,10 @@ files = [
     #  ('70', 0.7),
     #  ('80', 0.8),
     #  ('90', 0.9),
-    ('100', 1.0),
+    #  ('100', 1.0),
+    ('6', 0.9),
+    ('8', 0.9),
+    ('10', 0.9),
 ]
 
 cmd_base = './my {} {} system.info.plumbing=true'
