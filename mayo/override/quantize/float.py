@@ -22,7 +22,7 @@ class FloatingPointQuantizer(QuantizerBase):
     When both exponent_width and mantissa_width are 0, the quantized value can
     only represent $2^{-bias}$ or 0, which is not very useful.
     """
-    width = Parameter('width', 32, [], 'float')
+    width = Parameter('width', 31, [], 'float')
     exponent_bias = Parameter('exponent_bias', -127, [], 'float')
     mantissa_width = Parameter('mantissa_width', 23, [], 'float')
 
