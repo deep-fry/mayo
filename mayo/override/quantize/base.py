@@ -22,3 +22,8 @@ class QuantizerBase(OverriderBase):
 
     def _apply(self, value):
         return self._quantize(value)
+
+
+class EmptyQuantizer(QuantizerBase):
+    def _quantize(self, value):
+        return value

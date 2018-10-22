@@ -1,3 +1,4 @@
+from mayo.override.quantize.base import EmptyQuantizer
 from mayo.override.quantize.fixed import (
     FixedPointQuantizer, CourbariauxQuantizer,
     DGQuantizer, DGTrainableQuantizer, LogQuantizer)
@@ -10,7 +11,7 @@ from mayo.override.quantize.ternary import (
 
 
 __all__ = [
-    FloatingPointQuantizer, ShiftQuantizer,
+    EmptyQuantizer, FloatingPointQuantizer, ShiftQuantizer,
     FixedPointQuantizer, CourbariauxQuantizer,
     DGQuantizer, DGTrainableQuantizer, LogQuantizer,
     MixedQuantizer, Recentralizer, IncrementalQuantizer,
