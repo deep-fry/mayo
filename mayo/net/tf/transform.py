@@ -129,7 +129,12 @@ class ParameterTransformer(object):
                 node, 'activations', tf.get_variable, x)
             activation_functions.append(override_fn)
         # produce a default ReLU activation when overriders are used
-        default_fn = tf.nn.relu if activation_functions else None
+        relu_types = [
+            'convolution', 'depthwise_separable_convolution',
+            'fully_connected']
+        default_fn = None
+        if activation_functions and node.params.type in relu_types:
+            default_fn = tf.nn.relu
         activation_fn = params.get('activation_fn', default_fn)
         if activation_fn:
             activation_params = params.pop('activation_params', {})
