@@ -81,9 +81,10 @@ class FloatingPointQuantizer(QuantizerBase):
             mantissa /= shift
         else:
             mantissa = util.round(mantissa * shift) / shift
-
         # if the mantissa value gets rounded to >= 2 then we need to divide it
         # by 2 and increment exponent by 1
+        # FIXME @xitong should saturate mantissa when the exponent
+        # can no longer be incremented
         is_out_of_range = util.greater_equal(mantissa, 2)
         mantissa = util.where(is_out_of_range, mantissa / 2, mantissa)
         exponent = util.where(is_out_of_range, exponent + 1, exponent)
