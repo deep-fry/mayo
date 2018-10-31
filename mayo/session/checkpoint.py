@@ -131,7 +131,10 @@ class CheckpointHandler(object):
         # variables missing
         if missing_vars:
             log.warn(
-                'Variables missing in checkpoint:\n    {}'
+                '{} variables missing in checkpoint.'
+                .format(len(missing_vars)))
+            log.debug(
+                'Missing variables:\n    {}'
                 .format('\n    '.join(missing_vars)))
         log.debug(
             'Checkpoint variables to restore:\n    {}'

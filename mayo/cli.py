@@ -270,7 +270,7 @@ Arguments:
     def _purge_session(self):
         if not self.session:
             return
-        log.debug('Purging current session because config is updated.')
+        log.info('Purging current session because config is updated...')
         del self.session
         self.session = None
 
