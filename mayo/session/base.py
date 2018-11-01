@@ -321,6 +321,7 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def debug(self, tensors):
         def wrapped(t):
+            import numpy as np
             __import__('ipdb').set_trace()
             return t
         self.estimator.register(
