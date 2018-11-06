@@ -206,7 +206,12 @@ class BaseExporter(object):
             log.key('Dry run, not actually saving.')
             return
         log.key('Exporting with {}...'.format(self.__class__.__name__))
-        self._export(file)
+        root, file = os.path.split(file)
+        if not root:
+            root = './'
+        else:
+            os.makedirs(root, exist_ok=True)
+        self._export(os.path.join(root, file))
 
     def _export(self, file):
         raise NotImplementedError
