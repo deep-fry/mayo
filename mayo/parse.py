@@ -71,16 +71,13 @@ class ArithTag(YamlScalarTag):
         if isinstance(n, ast.Num):
             return n.n
         if isinstance(n, ast.Call):
-            op = self._eval(n.func)
+            op = __import__(self._eval(n.func))
             args = (self._eval(a) for a in n.args)
             return op(*args)
         if isinstance(n, ast.Attribute):
             return getattr(self._eval(n.value), n.attr)
         if isinstance(n, ast.Name):
-            try:
-                return __builtins__[n.id]
-            except KeyError:
-                return __import__(n.id)
+            return n.id
         if isinstance(n, ast.Str):
             return n.s
         if isinstance(n, ast.Compare):

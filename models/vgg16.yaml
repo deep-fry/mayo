@@ -12,23 +12,32 @@ dataset:
                 - {type: subtract_channel_means}
                 - {type: linear_map, scale: 255.0}
 model:
-    name: vgg16
+    bn: false
+    name: !arith "'vgg16_bn' if $(model.bn) else 'vgg16'"
     layers:
-        _conv: &conv
-            type: convolution
-            kernel_size: [3, 3]
-            stride: 1
-            padding: same
+        _init: &init
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
                 stddev: 0.09
             biases_initializer:
                 type: tensorflow.constant_initializer
                 value: 0.1
+        _conv: &conv
+            <<: *init
+            type: convolution
+            kernel_size: [3, 3]
+            stride: 1
+            padding: same
             weights_regularizer:
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.00004
-        _fc: &fc {<<: *conv, kernel_size: [1, 1], padding: valid}
+            normalizer_fn: !arith >
+                'tensorflow.contrib.slim.batch_norm' if $(model.bn) else None
+            normalizer_params:
+                scale: true
+                decay: 0.997
+                epsilon: 0.00001
+        _fc: &fc {<<: *init, type: fully_connected}
         conv1_1: {<<: *conv, num_outputs: 64}
         conv1_2: {<<: *conv, num_outputs: 64}
         pool1: &pool
@@ -48,7 +57,8 @@ model:
         conv5_2: {<<: *conv, num_outputs: 512}
         conv5_3: {<<: *conv, num_outputs: 512}
         pool5: *pool
-        fc6: {<<: *fc, kernel_size: [7, 7], num_outputs: 4096}
+        flatten5: {type: flatten}
+        fc6: {<<: *fc, num_outputs: 4096}
         dropout6: &dropout {type: dropout, keep_prob: 0.5}
         fc7: {<<: *fc, num_outputs: 4096}
         dropout7: *dropout
@@ -56,14 +66,24 @@ model:
             <<: *fc
             num_outputs: $(dataset.task.num_classes)
             activation_fn: null
-        logits: {type: squeeze, axis: [1, 2]}
+        cifar_fc6: {<<: *fc, num_outputs: 512}
+        cifar_fc7:
+            <<: *fc
+            num_outputs: $(dataset.task.num_classes)
+            normalizer_fn: null
+            activation_fn: null
+    _graph:
+        imagenet: [flatten5, fc6, dropout6, fc7, dropout7, fc8]
+        cifar10: &cifar_graph [flatten5, cifar_fc6, cifar_fc7]
+        cifar100: *cifar_graph
     graph:
         from: input
-        with: [
-            conv1_1, conv1_2, pool1,
-            conv2_1, conv2_2, pool2,
-            conv3_1, conv3_2, conv3_3, pool3,
-            conv4_1, conv4_2, conv4_3, pool4,
-            conv5_1, conv5_2, conv5_3, pool5,
-            fc6, dropout6, fc7, dropout7, fc8, logits]
+        with: !arith >
+            [
+                conv1_1, conv1_2, pool1,
+                conv2_1, conv2_2, pool2,
+                conv3_1, conv3_2, conv3_3, pool3,
+                conv4_1, conv4_2, conv4_3, pool4,
+                conv5_1, conv5_2, conv5_3, pool5
+            ] + $(model._graph.$(dataset.name))
         to: output
