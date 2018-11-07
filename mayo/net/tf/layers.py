@@ -140,6 +140,8 @@ class Layers(TFNetBase):
         if shape[1] is None or shape[2] is None:
             return
         kernel = params['kernel_size']
+        if kernel == 'global':
+            kernel = [shape[1], shape[2]]
         if isinstance(kernel, int) or kernel is None:
             kernel = [kernel, kernel]
         for i in range(2):
