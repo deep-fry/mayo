@@ -8,6 +8,7 @@ import collections
 import networkx as nx
 
 from mayo.util import ensure_list, recursive_apply
+from mayo.parse import ArithTag
 
 
 def _replace_module_kwargs(params):
@@ -30,59 +31,20 @@ def _replace_module_kwargs(params):
                 value = value.replace(placeholder, str(replace_value))
         return value
 
+    def replace_arith(value):
+        return ArithTag(replace_str(value.content))
+
     def skip_inner_module(value):
         if not isinstance(value, collections.Mapping):
             return None
         if value.get('type') != 'module':
             return None
-
-        # leak values of kwargs set for parent to the top-level definitions of
-        # child's kwargs.
-        # More specifically:
-        #  When instantiating a module, values for all of its kwargs are
-        #  supposed to be passed as top-level children of the module, e.g.
-        #    mod:
-        #      type: module
-        #      kwargs: { arg: null } #declaration
-        #      arg: value_for_arg    #definition
-        #  If a module itself is a child of another module, it is possible to
-        #  put a placeholder for the parent's kwarg in definitions of child's
-        #  kwarg. In that case, the placeholder should be resolved with regard
-        #  to the parent's context. In every other case, if the child contains
-        #  a placeholder, it should be resolved with regard to this child's
-        #  context.
-        #  The following code takes advantage of this:
-        #    mod1: &child
-        #      type: module,
-        #      kwargs: { child_arg: null }
-        #    mod2:
-        #      type: module
-        #      kwargs: { parent_arg: null }
-        #      child_inst: { <<: *child, child_arg: ^(parent_arg) }
-        # Xitong: FIXME @vaenyr Couldn't this be achieved by:
-        # ```yaml
-        # outer:
-        #     type: module
-        #     kwargs: {outer_arg: null}
-        #     layers:
-        #         _inner: &inner
-        #             type: module
-        #             kwargs: {inner_arg: null}
-        #             layers: ...
-        #             graph: ...
-        #         inner: {<<: *inner, inner_arg: ^(outer_arg)}
-        #     graph: ...
-        # ```
-        child_args = value.get('kwargs', {})
-        for key, _ in child_args.items():
-            if key in value and isinstance(value[key], str):
-                value[key] = replace_str(value[key])
-
         return value
 
     def replace(params, key):
         p = copy.deepcopy(params[key])
-        params[key] = recursive_apply(p, {str: replace_str}, skip_inner_module)
+        func_map = {str: replace_str, ArithTag: replace_arith}
+        params[key] = recursive_apply(p, func_map, skip_inner_module)
 
     replace(params, 'layers')
     replace(params, 'graph')
