@@ -1,0 +1,91 @@
+---
+dataset:
+    task:
+        background_class: {use: false}
+        preprocess:
+            shape:
+                height: 32
+                width: 32
+                channels: 3
+            validate:
+                - {type: crop_or_pad}
+            final_cpu:
+                - {type: standardize_image}
+model:
+    name: resnet18-cifar100
+    description:
+        ResNet18 implementation from::
+            https://github.com/pytorch/vision/blob/master/torchvision/models/resnet.py
+    layers:
+        _conv: &conv
+            type: convolution
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            normalizer_params:
+                scale: true
+                decay: 0.997
+                epsilon: 0.00001
+            weights_initializer: &initializer
+                type: tensorflow.variance_scaling_initializer
+            weights_regularizer: &regularizer
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0001
+        conv1:
+            <<: *conv
+            kernel_size: 7
+            stride: 2
+            padding: 3
+            num_outputs: 64
+        pool1:
+            type: max_pool
+            kernel_size: 3
+            stride: 2
+            padding: 1
+        _basic_block: &bb
+            type: module
+            kwargs: {stride: null, depth: null, shortcut: null}
+            layers:
+                conv1: &bbconv
+                    <<: *conv
+                    kernel_size: 3
+                    stride: ^(stride)
+                    padding: 1
+                    num_outputs: ^(depth)
+                conv2:
+                    <<: *bbconv
+                    stride: 1
+                    activation_fn: null
+                downsample_shortcut:
+                    <<: *bbconv
+                    kernel_size: 1
+                    padding: valid
+                    activation_fn: null
+                identity_shortcut: {type: identity}
+                add: {type: add}
+                relu: {type: activation, mode: relu}
+            graph:
+                - {from: input, with: [conv1, conv2], to: a}
+                - {from: input, with: ^(shortcut)_shortcut, to: b}
+                - {from: [a, b], with: add, to: preact}
+                - {from: preact, with: relu, to: output}
+        b11: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
+        b12: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
+        b21: {<<: *bb, stride: 2, depth: 128, shortcut: downsample}
+        b22: {<<: *bb, stride: 1, depth: 128, shortcut: identity}
+        b31: {<<: *bb, stride: 2, depth: 256, shortcut: downsample}
+        b32: {<<: *bb, stride: 1, depth: 256, shortcut: identity}
+        b41: {<<: *bb, stride: 2, depth: 512, shortcut: downsample}
+        b42: {<<: *bb, stride: 1, depth: 512, shortcut: identity}
+        pool4: {type: average_pool, kernel_size: 7}
+        flatten4: {type: flatten}
+        fc5:
+            type: fully_connected
+            num_outputs: $(dataset.task.num_classes)
+            activation_fn: null
+            weights_initializer: *initializer
+    graph:
+        from: input
+        with: [
+            conv1, pool1,
+            b11, b12, b21, b22, b31, b32, b41, b42,
+            pool4, flatten4, fc5]
+        to: output
