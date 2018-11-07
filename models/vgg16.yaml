@@ -8,9 +8,14 @@ dataset:
                 width: 224
                 channels: 3
             validate: null
-            final_cpu:
+            _final_cpu_imagenet:
                 - {type: subtract_channel_means}
                 - {type: linear_map, scale: 255.0}
+            _final_cpu:
+                - {type: linear_map, scale: 2.0, shift: -1.0}
+            final_cpu: !arith >
+                $(dataset.task._final_cpu_imagenet)
+                if $(dataset.name) == 'imagenet' else '_final_cpu'
 model:
     bn: false
     name: !arith "'vgg16_bn' if $(model.bn) else 'vgg16'"
