@@ -275,7 +275,7 @@ class SessionBase(object, metaclass=SessionMeta):
                 uninit_vars.append(var)
         if uninit_vars:
             desc = '\n    '.join(v.op.name for v in uninit_vars)
-            log.warn('Variables are not initialized:\n    {}'.format(desc))
+            log.debug('Variables are not initialized:\n    {}'.format(desc))
             self.raw_run(tf.variables_initializer(uninit_vars))
             self.initialized_variables += uninit_vars
 
@@ -321,6 +321,7 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def debug(self, tensors):
         def wrapped(t):
+            import numpy as np
             __import__('ipdb').set_trace()
             return t
         self.estimator.register(
