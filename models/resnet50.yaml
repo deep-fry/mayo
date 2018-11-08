@@ -1,7 +1,7 @@
 ---
 dataset:
     task:
-        background_class: {use: true}
+        background_class: {use: false}
         preprocess:
             shape:
                 height: 224
@@ -10,7 +10,9 @@ dataset:
             validate: {type: central_crop, fraction: 0.875}
             final_cpu:
                 - {type: resize, fill: false}
-                - {type: linear_map, scale: 2.0, shift: -1.0}
+                - {type: subtract_channel_means}
+                - {type: linear_map, scale: 255.0, shift: 0.0}
+                - {type: permute_channels, order: [2, 1, 0]}
 model:
     version: 1
     name: resnet_v$(model.version)_50
@@ -31,11 +33,13 @@ model:
             <<: *common
             type: convolution
             padding: valid
+            force_biases: true
         conv1:
             <<: *conv
             kernel_size: 7
             stride: 2
             num_outputs: 64
+            padding: 3
         pool1:
             type: max_pool
             kernel_size: 3

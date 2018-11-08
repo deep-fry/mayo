@@ -11,11 +11,26 @@ from mayo.override.quantize.base import QuantizerBase
 
 class Layers(TFNetBase):
     """ Create a TensorFlow graph from "config.model" model definition.  """
-
     def instantiate_convolution(self, node, tensor, params):
+        scope = params.get('scope')
+        norm_scope = scope + '/BatchNorm'
         groups = params.pop('num_groups', 1)
         if groups == 1:
-            return slim.conv2d(tensor, **params)
+            force_biases = params.pop('force_biases', False)
+            if not force_biases:
+                return slim.conv2d(tensor, **params)
+            normalizer_fn = params.pop('normalizer_fn', None)
+            activation_fn = params.pop('activation_fn', tf.nn.relu)
+            params['activation_fn'] = None
+            tensor = slim.conv2d(tensor, **params)
+            if normalizer_fn:
+                normalizer_params = params.pop('normalizer_params')
+                normalizer_params = dict(
+                    normalizer_params, scope=norm_scope)
+                tensor = normalizer_fn(tensor, **normalizer_params)
+            if activation_fn:
+                tensor = activation_fn(tensor)
+            return tensor
 
         # group-wise convolution
         channels = int(tensor.shape[-1])
@@ -25,7 +40,6 @@ class Layers(TFNetBase):
                 'the number of groups.')
 
         # parameters
-        scope = params.get('scope')
         normalizer_fn = params.get('normalizer_fn', None)
         activation_fn = params.get('activation_fn', tf.nn.relu)
         params['activation_fn'] = None
@@ -71,7 +85,9 @@ class Layers(TFNetBase):
 
         # normalization & activation
         if normalizer_fn:
-            output = normalizer_fn(output, scope=scope)
+            normalizer_params = params.pop('normalizer_params')
+            normalizer_params = dict(normalizer_params, scope=norm_scope)
+            output = normalizer_fn(output, **normalizer_params)
         if activation_fn:
             output = activation_fn(output)
         return output
