@@ -7,7 +7,7 @@ import collections
 
 import yaml
 
-from mayo.util import recursive_apply
+from mayo.util import recursive_apply, import_from_string
 
 
 class YamlTag(object):
@@ -71,15 +71,14 @@ class ArithTag(YamlScalarTag):
         if isinstance(n, ast.Num):
             return n.n
         if isinstance(n, ast.Call):
-            op = self._eval(n.func)
-            try:
-                op = __builtins__[op]
-            except KeyError:
-                op = __import__(op)
+            op = import_from_string(self._eval(n.func))
             args = (self._eval(a) for a in n.args)
             return op(*args)
         if isinstance(n, ast.Attribute):
-            return getattr(self._eval(n.value), n.attr)
+            obj = self._eval(n.value)
+            if isinstance(obj, str):
+                return '{}.{}'.format(obj, n.attr)
+            return getattr(obj, n.attr)
         if isinstance(n, ast.Name):
             return n.id
         if isinstance(n, ast.Str):
