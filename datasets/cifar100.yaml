@@ -1,0 +1,22 @@
+---
+dataset:
+    name: cifar100
+    task:
+        type: mayo.task.image.Classify
+        num_classes: 100
+        background_class: {has: false}
+        shape:
+            height: 32
+            width: 32
+            channels: 3
+        preprocess:
+            train:
+                - {type: distort_color}
+                # - {type: random_crop}
+                - {type: random_flip}
+    path:
+        train: cifar100/train.tfrecord
+        validate: cifar100/test.tfrecord
+    num_examples_per_epoch:
+        train: 50000
+        validate: 10000

@@ -7,6 +7,10 @@
 # into a checkpoint used by our vgg16.yaml model.
 # Baseline accuracy: 71.5% / 89.8%
 ---
+permute:
+    vgg_16/fc6/weights: [{type: reshape, newshape: [25088, 4096]}]
+    vgg_16/fc7/weights: [{type: reshape, newshape: [4096, 4096]}]
+    vgg_16/fc8/weights: [{type: reshape, newshape: [4096, 1000]}]
 rename:
     vgg_16: vgg16
     conv\d/: ''
