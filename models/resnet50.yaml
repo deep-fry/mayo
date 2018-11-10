@@ -47,7 +47,7 @@ model:
             kernel_size: 3
             stride: 2
             padding: 1
-        _basic_block: &bb
+        _bottleneck: &bb
             type: module
             kwargs: {stride: null, depth: null, shortcut: null}
             layers:
