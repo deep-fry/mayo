@@ -145,7 +145,7 @@ class OverriderBase(object):
             # assignment
             var = self._parameter_variables[name]
             try:
-                self.session.assign(var, value, raw_run=True)
+                self.session.assign(var, value)
             except ValueError:
                 raise ShapeError(
                     'Variable {!r} in overrider {!r} expects '

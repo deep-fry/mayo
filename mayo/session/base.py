@@ -241,7 +241,7 @@ class SessionBase(object, metaclass=SessionMeta):
                 '{} adds new operations {} to a read-only graph.'
                 .format(func_name, diff_ops))
 
-    def assign(self, var, tensor, raw_run=False):
+    def assign(self, var, tensor):
         """
         Variable assignment.
 
