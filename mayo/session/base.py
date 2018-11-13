@@ -91,9 +91,13 @@ class SessionBase(object, metaclass=SessionMeta):
         # progress
         def progress_formatter(estimator):
             progress = estimator.get_value('imgs_seen') / self.num_examples
-            if progress > 1:
-                progress = 1
-            return '{}: {}'.format(self.mode, Percent(progress))
+            if self.is_training:
+                progress = '{:.2f}'.format(progress)
+            else:
+                if progress > 1:
+                    progress = 1
+                progress = Percent(progress)
+            return '{}: {}'.format(self.mode, progress)
         self.estimator.register(
             self.imgs_seen_op, 'imgs_seen',
             history=1, formatter=progress_formatter)
