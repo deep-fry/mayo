@@ -5,7 +5,8 @@ import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_property, flatten, object_from_params, Change, Table, Percent)
+    memoize_property, flatten, object_from_params,
+    Change, Table, Percent, print_variables)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
 from mayo.session.checkpoint import CheckpointHandler
@@ -276,8 +277,8 @@ class SessionBase(object, metaclass=SessionMeta):
             if var not in self.initialized_variables:
                 uninit_vars.append(var)
         if uninit_vars:
-            desc = '\n    '.join(v.op.name for v in uninit_vars)
-            log.debug('Variables are not initialized:\n    {}'.format(desc))
+            desc = 'Variables are not initialized'
+            print_variables(desc, (v.op.name for v in uninit_vars), 'debug')
             self.raw_run(tf.variables_initializer(uninit_vars))
             self.initialized_variables += uninit_vars
 

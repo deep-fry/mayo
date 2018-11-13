@@ -6,7 +6,7 @@ import yaml
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import format_shape
+from mayo.util import format_shape, print_variables
 
 
 class CheckpointNotFoundError(FileNotFoundError):
@@ -90,18 +90,6 @@ class CheckpointHandler(object):
         with self.tf_session.graph.as_default():
             return tf.global_variables()
 
-    def _show_vars(self, description, variables):
-        show_count = 10
-        if not vars:
-            return
-        show_vars = '\n    '.join(variables[:show_count])
-        num_more_vars = len(variables[show_count:])
-        more_vars = ''
-        if num_more_vars > 0:
-            more_vars = '\n    ... [{} more variables]'.format(num_more_vars)
-        log.warn(
-            '{}:\n    {}{}'.format(description, show_vars, more_vars))
-
     def load(self, key=_checkpoint_latest):
         if key is False or (key != 0 and not key):
             log.debug('Checkpoint loading disabled.')
@@ -134,19 +122,17 @@ class CheckpointHandler(object):
         not_restore_vars = []
         restore_var_names = [v.name.split(':')[0] for v in restore_vars]
         for v in var_shape_map:
-            skipped = ['RMSProp', 'ExponentialMovingAverage']
-            if any(n in v for n in skipped):
-                continue
             if v not in restore_var_names:
                 not_restore_vars.append(v)
-        self._show_vars(
-            'Variables in checkpoint but not restored', not_restore_vars)
+        desc = 'Variables in checkpoint but not restored'
+        print_variables(desc, not_restore_vars, 'warn')
         # variables missing
-        self._show_vars(
-            'Variables to be restored but missing in checkpoint', missing_vars)
-        log.debug(
-            'Checkpoint variables to restore:\n    {}'
-            .format('\n    '.join(v.name for v in restore_vars)))
+        desc = 'Variables to be restored but missing in checkpoint'
+        print_variables(desc, missing_vars, 'warn')
+        # variables to restore
+        desc = 'Checkpoint variables to restore'
+        print_variables(desc, (v.name for v in restore_vars), 'debug')
+        # restore
         restorer = tf.train.Saver(restore_vars)
         restorer.restore(self.tf_session, path)
         log.debug('Checkpoint restored.')

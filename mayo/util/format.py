@@ -7,6 +7,28 @@ def format_shape(shape):
     return ' x '.join(str(s) if s else '?' for s in shape)
 
 
+def print_variables(description, variables, level):
+    from mayo.log import log
+    log_func = getattr(log, level)
+    skipped = ['RMSProp', 'ExponentialMovingAverage']
+    variables = [v for v in variables if not any(n in v for n in skipped)]
+    if not variables:
+        return
+    if log.is_enabled('debug'):
+        show_vars = '\n    '.join(variables)
+        log_func('{}:\n    {}'.format(description, show_vars))
+        return
+    show_count = 10
+    show_vars = '\n    '.join(variables[:show_count])
+    num_more_vars = len(variables[show_count:])
+    more_vars = ''
+    if num_more_vars > 0:
+        more_vars = '\n    ... '
+        more_vars += '[{} more variables, use debug level to see all.]'
+        more_vars = more_vars.format(num_more_vars)
+    log_func('{}:\n    {}{}'.format(description, show_vars, more_vars))
+
+
 class Percent(float):
     def __format__(self, _):
         return '{:.2f}%'.format(self * 100)
