@@ -106,6 +106,7 @@ class OverriderBase(object):
         super().__init__()
         self._applied = False
         self.name = None
+        self.alias = None
         self.session = session
         self.internals = {}
         self._parameter_config = {}
@@ -182,11 +183,12 @@ class OverriderBase(object):
         """
         if self._applied:
             raise OverrideAlreadyAppliedError(
-                'Overrider has already been applied to {!r}.'
+                'This overrider has already been applied to {!r}.'
                 .format(self.name))
         self._applied = True
         self.node = node
-        self.name = value.op.name
+        self.name = '{}/{}'.format(scope, self.__class__.__name__)
+        self.alias = value.op.name
         self.before = value
         self._scope = scope
         self._original_getter = getter
