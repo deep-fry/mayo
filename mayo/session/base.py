@@ -1,6 +1,7 @@
 import functools
 from contextlib import contextmanager
 
+import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
@@ -183,17 +184,31 @@ class SessionBase(object, metaclass=SessionMeta):
     def overriders(self):
         return self.task.nets[0].overriders
 
-    def _overrider_assign_parameters(self):
-        # FIXME speghetti
-        # parameter assignments in overriders
-        for overriders in self.overriders.values():
+    def _overriders_call(self, func_name):
+        # it is sufficient to use the first net, as overriders
+        # share internal variables
+        results = {}
+        for node, overriders in self.overriders.items():
+            oresults = results.setdefault(node, {})
             for k, o in overriders.items():
                 if k == 'gradient':
-                    for each in o.values():
-                        each.assign_parameters()
+                    goresults = oresults.setdefault(k, {})
+                    for gk, go in o.items():
+                        goresults[gk] = getattr(go, func_name)()
                 else:
-                    o.assign_parameters()
+                    oresults[k] = getattr(o, func_name)()
+        return results
+
+    def _overrider_assign_parameters(self):
+        # parameter assignments in overriders
+        self._overriders_call('assign_parameters')
         self._run_assignments()
+
+    def overriders_dump(self):
+        data = self._overriders_call('dump')
+        name = '-'.join([self.config.model.name, self.config.dataset.name])
+        log.info('Dumping overrider parameters to {!r}...'.format(name))
+        np.save(name, data)
 
     def get_collection(self, key, first_gpu=False):
         func = lambda net, *args: tf.get_collection(key)

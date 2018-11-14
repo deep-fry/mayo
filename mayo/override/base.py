@@ -229,6 +229,12 @@ class OverriderBase(object):
             return
         self.session.assign(self.before, self.after)
 
+    def dump(self):
+        return dict(self._dump(), name=self.name)
+
+    def _dump(self):
+        return self.session.run(self._parameter_variables)
+
     def reset(self):
         """Reset internal variables to their respective initial values.  """
         for var in self.internals.values():
@@ -317,6 +323,9 @@ class ChainOverrider(OverriderBase, collections.Sequence):
     def reset(self):
         for o in self._overriders:
             o.reset()
+
+    def _dump(self):
+        return [o.dump() for o in self._overriders]
 
     def _info(self):
         return self._info_tuple(overriders=self._overriders)
