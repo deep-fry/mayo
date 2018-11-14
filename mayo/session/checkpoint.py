@@ -101,6 +101,7 @@ class CheckpointHandler(object):
             return []
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
+        var_dtype_map = reader.get_variable_to_dtype_map()
         restore_vars = []
         missing_vars = []
         for v in self._global_variables():
@@ -111,11 +112,20 @@ class CheckpointHandler(object):
                 continue
             v_shape = v.shape.as_list()
             if shape != v_shape:
-                msg = ('Variable named {!r} has shape ({}) mismatch with the '
-                       'shape ({}) in checkpoint, not loading it.')
-                msg = msg.format(
-                    base_name, format_shape(v_shape), format_shape(shape))
-                log.warn(msg)
+                v_shape = format_shape(v_shape)
+                shape = format_shape(shape)
+                log.warn(
+                    'Variable named {!r} has shape ({}) mismatching '
+                    'the shape ({}) in checkpoint, not loading it.'
+                    .format(base_name, v_shape, shape))
+                continue
+            dtype = var_dtype_map.get(base_name, None).base_dtype
+            v_dtype = v.dtype.base_dtype
+            if dtype != v_dtype:
+                log.warn(
+                    'Variable named {!r} has dtype {!r} mismatching '
+                    'the dtype {!r} in checkpoint, not loading it.'
+                    .format(base_name, v_dtype.name, dtype.name))
                 continue
             restore_vars.append(v)
         # variable not restored
