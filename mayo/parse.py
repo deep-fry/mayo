@@ -231,13 +231,14 @@ class _DotDict(collections.MutableMapping):
             return value.__class__(self._eval(value.content, parent)).value()
 
         def eval_str(value):
-            regex = r'\$\((\.?[_a-zA-Z][_a-zA-Z0-9\.]*)\)'
+            regex = r'\$\((\.?[_a-zA-Z][_a-zA-Z0-9\.\s\n\t]*)\)'
             while True:
                 keys = re.findall(regex, value, re.MULTILINE)
                 if not keys:
                     break
                 for k in keys:
                     placeholder = '$({})'.format(k)
+                    k = k.replace(' ', '').replace('\n', '').replace('\t', '')
                     try:
                         if k.startswith('.'):  # relative path
                             v = parent[k[1:]]
@@ -247,7 +248,7 @@ class _DotDict(collections.MutableMapping):
                         raise KeyError(
                             'Attempting to resolve a non-existent key-path '
                             'with placeholder {!r}.'.format(placeholder))
-                    is_unique = not value.replace(placeholder, '')
+                    is_unique = not value.replace(placeholder, '').strip()
                     if is_unique:
                         return v
                     if isinstance(v, collections.Mapping):
