@@ -5,7 +5,7 @@ import numpy as np
 
 from mayo.log import log
 from mayo.util import Percent, memoize_method
-from mayo.net.tf.estimate import multiply, mask_density
+from mayo.net.tf.estimate import multiply, mask_density, _memory_bitops
 from mayo.net.tf.gate.base import GateError
 from mayo.net.tf.gate.naive import NaiveGatedConvolution
 from mayo.net.tf.gate.squeeze import SqueezeExciteGatedConvolution
@@ -97,8 +97,7 @@ class GateLayers(object):
 
     def estimate_gated_convolution(
             self, node, in_info, in_shape, out_shape, params):
-        out_info = self.estimate_convolution(
-            node, in_info, in_shape, out_shape, params)
+        out_info = self._estimate_convolution(in_shape, out_shape, params)
         active_density = 1
         if params.get('enable', True):
             try:
@@ -110,12 +109,11 @@ class GateLayers(object):
                 out_info['_mask'] = mask
                 out_info['active'] = active_density
                 out_info['density'] = density
-                out_info['macs'] = int(out_info['macs'] * density)
-                out_info['weights'] = int(out_info['weights'] * active_density)
+        o = self._weight_overrider(node)
+        out_info = _memory_bitops(o, in_info, out_info, in_shape, out_shape)
         in_density = in_info.get('density', 1)
         oweights, omacs = self._estimate_overhead(
             in_shape, out_shape, in_density, active_density, params)
-        # out_info['overhead'] = overhead_macs
         out_info['weights'] += oweights
         out_info['macs'] += omacs
         return out_info

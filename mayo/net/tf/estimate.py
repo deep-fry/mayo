@@ -132,18 +132,21 @@ class LayerEstimateMixin(object):
         macs = multiply(macs)
         return {'weights': weights, 'macs': macs}
 
-    def _weight_overrider(self, node):
-        return self.overriders.get(node, {}).get('weights')
-
-    def estimate_convolution(self, node, in_info, in_shape, out_shape, params):
-        out_info = self._estimate_depthwise_convolution(
-            out_shape, params)
+    def _estimate_convolution(self, in_shape, out_shape, params):
+        out_info = self._estimate_depthwise_convolution(out_shape, params)
         # input channel size C_in
         in_channels = in_shape[-1]
         out_channels = out_shape[-1]
         out_info['macs'] *= in_channels
         out_info['weights'] = int(
             in_channels * out_info['weights'] + out_channels)
+        return out_info
+
+    def _weight_overrider(self, node):
+        return self.overriders.get(node, {}).get('weights')
+
+    def estimate_convolution(self, node, in_info, in_shape, out_shape, params):
+        out_info = self._estimate_convolution(in_shape, out_shape, params)
         o = self._weight_overrider(node)
         return _memory_bitops(o, in_info, out_info, in_shape, out_shape)
 
