@@ -1,6 +1,5 @@
 ---
 _import: ../resnet50.yaml
-_trainable: true
 _gate:
     enable: true
     policy: parametric
@@ -11,43 +10,34 @@ _gate:
         # moe: 0.01
         null
     threshold: online
-    trainable: true
 model:
     name: resnet50
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
             gate_params: $(_gate)
-            trainable: $(_gate.trainable)
-        _conv: &conv
-            <<: *gated_conv
-            gate_params: $(_gate)
-            padding: valid
-            force_biases: true
         _bottleneck: &bb
             type: module
             kwargs: {stride: null, depth: null, shortcut: null}
             layers:
-                conv1: &bottleneck_gated_conv
-                    <<: *gated_conv
-                    gate_params: $(_gate)
-                conv2: {<<: *bottleneck_gated_conv}
-                conv3: {<<: *bottleneck_gated_conv}
-                conv_shortcut: {<<: *bottleneck_gated_conv}
+                conv1: {<<: *gated_conv}
+                conv2: {<<: *gated_conv}
+                conv3: {<<: *gated_conv}
+                conv_shortcut: {<<: *gated_conv}
         conv1: {<<: *gated_conv}
-    b2a: {<<: *bb}
-    b2b: {<<: *bb}
-    b2c: {<<: *bb}
-    b3a: {<<: *bb}
-    b3b: {<<: *bb}
-    b3c: {<<: *bb}
-    b3d: {<<: *bb}
-    b4a: {<<: *bb}
-    b4b: {<<: *bb}
-    b4c: {<<: *bb}
-    b4d: {<<: *bb}
-    b4e: {<<: *bb}
-    b4f: {<<: *bb}
-    b5a: {<<: *bb}
-    b5b: {<<: *bb}
-    b5c: {<<: *bb}
+        b2a: {<<: *bb}
+        b2b: {<<: *bb}
+        b2c: {<<: *bb}
+        b3a: {<<: *bb}
+        b3b: {<<: *bb}
+        b3c: {<<: *bb}
+        b3d: {<<: *bb}
+        b4a: {<<: *bb}
+        b4b: {<<: *bb}
+        b4c: {<<: *bb}
+        b4d: {<<: *bb}
+        b4e: {<<: *bb}
+        b4f: {<<: *bb}
+        b5a: {<<: *bb}
+        b5b: {<<: *bb}
+        b5c: {<<: *bb}
