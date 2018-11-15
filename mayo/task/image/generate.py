@@ -137,7 +137,7 @@ class Preprocess(object):
             if self.mode == 'train':
                 buffer_size = min(1024, 10 * batch_size)
                 dataset = dataset.shuffle(buffer_size=buffer_size)
-        dataset = dataset.batch(batch_size)
+        dataset = dataset.batch(batch_size, drop_remainder=True)
         # iterator
         iterator = dataset.make_one_shot_iterator()
         batch = iterator.get_next()
