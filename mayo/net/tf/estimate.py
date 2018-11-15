@@ -83,9 +83,9 @@ def _adder_tree(inputs, width):
     return {'adders': adders, 'height': height, 'binops': binops}
 
 
-def _memory_bitops(weight_overrider, in_info, out_info, in_shape, out_shape):
-    active_weights = weights = out_info['weights']
-    active_weights *= out_info.get('active', 1) * in_info.get('active', 1)
+def apply_sparsity(
+        weight_overrider, in_info, out_info, in_shape, out_shape,
+        depthwise=False):
     num_inputs = multiply(in_shape[1:])
     num_outputs = multiply(out_shape[1:])
     weight_bitwidth = 32
@@ -104,15 +104,24 @@ def _memory_bitops(weight_overrider, in_info, out_info, in_shape, out_shape):
     in_bitwidth = in_info.get('bitwidth', 32)
     out_density = out_info.get('density', 1.0)
     out_bitwidth = out_info.get('bitwidth', 32)
-    mem_weights = int(
-        weights * in_density * out_density * weight_density * weight_bitwidth)
     mem_input = int(num_inputs * in_density * in_bitwidth)
     mem_output = int(num_outputs * out_density * out_bitwidth)
+    if depthwise:
+        full_density = out_density
+        mem_activation = max(mem_input, mem_output)  # inplace computation
+    else:
+        full_density = in_density * out_density
+        mem_activation = mem_input + mem_output
+    mem_weights = int(
+        out_info['weights'] * full_density * weight_density * weight_bitwidth)
+    active_density = out_info.get('active', 1)
+    if not depthwise:
+        active_density *= in_info.get('active', 1)
     update_info = {
-        'macs': int(out_info['macs'] * in_density),
-        'weights': int(active_weights),
+        'macs': int(out_info['macs'] * full_density),
+        'weights': int(out_info['weights'] * active_density),
         'mem_weights': Bits(mem_weights),
-        'mem_activation': Bits(mem_input + mem_output),
+        'mem_activation': Bits(mem_activation),
         # TODO fixed point bitwidth after multiplication
         # 'binops': _adder_tree(
         #     num_inputs * in_density * weight_density, 0)['binops'],
@@ -148,13 +157,13 @@ class LayerEstimateMixin(object):
     def estimate_convolution(self, node, in_info, in_shape, out_shape, params):
         out_info = self._estimate_convolution(in_shape, out_shape, params)
         o = self._weight_overrider(node)
-        return _memory_bitops(o, in_info, out_info, in_shape, out_shape)
+        return apply_sparsity(o, in_info, out_info, in_shape, out_shape)
 
     def estimate_depthwise_convolution(
             self, node, in_info, in_shape, out_shape, params):
         out_info = self._estimate_depthwise_convolution(out_shape, params)
         o = self._weight_overrider(node)
-        out_info = _memory_bitops(o, in_info, out_info, in_shape, out_shape)
+        out_info = apply_sparsity(o, in_info, out_info, in_shape, out_shape)
         return passthrough(in_info, out_info)
 
     def estimate_fully_connected(
@@ -165,7 +174,7 @@ class LayerEstimateMixin(object):
             'weight': macs,
         }
         o = self._weight_overrider(node)
-        return _memory_bitops(o, in_info, out_info, in_shape, out_shape)
+        return apply_sparsity(o, in_info, out_info, in_shape, out_shape)
 
     def estimate_concat(self, node, in_infos, input_shapes, out_shape, params):
         masks = []

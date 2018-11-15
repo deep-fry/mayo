@@ -5,7 +5,7 @@ import numpy as np
 
 from mayo.log import log
 from mayo.util import Percent, memoize_method
-from mayo.net.tf.estimate import multiply, mask_density, _memory_bitops
+from mayo.net.tf.estimate import multiply, mask_density, apply_sparsity
 from mayo.net.tf.gate.base import GateError
 from mayo.net.tf.gate.naive import NaiveGatedConvolution
 from mayo.net.tf.gate.squeeze import SqueezeExciteGatedConvolution
@@ -110,7 +110,7 @@ class GateLayers(object):
                 out_info['active'] = active_density
                 out_info['density'] = density
         o = self._weight_overrider(node)
-        out_info = _memory_bitops(o, in_info, out_info, in_shape, out_shape)
+        out_info = apply_sparsity(o, in_info, out_info, in_shape, out_shape)
         in_density = in_info.get('density', 1)
         oweights, omacs = self._estimate_overhead(
             in_shape, out_shape, in_density, active_density, params)
