@@ -161,13 +161,10 @@ class _DotDict(collections.MutableMapping):
             return d._mapping
         return recursive_apply(value, {collections.Mapping: normalize_map})
 
-    def asdict(self):
-        def convert(mapping):
-            d = {}
-            for key, value in mapping.items():
-                d[key] = value
-            return d
-        return recursive_apply(self, {collections.Mapping: convert})
+    def asdict(self, eval=True):
+        if not eval:
+            return self._mapping
+        return recursive_apply(self, {collections.Mapping: lambda m: dict(m)})
 
     @classmethod
     def _merge(cls, d, md):

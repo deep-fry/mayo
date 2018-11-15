@@ -44,7 +44,6 @@ def recursive_apply(obj, apply_funcs, skip_func=None):
         disallow recursion into that object.  It accepts a signature (obj) as
         described above.
     """
-    from mayo.parse import _DotDict
     if skip_func:
         skip_obj = skip_func(obj)
         if skip_obj is not None:

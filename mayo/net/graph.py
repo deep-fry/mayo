@@ -41,7 +41,11 @@ def _replace_module_kwargs(params):
         return value
 
     def replace(params, key):
-        p = params[key].asdict()
+        p = params[key]
+        if isinstance(p, collections.Sequence):
+            p = [e.asdict(eval=False) for e in p]
+        else:
+            p = p.asdict(eval=False)
         func_map = {str: replace_str, ArithTag: replace_arith}
         params[key] = recursive_apply(p, func_map, skip_inner_module)
 
