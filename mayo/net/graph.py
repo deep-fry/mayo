@@ -1,5 +1,4 @@
 import re
-import copy
 import pprint
 import weakref
 import itertools
@@ -42,7 +41,7 @@ def _replace_module_kwargs(params):
         return value
 
     def replace(params, key):
-        p = copy.deepcopy(params[key])
+        p = params[key].asdict()
         func_map = {str: replace_str, ArithTag: replace_arith}
         params[key] = recursive_apply(p, func_map, skip_inner_module)
 

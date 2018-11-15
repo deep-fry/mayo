@@ -161,9 +161,13 @@ class _DotDict(collections.MutableMapping):
             return d._mapping
         return recursive_apply(value, {collections.Mapping: normalize_map})
 
-    def __deepcopy__(self, memo):
-        data = copy.deepcopy(self._mapping, memo)
-        return self.__class__(data, root=self._root, normalize=False)
+    def asdict(self):
+        def convert(mapping):
+            d = {}
+            for key, value in mapping.items():
+                d[key] = value
+            return d
+        return recursive_apply(self, {collections.Mapping: convert})
 
     @classmethod
     def _merge(cls, d, md):

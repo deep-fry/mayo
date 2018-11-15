@@ -49,11 +49,11 @@ def recursive_apply(obj, apply_funcs, skip_func=None):
         skip_obj = skip_func(obj)
         if skip_obj is not None:
             return skip_obj
-    if isinstance(obj, _DotDict):
-        obj = obj._mapping
     if isinstance(obj, collections.Mapping):
+        new_obj = {}
         for k, v in obj.items():
-            obj[k] = recursive_apply(v, apply_funcs, skip_func)
+            new_obj[k] = recursive_apply(v, apply_funcs, skip_func)
+        obj = new_obj
     elif isinstance(obj, (tuple, list, set, frozenset)):
         obj = obj.__class__(
             recursive_apply(v, apply_funcs, skip_func) for v in obj)
