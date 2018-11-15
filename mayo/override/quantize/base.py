@@ -3,13 +3,20 @@ from mayo.override.base import OverriderBase
 
 
 class QuantizerBase(OverriderBase):
+    @property
+    def real_width(self):
+        raise NotImplementedError(
+            'Override this method to compute real bit-width '
+            'required for {!r}.'.format(self))
+
     def eval(self, attribute):
         if util.is_tensor(attribute):
             return self.session.run(attribute)
         return attribute
 
     def _quantize(self, value, **kwargs):
-        raise NotImplementedError
+        raise NotImplementedError(
+            'Override this method to perform quantization.')
 
     @staticmethod
     def _overflow_rate(mask):

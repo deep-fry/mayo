@@ -1,3 +1,4 @@
+import math
 import collections
 
 import tensorflow as tf
@@ -32,6 +33,27 @@ def print_variables(description, variables, level):
 class Percent(float):
     def __format__(self, _):
         return '{:.2f}%'.format(self * 100)
+
+
+class Bits(int):
+    def __format__(self, mode):
+        value = self
+        is_bytes = 'b' not in mode
+        if is_bytes:
+            value = math.ceil(self / 8.0)
+        suffix = 'B' if is_bytes else 'b'
+        if 'i' in mode:
+            suffix = ''
+        base = math.floor(math.log(value, 1024))
+        value = value / 1024 ** base
+        value = '{:.3g}{}{}'.format(value, ' KMGTP'[base], suffix)
+        return value.replace(' ', '')
+
+    def __str__(self):
+        return '{}'.format(self)
+
+    def __repr__(self):
+        return str(self)
 
 
 class Unknown(object):

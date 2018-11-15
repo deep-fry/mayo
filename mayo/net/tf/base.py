@@ -197,20 +197,16 @@ class TFNetBase(NetBase):
             return [tf.pad(t, paddings) for t in tensors]
         return tf.pad(tensors, paddings)
 
-    def _estimate_layer(self, node, info):
-        # info pass-through
-        if node.params['type'] in ['identity', 'dropout']:
-            return self.estimator._mask_passthrough(info, {})
-        layer_info = super()._estimate_layer(node, info)
+    def _estimate_layer(self, node, in_info):
+        out_info = super()._estimate_layer(node, in_info)
         log.debug(
             'Estimated statistics for {!r}: {}.'
-            .format(node.formatted_name(), layer_info))
+            .format(node.formatted_name(), out_info))
         for k, o in self.overriders.get(node, {}).items():
-            if k == 'gradient':
-                # gradient is not used for layer estimation
+            if k == ['gradient', 'normalization']:
+                log.warn('Normalization/gradient estimation not supported.')
                 continue
-            layer_info = o.estimate(layer_info, info)
+            out_info = o.estimate(out_info, in_info)
             log.debug(
-                'Overrider {!r} modified statistics: {}.'
-                .format(o, layer_info))
-        return layer_info
+                'Overrider {!r} modified statistics: {}.'.format(o, out_info))
+        return out_info

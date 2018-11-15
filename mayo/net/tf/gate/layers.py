@@ -5,6 +5,7 @@ import numpy as np
 
 from mayo.log import log
 from mayo.util import Percent, memoize_method
+from mayo.net.tf.estimate import multiply, mask_density
 from mayo.net.tf.gate.base import GateError
 from mayo.net.tf.gate.naive import NaiveGatedConvolution
 from mayo.net.tf.gate.squeeze import SqueezeExciteGatedConvolution
@@ -77,10 +78,9 @@ class GateLayers(object):
         return cls(self, node, params, gate_params, tensor).instantiate()
 
     def _estimate_overhead(
-            self, input_shape, output_shape,
-            in_density, active_density, params):
-        in_channels = int(input_shape[-1] * in_density)
-        out_channels = int(output_shape[-1] * active_density)
+            self, in_shape, out_shape, in_density, active_density, params):
+        in_channels = int(in_shape[-1] * in_density)
+        out_channels = int(out_shape[-1] * active_density)
         factor = params.get('factor', 0)
         if factor <= 0:
             macs = in_channels * out_channels
@@ -92,13 +92,13 @@ class GateLayers(object):
             macs += mid_channels * out_channels
             weights = NotImplemented
         # gamma multiplication overhead
-        macs += self.estimator._multiply(output_shape[1:])
+        macs += multiply(out_shape[1:])
         return weights, macs
 
     def estimate_gated_convolution(
-            self, node, info, input_shape, output_shape, params):
-        layer_info = self.estimate_convolution(
-            node, info, input_shape, output_shape, params)
+            self, node, in_info, in_shape, out_shape, params):
+        out_info = self.estimate_convolution(
+            node, in_info, in_shape, out_shape, params)
         active_density = 1
         if params.get('enable', True):
             try:
@@ -106,17 +106,16 @@ class GateLayers(object):
             except KeyError:
                 pass
             else:
-                density, active_density = self.estimator._mask_density(mask)
-                layer_info['_mask'] = mask
-                layer_info['active'] = active_density
-                layer_info['density'] = density
-                layer_info['macs'] = int(layer_info['macs'] * density)
-                layer_info['weights'] = int(
-                    layer_info['weights'] * active_density)
-        in_density = info.get('density', 1)
+                density, active_density = mask_density(mask)
+                out_info['_mask'] = mask
+                out_info['active'] = active_density
+                out_info['density'] = density
+                out_info['macs'] = int(out_info['macs'] * density)
+                out_info['weights'] = int(out_info['weights'] * active_density)
+        in_density = in_info.get('density', 1)
         oweights, omacs = self._estimate_overhead(
-            input_shape, output_shape, in_density, active_density, params)
-        # layer_info['overhead'] = overhead_macs
-        layer_info['weights'] += oweights
-        layer_info['macs'] += omacs
-        return layer_info
+            in_shape, out_shape, in_density, active_density, params)
+        # out_info['overhead'] = overhead_macs
+        out_info['weights'] += oweights
+        out_info['macs'] += omacs
+        return out_info
