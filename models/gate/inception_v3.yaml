@@ -1,0 +1,85 @@
+---
+_import: ../inception_v3.yaml
+_gate:
+    enable: true
+    policy: parametric
+    density: 1.0
+    pool: avg
+    regularizer:
+        null
+    threshold: online
+model:
+    name: inception_v3
+    layers:
+        _gated_conv: &gated_conv
+            type: gated_convolution
+            gate_params: $(_gate)
+        conv1: {<<: *gated_conv}
+        conv2a: {<<: *gated_conv}
+        conv2b: {<<: *gated_conv}
+        conv3b: {<<: *gated_conv}
+        conv4: {<<: *gated_conv}
+        mixed5b: &gated_mixed5b
+            type: module
+            kwargs: {d_depth: 32}
+            layers:
+                a1: {<<: *gated_conv}
+                b1: {<<: *gated_conv}
+                b2: {<<: *gated_conv}
+                c1: {<<: *gated_conv}
+                c2: {<<: *gated_conv}
+                c3: {<<: *gated_conv}
+                d2: {<<: *gated_conv}
+        # 35 x 35 x 256
+        mixed5c: {<<: *gated_mixed5b, d_depth: 64}
+        # 35 x 35 x 288
+        mixed5d: {<<: *gated_mixed5b, d_depth: 64}
+        mixed6a:
+            type: module
+            layers:
+                a1: {<<: *gated_conv}
+                b1: {<<: *gated_conv}
+                b2: {<<: *gated_conv}
+                b3: {<<: *gated_conv}
+        mixed6b: &gated_mixed6b
+            type: module
+            kwargs: {depth: 128, final_depth: 192}
+            layers:
+                a1: {<<: *gated_conv}
+                b1: {<<: *gated_conv}
+                b2: {<<: *gated_conv}
+                b3: {<<: *gated_conv}
+                c1: {<<: *gated_conv}
+                c2: {<<: *gated_conv}
+                c3: {<<: *gated_conv}
+                c4: {<<: *gated_conv}
+                c5: {<<: *gated_conv}
+                d2: {<<: *gated_conv}
+        # 17 x 17 x 768
+        mixed6c: {<<: *gated_mixed6b, depth: 160}
+        # 17 x 17 x 768
+        mixed6d: {<<: *gated_mixed6b, depth: 160}
+        # 17 x 17 x 768
+        mixed6e: {<<: *gated_mixed6b, depth: 192}
+        mixed7a:
+            type: module
+            layers:
+                a1: {<<: *gated_conv}
+                a2: {<<: *gated_conv}
+                b1: {<<: *gated_conv}
+                b2: {<<: *gated_conv}
+                b3: {<<: *gated_conv}
+                b4: {<<: *gated_conv}
+        mixed7b: &gated_mixed7b
+            type: module
+            layers:
+                a1: {<<: *gated_conv}
+                b1: {<<: *gated_conv}
+                b2a: {<<: *gated_conv}
+                b2b: {<<: *gated_conv}
+                c1: {<<: *gated_conv}
+                c2: {<<: *gated_conv}
+                c3a: {<<: *gated_conv}
+                c3b: {<<: *gated_conv}
+                d2: {<<: *gated_conv}
+        mixed7c: {<<: *gated_mixed7b}
