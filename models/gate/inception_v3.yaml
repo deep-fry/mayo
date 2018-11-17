@@ -8,12 +8,14 @@ _gate:
     regularizer:
         null
     threshold: online
+    trainable: true
 model:
     name: inception_v3
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
             gate_params: $(_gate)
+            trainable: $(_gate.trainable)
         conv1: {<<: *gated_conv}
         conv2a: {<<: *gated_conv}
         conv2b: {<<: *gated_conv}

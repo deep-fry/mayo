@@ -10,12 +10,14 @@ _gate:
         # moe: 0.01
         null
     threshold: online
+    trainable: true
 model:
     name: resnet50
     layers:
         _gated_conv: &gated_conv
             type: gated_convolution
             gate_params: $(_gate)
+            trainable: $(_gate.trainable)
         _bottleneck: &bb
             type: module
             kwargs: {stride: null, depth: null, shortcut: null}
