@@ -9,6 +9,5 @@ train:
             $(train.learning_rate._initial) * math.sqrt(
                 $(system.batch_size_per_gpu) * $(system.num_gpus) /
                 $(train.learning_rate._default_batch_size))
-        learning_rate: 0.1
         decay_steps: 30  # number of epochs per decay
         staircase: true
