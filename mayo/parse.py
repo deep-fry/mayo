@@ -61,6 +61,7 @@ class ArithTag(YamlScalarTag):
         ast.USub: operator.neg,
         ast.Eq: operator.eq,
         ast.NotEq: operator.ne,
+        ast.And: lambda *args: all(args),
     }
 
     def value(self):
@@ -100,11 +101,13 @@ class ArithTag(YamlScalarTag):
             return n.value
         if isinstance(n, ast.List):
             return [self._eval(e) for e in n.elts]
-        if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
+        if not isinstance(n, (ast.UnaryOp, ast.BinOp, ast.BoolOp)):
             raise TypeError('Unrecognized operator node {}'.format(n))
         op = self._eval_expr_map[type(n.op)]
         if isinstance(n, ast.UnaryOp):
             return op(self._eval(n.operand))
+        if isinstance(n, ast.BoolOp):
+            return op(*(self._eval(e) for e in n.values))
         return op(self._eval(n.left), self._eval(n.right))
 
 

@@ -141,8 +141,8 @@ class Graph(object):
     def __init__(self, model):
         super().__init__()
         self.nx_graph = nx.OrderedMultiDiGraph()
-        inputs = model.get('inputs', 'input')
-        outputs = model.get('outputs', 'output')
+        self._input_names = inputs = model.get('inputs', 'input')
+        self._output_names = outputs = model.get('outputs', 'output')
         self._add_module(inputs, outputs, model['name'], model, [])
         self._optimize()
         self._validate()
@@ -157,16 +157,21 @@ class Graph(object):
                 .format(to_node))
 
     def input_nodes(self):
-        return self._filter_nodes(lambda n: not n.predecessors)
+        return self._filter_nodes(
+            lambda n: n.name in self._input_names and not n.module)
 
     def output_nodes(self):
-        return self._filter_nodes(lambda n: not n.successors)
+        return self._filter_nodes(
+            lambda n: n.name in self._output_names and not n.module)
 
     def nodes(self):
         return self.nx_graph.nodes()
 
     def edges(self):
         return self.nx_graph.edges()
+
+    def has_path(self, from_node, to_node):
+        return nx.has_path(self.nx_graph, from_node, to_node)
 
     def remove_node(self, node):
         return self.nx_graph.remove_node(node)
@@ -197,7 +202,7 @@ class Graph(object):
             submodule_path += [module_name]
         # add graph connections
         for connection in ensure_list(params['graph']):
-            with_layers = ensure_list(connection['with'])
+            with_layers = ensure_list(connection['with'] or [])
             edges = list(zip(
                 [connection['from']] + with_layers,
                 with_layers + [connection['to']],
@@ -281,6 +286,7 @@ class Graph(object):
 
     def _optimize_propagation(self):
         changed = False
+        # remove redundant tensor nodes from graph
         for node in list(self.nodes()):
             if not isinstance(node, TensorNode):
                 continue
@@ -292,6 +298,11 @@ class Graph(object):
             # remove current node as it is redundant
             self.remove_node(node)
             self.add_edge(preds[0], succs[0])
+        # remove nodes not connected to output
+        output_nodes = self.output_nodes()
+        for node in list(self.nodes()):
+            if not any(self.has_path(node, o) for o in output_nodes):
+                self.remove_node(node)
         return changed
 
     def _ensure_connection(self, from_nodes, to_nodes):
