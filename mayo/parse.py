@@ -90,8 +90,8 @@ class ArithTag(YamlScalarTag):
             if len(ops) > 1 or len(rhs) > 1:
                 raise NotImplementedError(
                     'We support only one comparator for now.')
-            op = self._eval_expr_map[type(ops.pop())]
-            return op(self._eval(n.left), rhs.pop())
+            op = self._eval_expr_map[type(ops[0])]
+            return op(self._eval(n.left), self._eval(rhs[0]))
         if isinstance(n, ast.IfExp):
             if self._eval(n.test):
                 return self._eval(n.body)

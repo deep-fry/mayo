@@ -26,7 +26,7 @@ model:
             normalizer_params:
                 center: true
                 scale: true
-                decay: 0.9997
+                decay: 0.999
                 epsilon: 0.001
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
