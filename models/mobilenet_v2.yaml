@@ -1,0 +1,139 @@
+---
+dataset:
+    task:
+        background_class: {use: true}
+        preprocess:
+            shape:
+                height: 224
+                width: 224
+                channels: 3
+            validate: {type: central_crop, fraction: 0.875}
+            final_cpu:
+                - {type: resize, fill: false}
+                - {type: linear_map, scale: 2.0, shift: -1.0}
+model:
+    name: mobilenet_v2
+    description:
+        MobileNet implementation from::
+            https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet_v1.py
+    layers:
+        _regu: &regularizer
+            type: tensorflow.contrib.layers.l2_regularizer
+            scale: 0.00004
+        _conv: &conv
+            type: convolution
+            kernel_size: 3
+            stride: 2
+            padding: same
+            normalizer_fn: tensorflow.contrib.slim.batch_norm
+            # normalizer_fn: mayo.objects.normalize.custom_batch_norm
+            normalizer_params:
+                center: true
+                scale: true
+                decay: 0.9997
+                epsilon: 0.001
+            weights_initializer:
+                type: tensorflow.truncated_normal_initializer
+                stddev: 0.09
+            activation_fn: tensorflow.nn.relu6
+            weights_regularizer: *regularizer
+        _invertedbottleneck_1stride: &ibn1
+            type: module
+            kwargs: {expansion_factor: null, num_outputs: null, shortcut: null}
+            layers:
+                conv1:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: 1
+                    num_outputs: !arith ^(num_outputs) * ^(expansion_factor)
+                depthwise:
+                    <<: *conv
+                    type: depthwise_convolution
+                    stride: 1
+                pointwise:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: 1
+                    num_outputs: !arith ^(num_outputs) * ^(expansion_factor)
+                    weights_regularizer: *regularizer
+                    activation_fn: null
+                upsample_shortcut:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: 1
+                    activation_fn: null
+                    num_outputs: !arith ^(num_outputs) * ^(expansion_factor)
+                identity_shortcut: {type: identity}
+                add: {type: add}
+            graph:
+                - {from: input, with: [conv1, depthwise, pointwise], to: residual}
+                - {from: input, with: ^(shortcut)_shortcut, to: shortcut}
+                - {from: [residual, shortcut], with: add, to: output}
+        _invertedbottleneck_2stride: &ibn2
+            type: module
+            kwargs: {expansion_factor: null, num_outputs: null, stride: null}
+            layers:
+                conv1:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: 1
+                    num_outputs: !arith ^(num_outputs) * ^(expansion_factor)
+                depthwise:
+                    <<: *conv
+                    type: depthwise_convolution
+                    stride: 2
+                pointwise:
+                    <<: *conv
+                    kernel_size: [1, 1]
+                    stride: 1
+                    num_outputs: !arith ^(num_outputs) * ^(expansion_factor)
+                    weights_regularizer: *regularizer
+                    activation_fn: null
+            graph:
+                - {from: input, with: [conv1, depthwise, pointwise], to: output}
+        prep: {type: identity}
+        conv0: {<<: *conv, num_outputs: 32, stride: 2, kernel_size: 3}
+        # block 1 (t=1, c=16, n=1, s=1)
+        conv1: {<<: *ibn1, num_outputs: 16, expansion_factor: 1, shortcut: upsample}
+        # block 2 (t=6, c=24, n=2, s=2)
+        conv2: {<<: *ibn2, num_outputs: 24, expansion_factor: 6, stride: 2}
+        conv3: {<<: *ibn2, num_outputs: 24, expansion_factor: 6, stride: 1}
+        # block 3 (t=6, c=32, n=3, s=2)
+        conv4: {<<: *ibn2, num_outputs: 32, expansion_factor: 6, stride: 2}
+        conv5: {<<: *ibn2, num_outputs: 32, expansion_factor: 6, stride: 1}
+        conv6: {<<: *ibn2, num_outputs: 32, expansion_factor: 6, stride: 1}
+        # block 4 (t=6, c=64, n=4, s=2)
+        conv7: {<<: *ibn2, num_outputs: 64, expansion_factor: 6, stride: 2}
+        conv8: {<<: *ibn2, num_outputs: 64, expansion_factor: 6, stride: 1}
+        conv9: {<<: *ibn2, num_outputs: 64, expansion_factor: 6, stride: 1}
+        conv10: {<<: *ibn2, num_outputs: 64, expansion_factor: 6, stride: 1}
+        # block 5 (t=6, c=96, n=3, s=1)
+        conv11: {<<: *ibn1, num_outputs: 96, expansion_factor: 6, shortcut: upsample}
+        conv12: {<<: *ibn1, num_outputs: 96, expansion_factor: 6, shortcut: identity}
+        conv13: {<<: *ibn1, num_outputs: 96, expansion_factor: 6, shortcut: identity}
+        # block 6 (t=6, c=160, n=3, s=2)
+        conv14: {<<: *ibn2, num_outputs: 160, expansion_factor: 6, stride: 2}
+        conv15: {<<: *ibn2, num_outputs: 160, expansion_factor: 6, stride: 1}
+        conv16: {<<: *ibn2, num_outputs: 160, expansion_factor: 6, stride: 1}
+        # block 7 (t=6, c=320, n=1, s=1)
+        conv17: {<<: *ibn1, num_outputs: 320, expansion_factor: 6, shortcut: upsample}
+        conv18: {<<: *conv, kernel_size: 1, stride: 1, num_outputs: 1280}
+        pool: {type: average_pool, kernel_size: 7, stride: 1, padding: same}
+        dropout: {type: dropout, keep_prob: 0.999}
+        fc:
+            type: convolution
+            kernel_size: 1
+            num_outputs: $(dataset.task.num_classes)
+            activation_fn: null
+            normalizer_fn: null
+            weights_regularizer: *regularizer
+        logits: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: input
+        with: [
+            prep, conv0,
+            conv1, conv2, conv3, conv4, conv5,
+            conv6, conv7, conv8, conv9, conv10,
+            conv11, conv12, conv13, conv14, conv15, conv16, conv17, conv18,
+            pool, dropout, fc, logits]
+        to: output
