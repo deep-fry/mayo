@@ -1,0 +1,10 @@
+rename:
+    MobilenetV2: mobilenet_v2
+    Conv_1/: conv1/
+    Conv/: conv0/
+    Logits/Conv2d_1c_1x1: fc
+    expanded_conv_(\d+)/: ibn\1/
+    expanded_conv/: ibn0/
+    ExponentialMovingAverage: null
+    RMSProp: null
+    global_step: null

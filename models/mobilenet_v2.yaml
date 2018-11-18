@@ -35,30 +35,28 @@ model:
         _inverted_bottleneck: &ibn
             type: module
             kwargs:
-                factor: 6
+                num_expand: null
                 num_outputs: null
                 stride: null
                 residual: true
             layers:
-                pointwise:
+                expand:
                     <<: *conv
                     kernel_size: 1
-                    num_outputs: &ibn_outputs !arith ^(num_outputs) * ^(factor)
+                    num_outputs: ^(num_expand)
                 depthwise:
                     <<: *conv
                     type: depthwise_convolution
                     stride: ^(stride)
-                pointwise_linear:
+                project:
                     <<: *conv
                     kernel_size: 1
-                    num_outputs: *ibn_outputs
+                    num_outputs: ^(num_outputs)
                     activation_fn: null
                 identity_shortcut: {type: identity}
                 add: {type: add}
             graph:
-                - from: input
-                  with: [pointwise, depthwise, pointwise_linear]
-                  to: conv
+                - {from: input, with: [expand, depthwise, project], to: conv}
                 - {from: [conv, input], with: add, to: residual}
                 - from: !arith >
                       'residual' if ^(residual) and ^(stride) == 1 else 'conv'
@@ -66,25 +64,40 @@ model:
                   to: output
         prep: {type: identity}
         conv0: {<<: *conv, stride: 2, num_outputs: 32}
-        conv1:
-            {<<: *ibn, num_outputs: 16, stride: 1, factor: 1, residual: false}
-        conv2: {<<: *ibn, num_outputs: 24, stride: 2}
-        conv3: {<<: *ibn, num_outputs: 24, stride: 1}
-        conv4: {<<: *ibn, num_outputs: 32, stride: 2}
-        conv5: {<<: *ibn, num_outputs: 32, stride: 1}
-        conv6: {<<: *ibn, num_outputs: 32, stride: 1}
-        conv7: {<<: *ibn, num_outputs: 64, stride: 2}
-        conv8: {<<: *ibn, num_outputs: 64, stride: 1}
-        conv9: {<<: *ibn, num_outputs: 64, stride: 1}
-        conv10: {<<: *ibn, num_outputs: 64, stride: 1}
-        conv11: {<<: *ibn, num_outputs: 96, stride: 1, residual: false}
-        conv12: {<<: *ibn, num_outputs: 96, stride: 1}
-        conv13: {<<: *ibn, num_outputs: 96, stride: 1}
-        conv14: {<<: *ibn, num_outputs: 160, stride: 2}
-        conv15: {<<: *ibn, num_outputs: 160, stride: 1}
-        conv16: {<<: *ibn, num_outputs: 160, stride: 1}
-        conv17: {<<: *ibn, num_outputs: 320, stride: 1, residual: false}
-        conv18: {<<: *conv, kernel_size: 1, stride: 1, num_outputs: 1280}
+        ibn0:
+            <<: *ibn
+            num_expand: 32
+            num_outputs: 16
+            stride: 1
+            residual: false
+            graph: {from: input, with: [depthwise, project], to: output}
+        ibn1: {<<: *ibn, num_expand: 96, num_outputs: 24, stride: 2}
+        ibn2: {<<: *ibn, num_expand: 144, num_outputs: 24, stride: 1}
+        ibn3: {<<: *ibn, num_expand: 144, num_outputs: 32, stride: 2}
+        ibn4: {<<: *ibn, num_expand: 192, num_outputs: 32, stride: 1}
+        ibn5: {<<: *ibn, num_expand: 192, num_outputs: 32, stride: 1}
+        ibn6: {<<: *ibn, num_expand: 192, num_outputs: 64, stride: 2}
+        ibn7: {<<: *ibn, num_expand: 384, num_outputs: 64, stride: 1}
+        ibn8: {<<: *ibn, num_expand: 384, num_outputs: 64, stride: 1}
+        ibn9: {<<: *ibn, num_expand: 384, num_outputs: 64, stride: 1}
+        ibn10:
+            <<: *ibn
+            num_expand: 384
+            num_outputs: 96
+            stride: 1
+            residual: false
+        ibn11: {<<: *ibn, num_expand: 576, num_outputs: 96, stride: 1}
+        ibn12: {<<: *ibn, num_expand: 576, num_outputs: 96, stride: 1}
+        ibn13: {<<: *ibn, num_expand: 576, num_outputs: 160, stride: 2}
+        ibn14: {<<: *ibn, num_expand: 960, num_outputs: 160, stride: 1}
+        ibn15: {<<: *ibn, num_expand: 960, num_outputs: 160, stride: 1}
+        ibn16:
+            <<: *ibn
+            num_expand: 960
+            num_outputs: 320
+            stride: 1
+            residual: false
+        conv1: {<<: *conv, kernel_size: 1, stride: 1, num_outputs: 1280}
         pool: {type: average_pool, kernel_size: global, stride: 1}
         dropout: {type: dropout, keep_prob: 0.999}
         fc:
@@ -98,8 +111,9 @@ model:
         from: input
         with: [
             prep, conv0,
-            conv1, conv2, conv3, conv4, conv5,
-            conv6, conv7, conv8, conv9, conv10,
-            conv11, conv12, conv13, conv14, conv15, conv16, conv17, conv18,
+            ibn0, ibn1, ibn2, ibn3, ibn4,
+            ibn5, ibn6, ibn7, ibn8, ibn9,
+            ibn10, ibn11, ibn12, ibn13, ibn14,
+            ibn15, ibn16, conv1,
             pool, dropout, fc, logits]
         to: output
