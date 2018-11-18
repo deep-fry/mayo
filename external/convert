@@ -101,7 +101,7 @@ class PyTorchImporter(BaseImporter):
     def _import(file, rules):
         import torch
         var_to_tensor = {}
-        for k, v in torch.load(file).items():
+        for k, v in torch.load(file, map_location='cpu').items():
             if isinstance(v, torch.nn.Parameter):
                 v = v.data
             var_to_tensor[k] = v.numpy()
