@@ -81,7 +81,7 @@ model:
                 depthwise:
                     <<: *conv
                     type: depthwise_convolution
-                    stride: 2
+                    stride: ^(stride)
                 pointwise:
                     <<: *conv
                     kernel_size: [1, 1]
