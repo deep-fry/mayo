@@ -56,16 +56,16 @@ class Bits(int):
         return str(self)
 
 
-class Unknown(object):
-    def __add__(self, other):
-        return other
-    __radd__ = __add__
+class _Unknown(int):
+    def __format__(self, mode):
+        return ''
 
     def __str__(self):
         return ''
+    __repr__ = __str__
 
 
-unknown = Unknown()
+unknown = _Unknown(0)
 
 
 class Table(collections.Sequence):
@@ -132,6 +132,9 @@ class Table(collections.Sequence):
     def footer_sum(self, column):
         self._footers[column] = {'method': 'sum'}
 
+    def footer_max(self, column):
+        self._footers[column] = {'method': 'max'}
+
     def footer_mean(self, column, weights=None):
         self._footers[column] = {'method': 'mean', 'weights': weights}
 
@@ -185,6 +188,8 @@ class Table(collections.Sequence):
             column = self.get_column(column)
             if prop['method'] == 'sum':
                 value = sum(column)
+            elif prop['method'] == 'max':
+                value = max((r for r in column if r is not unknown))
             elif prop['method'] == 'mean':
                 try:
                     weights = self.get_column(prop.get('weights'))

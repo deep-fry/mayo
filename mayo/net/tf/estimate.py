@@ -117,11 +117,14 @@ def apply_sparsity(
     active_density = out_info.get('active', 1)
     if not depthwise:
         active_density *= in_info.get('active', 1)
+    macs = int(out_info['macs'] * full_density)
     update_info = {
-        'macs': int(out_info['macs'] * full_density),
+        'macs': macs,
         'weights': int(out_info['weights'] * active_density),
-        'mem_weights': Bits(mem_weights),
-        'mem_activation': Bits(mem_activation),
+        # 'mem_weights': Bits(mem_weights),
+        # 'mem_activation': Bits(mem_activation),
+        'alu_moves': macs * 2 + mem_output,
+        'optimal_cache': Bits(mem_weights + mem_activation),
         # TODO fixed point bitwidth after multiplication
         # 'binops': _adder_tree(
         #     num_inputs * in_density * weight_density, 0)['binops'],
@@ -169,10 +172,7 @@ class LayerEstimateMixin(object):
     def estimate_fully_connected(
             self, node, in_info, in_shape, out_shape, params):
         macs = in_shape[-1] * out_shape[-1]
-        out_info = {
-            'macs': macs,
-            'weight': macs,
-        }
+        out_info = {'macs': macs, 'weights': macs}
         o = self._weight_overrider(node)
         return apply_sparsity(o, in_info, out_info, in_shape, out_shape)
 
