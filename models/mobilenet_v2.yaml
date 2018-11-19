@@ -26,7 +26,7 @@ model:
             normalizer_params:
                 center: true
                 scale: true
-                decay: 0.999
+                decay: 0.997
                 epsilon: 0.001
             weights_initializer:
                 type: tensorflow.truncated_normal_initializer
@@ -99,7 +99,7 @@ model:
             residual: false
         conv1: {<<: *conv, kernel_size: 1, stride: 1, num_outputs: 1280}
         pool: {type: average_pool, kernel_size: global, stride: 1}
-        dropout: {type: dropout, keep_prob: 0.999}
+        dropout: {type: dropout, keep_prob: 0.8}
         fc:
             <<: *conv
             kernel_size: 1
