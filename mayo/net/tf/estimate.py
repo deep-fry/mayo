@@ -112,19 +112,19 @@ def apply_sparsity(
     else:
         full_density = in_density * out_density
         mem_activation = mem_input + mem_output
-    mem_weights = int(
-        out_info['weights'] * full_density * weight_density * weight_bitwidth)
+    weights = out_info['weights'] * weight_density
+    mem_weights = int(weights * full_density * weight_bitwidth)
     active_density = out_info.get('active', 1)
     if not depthwise:
         active_density *= in_info.get('active', 1)
     macs = int(out_info['macs'] * full_density)
     update_info = {
         'macs': macs,
-        'weights': int(out_info['weights'] * active_density),
-        # 'mem_weights': Bits(mem_weights),
-        # 'mem_activation': Bits(mem_activation),
-        'alu_moves': macs * 2 + mem_output,
-        'optimal_cache': Bits(mem_weights + mem_activation),
+        'weights': int(weights * active_density),
+        'mem_weights': Bits(mem_weights),
+        'mem_activation': Bits(mem_activation),
+        # 'alu_moves': int(macs * 2 + num_outputs * out_density),
+        # 'optimal_cache': Bits(mem_weights + mem_activation),
         # TODO fixed point bitwidth after multiplication
         # 'binops': _adder_tree(
         #     num_inputs * in_density * weight_density, 0)['binops'],
