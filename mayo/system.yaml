@@ -6,7 +6,7 @@ system:
     preprocess:
         num_threads: 8
     batch_size_per_gpu: 256
-    max_epochs: null
+    max_epochs: 900
     pdb:
         use: true
         skip:

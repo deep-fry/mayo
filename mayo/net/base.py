@@ -112,19 +112,19 @@ class NetBase(object):
         func_map = {'layer': self._estimate_layer}
         return self.dataflow_analysis(func_map)
 
-    def _estimate_layer(self, node, info):
+    def _estimate_layer(self, node, in_info):
         shapes = self.shapes(unified=True)
-        input_shape = [shapes[p] for p in node.predecessors]
-        input_shape = input_shape[0] if len(input_shape) == 1 else input_shape
-        output_shape = shapes[node]
+        in_shape = [shapes[p] for p in node.predecessors]
+        in_shape = in_shape[0] if len(in_shape) == 1 else in_shape
+        out_shape = shapes[node]
         try:
             func, params = object_from_params(node.params, self, 'estimate_')
         except NotImplementedError:
             func = self.generic_estimate
             params = node.params
-        return func(node, info, input_shape, output_shape, params)
+        return func(node, in_info, in_shape, out_shape, params)
 
-    def generic_estimate(self, node, info, input_shape, output_shape, params):
+    def generic_estimate(self, node, info, in_shape, out_shape, params):
         # disallow information before any layer to pass through
         # the layer by default
         return {}

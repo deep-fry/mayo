@@ -1,3 +1,4 @@
+import math
 import collections
 
 import tensorflow as tf
@@ -7,21 +8,64 @@ def format_shape(shape):
     return ' x '.join(str(s) if s else '?' for s in shape)
 
 
+def print_variables(description, variables, level):
+    from mayo.log import log
+    log_func = getattr(log, level)
+    skipped = ['RMSProp', 'ExponentialMovingAverage']
+    variables = [v for v in variables if not any(n in v for n in skipped)]
+    if not variables:
+        return
+    if log.is_enabled('debug'):
+        show_vars = '\n    '.join(variables)
+        log_func('{}:\n    {}'.format(description, show_vars))
+        return
+    show_count = 10
+    show_vars = '\n    '.join(variables[:show_count])
+    num_more_vars = len(variables[show_count:])
+    more_vars = ''
+    if num_more_vars > 0:
+        more_vars = '\n    ... '
+        more_vars += '[{} more variables, use debug level to see all.]'
+        more_vars = more_vars.format(num_more_vars)
+    log_func('{}:\n    {}{}'.format(description, show_vars, more_vars))
+
+
 class Percent(float):
     def __format__(self, _):
         return '{:.2f}%'.format(self * 100)
 
 
-class Unknown(object):
-    def __add__(self, other):
-        return other
-    __radd__ = __add__
+class Bits(int):
+    def __format__(self, mode):
+        value = self
+        is_bytes = 'b' not in mode
+        if is_bytes:
+            value = math.ceil(self / 8.0)
+        suffix = 'B' if is_bytes else 'b'
+        if 'i' in mode:
+            suffix = ''
+        base = math.floor(math.log(value, 1024))
+        value = value / 1024 ** base
+        value = '{:.3g}{}{}'.format(value, ' KMGTP'[base], suffix)
+        return value.replace(' ', '')
+
+    def __str__(self):
+        return '{}'.format(self)
+
+    def __repr__(self):
+        return str(self)
+
+
+class _Unknown(int):
+    def __format__(self, mode):
+        return ''
 
     def __str__(self):
         return ''
+    __repr__ = __str__
 
 
-unknown = Unknown()
+unknown = _Unknown(0)
 
 
 class Table(collections.Sequence):
@@ -88,6 +132,9 @@ class Table(collections.Sequence):
     def footer_sum(self, column):
         self._footers[column] = {'method': 'sum'}
 
+    def footer_max(self, column):
+        self._footers[column] = {'method': 'max'}
+
     def footer_mean(self, column, weights=None):
         self._footers[column] = {'method': 'mean', 'weights': weights}
 
@@ -141,6 +188,8 @@ class Table(collections.Sequence):
             column = self.get_column(column)
             if prop['method'] == 'sum':
                 value = sum(column)
+            elif prop['method'] == 'max':
+                value = max((r for r in column if r is not unknown))
             elif prop['method'] == 'mean':
                 try:
                     weights = self.get_column(prop.get('weights'))

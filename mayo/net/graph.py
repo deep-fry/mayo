@@ -1,5 +1,4 @@
 import re
-import copy
 import pprint
 import weakref
 import itertools
@@ -8,6 +7,7 @@ import collections
 import networkx as nx
 
 from mayo.util import ensure_list, recursive_apply
+from mayo.parse import ArithTag
 
 
 def _replace_module_kwargs(params):
@@ -30,59 +30,24 @@ def _replace_module_kwargs(params):
                 value = value.replace(placeholder, str(replace_value))
         return value
 
+    def replace_arith(value):
+        return ArithTag(replace_str(value.content))
+
     def skip_inner_module(value):
         if not isinstance(value, collections.Mapping):
             return None
         if value.get('type') != 'module':
             return None
-
-        # leak values of kwargs set for parent to the top-level definitions of
-        # child's kwargs.
-        # More specifically:
-        #  When instantiating a module, values for all of its kwargs are
-        #  supposed to be passed as top-level children of the module, e.g.
-        #    mod:
-        #      type: module
-        #      kwargs: { arg: null } #declaration
-        #      arg: value_for_arg    #definition
-        #  If a module itself is a child of another module, it is possible to
-        #  put a placeholder for the parent's kwarg in definitions of child's
-        #  kwarg. In that case, the placeholder should be resolved with regard
-        #  to the parent's context. In every other case, if the child contains
-        #  a placeholder, it should be resolved with regard to this child's
-        #  context.
-        #  The following code takes advantage of this:
-        #    mod1: &child
-        #      type: module,
-        #      kwargs: { child_arg: null }
-        #    mod2:
-        #      type: module
-        #      kwargs: { parent_arg: null }
-        #      child_inst: { <<: *child, child_arg: ^(parent_arg) }
-        # Xitong: FIXME @vaenyr Couldn't this be achieved by:
-        # ```yaml
-        # outer:
-        #     type: module
-        #     kwargs: {outer_arg: null}
-        #     layers:
-        #         _inner: &inner
-        #             type: module
-        #             kwargs: {inner_arg: null}
-        #             layers: ...
-        #             graph: ...
-        #         inner: {<<: *inner, inner_arg: ^(outer_arg)}
-        #     graph: ...
-        # ```
-        child_args = value.get('kwargs', {})
-        for key, _ in child_args.items():
-            if key in value and isinstance(value[key], str):
-                value[key] = replace_str(value[key])
-
         return value
 
     def replace(params, key):
-        p = copy.deepcopy(params[key])
-        params[key] = recursive_apply(p, {str: replace_str}, skip_inner_module)
+        p = params[key]
+        if isinstance(p, collections.Sequence):
+            p = [e.asdict(eval=False) for e in p]
+        else:
+            p = p.asdict(eval=False)
+        func_map = {str: replace_str, ArithTag: replace_arith}
+        params[key] = recursive_apply(p, func_map, skip_inner_module)
 
     replace(params, 'layers')
     replace(params, 'graph')
@@ -176,8 +141,8 @@ class Graph(object):
     def __init__(self, model):
         super().__init__()
         self.nx_graph = nx.OrderedMultiDiGraph()
-        inputs = model.get('inputs', 'input')
-        outputs = model.get('outputs', 'output')
+        self._input_names = inputs = model.get('inputs', 'input')
+        self._output_names = outputs = model.get('outputs', 'output')
         self._add_module(inputs, outputs, model['name'], model, [])
         self._optimize()
         self._validate()
@@ -192,16 +157,21 @@ class Graph(object):
                 .format(to_node))
 
     def input_nodes(self):
-        return self._filter_nodes(lambda n: not n.predecessors)
+        return self._filter_nodes(
+            lambda n: n.name in self._input_names and not n.module)
 
     def output_nodes(self):
-        return self._filter_nodes(lambda n: not n.successors)
+        return self._filter_nodes(
+            lambda n: n.name in self._output_names and not n.module)
 
     def nodes(self):
         return self.nx_graph.nodes()
 
     def edges(self):
         return self.nx_graph.edges()
+
+    def has_path(self, from_node, to_node):
+        return nx.has_path(self.nx_graph, from_node, to_node)
 
     def remove_node(self, node):
         return self.nx_graph.remove_node(node)
@@ -232,7 +202,7 @@ class Graph(object):
             submodule_path += [module_name]
         # add graph connections
         for connection in ensure_list(params['graph']):
-            with_layers = ensure_list(connection['with'])
+            with_layers = ensure_list(connection['with'] or [])
             edges = list(zip(
                 [connection['from']] + with_layers,
                 with_layers + [connection['to']],
@@ -243,7 +213,8 @@ class Graph(object):
                         continue
                     raise EdgeError(
                         'Input name {!r} collides with output name {!r} '
-                        'for layer {!r}.'.format(layer_name))
+                        'for layer {!r}.'
+                        .format(input_names, output_names, layer_name))
                 layer_params = None
                 if layer_name is not None:
                     try:
@@ -315,6 +286,7 @@ class Graph(object):
 
     def _optimize_propagation(self):
         changed = False
+        # remove redundant tensor nodes from graph
         for node in list(self.nodes()):
             if not isinstance(node, TensorNode):
                 continue
@@ -326,6 +298,11 @@ class Graph(object):
             # remove current node as it is redundant
             self.remove_node(node)
             self.add_edge(preds[0], succs[0])
+        # remove nodes not connected to output
+        output_nodes = self.output_nodes()
+        for node in list(self.nodes()):
+            if not any(self.has_path(node, o) for o in output_nodes):
+                self.remove_node(node)
         return changed
 
     def _ensure_connection(self, from_nodes, to_nodes):

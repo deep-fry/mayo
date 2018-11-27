@@ -1,12 +1,10 @@
 import time
-import functools
-import collections
 
 import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import Change, Percent
+from mayo.util import Change
 
 
 class ResourceEstimator(object):
@@ -212,77 +210,3 @@ class ResourceEstimator(object):
             for layer_name, stat_tensors in self.operations.items()
             if name in stat_tensors
         }
-
-    @staticmethod
-    def _multiply(items):
-        value = 1
-        for i in items:
-            value *= i
-        return value
-
-    @classmethod
-    def _kernel_size(cls, params):
-        kernel = params['kernel_size']
-        if isinstance(kernel, collections.Sequence):
-            return cls._multiply(kernel)
-        elif isinstance(kernel, int):
-            return kernel * kernel
-        raise TypeError(
-            'We do not understand the kernel size {!r}.'.format(kernel))
-
-    @staticmethod
-    def _mask_density(mask):
-        if not mask:
-            return 1, 1
-        # mask
-        valids = sum(np.sum(m.astype(np.int32)) for m in mask)
-        totals = sum(m.size for m in mask)
-        density = Percent(valids / totals)
-        # active
-        for mm in mask:
-            if mm.ndim == 1:
-                # channel pruning, static mask
-                active = mm
-                break
-        else:
-            flat_masks = (m for mm in mask for m in mm)
-            active = functools.reduce(np.logical_or, flat_masks)
-        active = Percent(np.sum(active) / active.size)
-        return density, active
-
-    @staticmethod
-    def _mask_join(masks, reducer):
-        length = 1
-        for hist in masks:
-            if isinstance(hist, list):
-                length = max(length, len(hist))
-        masks = [
-            [hist] * length if not isinstance(hist, list) else hist
-            for hist in masks]
-        return [functools.reduce(reducer, each) for each in zip(*masks)]
-
-    @staticmethod
-    def _mask_passthrough(info, layer_info):
-        if 'density' in info:
-            layer_info['density'] = info['density']
-        if 'active' in info:
-            layer_info['active'] = info['active']
-        if '_mask' in info:
-            layer_info['_mask'] = info['_mask']
-        return layer_info
-
-    @staticmethod
-    def _apply_input_sparsity(info, layer_info):
-        if '_mask' not in info:
-            return layer_info
-        # computation
-        if 'density' in info:
-            macs = layer_info['macs']
-            layer_info['macs'] = int(macs * info['density'])
-            layer_info['_original_macs'] = macs
-        # memory
-        if 'active' in info:
-            weights = layer_info['weights']
-            layer_info['weights'] = int(weights * info['active'])
-            layer_info['_original_weights'] = weights
-        return layer_info

@@ -3,11 +3,13 @@ docopt
 ipdb
 ipdbplugin
 ipython
+matplotlib
 networkx
 nose
 Pillow
 PyYAML
-readline; sys_platform != 'win32'
+gnureadline; sys_platform != 'win32'
+sklearn
 tensorflow
-tensorflow-gpu
+tensorflow-gpu; sys_platform != 'darwin'
 termcolor

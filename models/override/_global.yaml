@@ -13,6 +13,7 @@ _overrider:
         gradient: $(_overrider.gradient)
         depthwise_weights: $(_overrider.depthwise_weights)
     # interfaces
+    prep: {<<: *overrider}
     conv: {<<: *overrider}
     fc: {<<: *overrider}
     logits: {<<: *overrider}  # you sure?

@@ -106,6 +106,7 @@ class OverriderBase(object):
         super().__init__()
         self._applied = False
         self.name = None
+        self.alias = None
         self.session = session
         self.internals = {}
         self._parameter_config = {}
@@ -145,7 +146,7 @@ class OverriderBase(object):
             # assignment
             var = self._parameter_variables[name]
             try:
-                self.session.assign(var, value, raw_run=True)
+                self.session.assign(var, value)
             except ValueError:
                 raise ShapeError(
                     'Variable {!r} in overrider {!r} expects '
@@ -182,11 +183,12 @@ class OverriderBase(object):
         """
         if self._applied:
             raise OverrideAlreadyAppliedError(
-                'Overrider has already been applied to {!r}.'
+                'This overrider has already been applied to {!r}.'
                 .format(self.name))
         self._applied = True
         self.node = node
-        self.name = value.op.name
+        self.name = '{}/{}'.format(scope, self.__class__.__name__)
+        self.alias = value.op.name
         self.before = value
         self._scope = scope
         self._original_getter = getter
@@ -226,6 +228,12 @@ class OverriderBase(object):
                 'cannot assign.'.format(self.before, self))
             return
         self.session.assign(self.before, self.after)
+
+    def dump(self):
+        return dict(self._dump(), name=self.name)
+
+    def _dump(self):
+        return self.session.run(self._parameter_variables)
 
     def reset(self):
         """Reset internal variables to their respective initial values.  """
@@ -315,6 +323,9 @@ class ChainOverrider(OverriderBase, collections.Sequence):
     def reset(self):
         for o in self._overriders:
             o.reset()
+
+    def _dump(self):
+        return [o.dump() for o in self._overriders]
 
     def _info(self):
         return self._info_tuple(overriders=self._overriders)

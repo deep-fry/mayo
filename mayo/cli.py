@@ -235,6 +235,10 @@ Arguments:
         """Reset the internal state of overriders.  """
         self._get_session('train').overriders_reset()
 
+    def cli_overriders_dump(self):
+        """Export the internal parameters of overriders.  """
+        self._get_session().overriders_dump()
+
     def cli_reset_num_epochs(self):
         """Resets the number of training epochs.  """
         self._get_session('train').reset_num_epochs()
@@ -270,7 +274,7 @@ Arguments:
     def _purge_session(self):
         if not self.session:
             return
-        log.debug('Purging current session because config is updated.')
+        log.info('Purging current session because config is updated...')
         del self.session
         self.session = None
 

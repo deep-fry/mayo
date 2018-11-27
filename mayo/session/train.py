@@ -125,17 +125,6 @@ class Train(SessionBase):
         _, num_epochs = self.run(tasks, batch=True)
         return num_epochs
 
-    def _overriders_call(self, func_name):
-        # it is sufficient to use the first net, as overriders
-        # share internal variables
-        for _, overriders in self.overriders.items():
-            for k, o in overriders.items():
-                if k == 'gradient':
-                    for go in o.values():
-                        getattr(go, func_name)()
-                else:
-                    getattr(o, func_name)()
-
     def overriders_assign(self):
         log.info('Assigning overridden values of parameters to parameters...')
         self._overriders_call('assign')

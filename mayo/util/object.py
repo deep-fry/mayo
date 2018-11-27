@@ -1,5 +1,6 @@
 import os
 import functools
+import collections
 from importlib.util import spec_from_file_location, module_from_spec
 
 from mayo.util.collections import ensure_list
@@ -83,6 +84,10 @@ def object_from_params(params, import_from=None, import_from_prefix=''):
 
 
 def multi_objects_from_params(params, import_from=None, import_from_prefix=''):
+    if isinstance(params, collections.Mapping):
+        return {
+            k: object_from_params(p, import_from, import_from_prefix)
+            for k, p in params.items()}
     return [
         object_from_params(p, import_from, import_from_prefix)
         for p in ensure_list(params)]

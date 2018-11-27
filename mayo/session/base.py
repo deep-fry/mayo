@@ -1,11 +1,13 @@
 import functools
 from contextlib import contextmanager
 
+import numpy as np
 import tensorflow as tf
 
 from mayo.log import log
 from mayo.util import (
-    memoize_property, flatten, object_from_params, Change, Table, Percent)
+    memoize_property, flatten, object_from_params,
+    Change, Table, Percent, print_variables)
 from mayo.estimate import ResourceEstimator
 from mayo.override import ChainOverrider
 from mayo.session.checkpoint import CheckpointHandler
@@ -92,10 +94,12 @@ class SessionBase(object, metaclass=SessionMeta):
         def progress_formatter(estimator):
             progress = estimator.get_value('imgs_seen') / self.num_examples
             if self.is_training:
-                return 'epoch: {:.2f}'.format(progress)
-            if progress > 1:
-                progress = 1
-            return '{}: {}'.format(self.mode, Percent(progress))
+                progress = '{:.2f}'.format(progress)
+            else:
+                if progress > 1:
+                    progress = 1
+                progress = Percent(progress)
+            return '{}: {}'.format(self.mode, progress)
         self.estimator.register(
             self.imgs_seen_op, 'imgs_seen',
             history=1, formatter=progress_formatter)
@@ -180,17 +184,31 @@ class SessionBase(object, metaclass=SessionMeta):
     def overriders(self):
         return self.task.nets[0].overriders
 
-    def _overrider_assign_parameters(self):
-        # FIXME speghetti
-        # parameter assignments in overriders
-        for overriders in self.overriders.values():
+    def _overriders_call(self, func_name):
+        # it is sufficient to use the first net, as overriders
+        # share internal variables
+        results = {}
+        for node, overriders in self.overriders.items():
+            oresults = results.setdefault(node, {})
             for k, o in overriders.items():
                 if k == 'gradient':
-                    for each in o.values():
-                        each.assign_parameters()
+                    goresults = oresults.setdefault(k, {})
+                    for gk, go in o.items():
+                        goresults[gk] = getattr(go, func_name)()
                 else:
-                    o.assign_parameters()
+                    oresults[k] = getattr(o, func_name)()
+        return results
+
+    def _overrider_assign_parameters(self):
+        # parameter assignments in overriders
+        self._overriders_call('assign_parameters')
         self._run_assignments()
+
+    def overriders_dump(self):
+        data = self._overriders_call('dump')
+        name = '-'.join([self.config.model.name, self.config.dataset.name])
+        log.info('Dumping overrider parameters to {!r}...'.format(name))
+        np.save(name, data)
 
     def get_collection(self, key, first_gpu=False):
         func = lambda net, *args: tf.get_collection(key)
@@ -243,7 +261,7 @@ class SessionBase(object, metaclass=SessionMeta):
                 '{} adds new operations {} to a read-only graph.'
                 .format(func_name, diff_ops))
 
-    def assign(self, var, tensor, raw_run=False):
+    def assign(self, var, tensor):
         """
         Variable assignment.
 
@@ -274,8 +292,8 @@ class SessionBase(object, metaclass=SessionMeta):
             if var not in self.initialized_variables:
                 uninit_vars.append(var)
         if uninit_vars:
-            desc = '\n    '.join(v.op.name for v in uninit_vars)
-            log.warn('Variables are not initialized:\n    {}'.format(desc))
+            desc = 'Variables are not initialized'
+            print_variables(desc, (v.op.name for v in uninit_vars), 'debug')
             self.raw_run(tf.variables_initializer(uninit_vars))
             self.initialized_variables += uninit_vars
 
@@ -321,6 +339,7 @@ class SessionBase(object, metaclass=SessionMeta):
 
     def debug(self, tensors):
         def wrapped(t):
+            import numpy as np
             __import__('ipdb').set_trace()
             return t
         self.estimator.register(

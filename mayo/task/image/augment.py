@@ -102,8 +102,9 @@ class Augment(object):
             i = tf.add(i, shift)
         return i
 
-    def subtract_channel_means(self, i):
-        means = self.moment.get('mean')
+    def subtract_channel_means(self, i, means=None):
+        if means is None:
+            means = self.moment.get('mean')
         if not means:
             log.warn(
                 'Channel means not supplied, defaulting '

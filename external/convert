@@ -101,7 +101,7 @@ class PyTorchImporter(BaseImporter):
     def _import(file, rules):
         import torch
         var_to_tensor = {}
-        for k, v in torch.load(file).items():
+        for k, v in torch.load(file, map_location='cpu').items():
             if isinstance(v, torch.nn.Parameter):
                 v = v.data
             var_to_tensor[k] = v.numpy()
@@ -135,34 +135,17 @@ def var_to_shape(var_to_tensor):
     return shapes
 
 
-def permute(var_to_tensor, rules):
-    for name, tensor in var_to_tensor.items():
-        actions = rules.get(name)
-        if actions is None:
-            actions = rules.get(tensor.ndim, [])
-        if not actions:
-            log.info('Not permuting {!r}.'.format(name))
-        for action in actions:
-            action = dict(action)
-            func = action.pop('type')
-            log.info(
-                'Performing {!r} on tensor {!r} of shape {} with params {}...'
-                .format(func, name, tensor.shape, action))
-            tensor = getattr(np, func)(tensor, **action)
-            log.info(
-                'Tensor {!r} now has shape {}.'.format(name, tensor.shape))
-        var_to_tensor[name] = tensor
-    return var_to_tensor
-
-
-class BaseExporter(object):
+class Transformer(object):
     def __init__(self, var_to_tensor, rules):
         super().__init__()
-        rules = (rules or {}).get('rename')
-        if rules:
-            self.var_to_tensor = self._rename(var_to_tensor, rules)
-        else:
-            self.var_to_tensor = var_to_tensor
+        rules = rules or {}
+        rename_rules = rules.get('rename')
+        if rename_rules:
+            var_to_tensor = self._rename(var_to_tensor, rename_rules)
+        permute_rules = rules.get('permute')
+        if permute_rules:
+            var_to_tensor = self._permute(var_to_tensor, permute_rules)
+        self.var_to_tensor = var_to_tensor
 
     @staticmethod
     def _rename_map(variables, rules):
@@ -176,7 +159,7 @@ class BaseExporter(object):
                 else:
                     try:
                         nv = re.sub(pattern, replacement, nv)
-                    except re.error as e:
+                    except re.error:
                         raise SyntaxError(
                             'Unable to replace pattern {!r} in {!r} with {!r}.'
                             .format(pattern, nv, replacement))
@@ -201,12 +184,42 @@ class BaseExporter(object):
             new_var_to_tensor[nv] = var_to_tensor[v]
         return new_var_to_tensor
 
+    def _permute(self, var_to_tensor, rules):
+        for name, tensor in var_to_tensor.items():
+            actions = rules.get(name)
+            if actions is None:
+                actions = rules.get(tensor.ndim, [])
+            if not actions:
+                log.info('Not permuting {!r}.'.format(name))
+            for action in actions:
+                action = dict(action)
+                func = action.pop('type')
+                log.info(
+                    'Performing {!r} on tensor {!r} of shape {} with params {}...'
+                    .format(func, name, tensor.shape, action))
+                tensor = getattr(np, func)(tensor, **action)
+                log.info(
+                    'Tensor {!r} now has shape {}.'.format(name, tensor.shape))
+            var_to_tensor[name] = tensor
+        return var_to_tensor
+
+
+class BaseExporter(object):
+    def __init__(self, var_to_tensor):
+        super().__init__()
+        self.var_to_tensor = var_to_tensor
+
     def export(self, file, dry_run=False):
         if dry_run:
             log.key('Dry run, not actually saving.')
             return
         log.key('Exporting with {}...'.format(self.__class__.__name__))
-        self._export(file)
+        root, file = os.path.split(file)
+        if not root:
+            root = './'
+        else:
+            os.makedirs(root, exist_ok=True)
+        self._export(os.path.join(root, file))
 
     def _export(self, file):
         raise NotImplementedError
@@ -292,9 +305,7 @@ def main():
         importer_cls = _porter(f, _importers)
         importer = importer_cls(f, rules)
         var_to_tensor.update(importer.var_to_tensor)
-    permute_rules = rules.get('permute')
-    if permute_rules:
-        permute(var_to_tensor, permute_rules)
+    var_to_tensor = Transformer(var_to_tensor, rules).var_to_tensor
     if not args['--to']:
         print(yaml.dump(var_to_shape(var_to_tensor)))
     if args['--interact']:
@@ -310,7 +321,7 @@ def main():
         else:
             directory = '.'
         exporter_cls = _porter(to_file, _exporters)
-        exporter = exporter_cls(var_to_tensor, rules)
+        exporter = exporter_cls(var_to_tensor)
         exporter.export(to_file, args['--dry-run'])
 
 

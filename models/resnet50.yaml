@@ -1,126 +1,116 @@
 ---
 dataset:
     task:
-        background_class: {use: true}
+        background_class: {use: false}
         preprocess:
             shape:
-                height: 299
-                width: 299
+                height: 224
+                width: 224
                 channels: 3
-            validate: {type: central_crop, fraction: 0.875}
+            validate:
+                - {type: resize, height: 256, width: 256, fill: true}
+                - {type: crop_or_pad, height: 224, width: 224}
             final_cpu:
-                - {type: resize, fill: false}
-                - {type: linear_map, scale: 2.0, shift: -1.0}
+                - {type: linear_map, scale: 255.0, shift: 0.0}
+                - type: subtract_channel_means
+                  means: [123.680, 116.779, 103.939]
+                - {type: permute_channels, order: [2, 1, 0]}
 model:
-    name: resnet50
-    description:
-        ResNet50 implementation from::
-            https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py
+    version: 1
+    name: resnet_v$(model.version)_50
+    description: |
+        ResNet-50 implementation from::
+        https://github.com/keras-team/keras-applications/blob/master/keras_applications/resnet50.py
     layers:
-        _conv: &conv
-            type: convolution
-            weights_initializer: &initializer
-                type: tensorflow.variance_scaling_initializer
-            weights_regularizer: &regularizer
-                type: tensorflow.contrib.layers.l2_regularizer
-                scale: 0.0001
-            activation_fn: &activator tensorflow.nn.relu
+        _common: &common
+            weights_initializer:
+                type: tensorflow.initializers.he_normal
             normalizer_fn: tensorflow.contrib.slim.batch_norm
-            normalizer_params: &normalizer_params
-                decay: 0.997
-                epsilon: 0.00001
-        _bottleneck: &neck
-            type: module
-            kwargs:
-                depth: null
-                neck_depth: null
-                stride: null
-                padding: null
-                shortcut: null
-            layers:
-                norm: &norm
-                    <<: *normalizer_params
-                    type: batch_normalization
-                    activation_fn: *activator
-                conv_shortcut:
-                    <<: *conv
-                    kernel_size: 1
-                    stride: ^(stride)
-                    num_outputs: ^(depth)
-                    normalizer_fn: null
-                    activation_fn: null
-                pool_shortcut:
-                    type: max_pool
-                    kernel_size: 1
-                    stride: ^(stride)
-                conv1: &bottleneck_conv1
-                    <<: *conv
-                    kernel_size: 1
-                    stride: 1
-                    num_outputs: ^(neck_depth)
-                conv2:
-                    <<: *conv
-                    kernel_size: 3
-                    stride: ^(stride)
-                    padding: ^(padding)
-                    num_outputs: ^(neck_depth)
-                conv3:
-                    <<: *bottleneck_conv1
-                    num_outputs: ^(depth)
-                    normalizer_fn: null
-                    activation_fn: null
-                add: {type: add}
-            graph:
-                - {from: input, with: norm, to: preact}
-                - {from: preact, with: ^(shortcut)_shortcut, to: shortcut}
-                - {from: preact, with: [conv1, conv2, conv3], to: residual}
-                - {from: [shortcut, residual], with: add, to: output}
-        # root block
+            normalizer_params:
+                center: true
+                scale: true
+                decay: 0.99
+                epsilon: 0.001
+        _conv: &conv
+            <<: *common
+            type: convolution
+            padding: valid
         conv1:
             <<: *conv
             kernel_size: 7
             stride: 2
-            padding: 3
             num_outputs: 64
-            activation_fn: null
-            normalizer_fn: null
-        pool1: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
-        _start: &start {<<: *neck, shortcut: conv, stride: 1, padding: same}
-        _mid: &mid {<<: *neck, shortcut: pool, stride: 1, padding: same}
-        _end: &end {<<: *neck, shortcut: pool, stride: 2, padding: 1}
-        b11: {<<: *start, depth: 256, neck_depth: 64}
-        b12: {<<: *mid, depth: 256, neck_depth: 64}
-        b13: {<<: *end, depth: 256, neck_depth: 64}
-        b21: {<<: *start, depth: 512, neck_depth: 128}
-        b22: {<<: *mid, depth: 512, neck_depth: 128}
-        b23: {<<: *mid, depth: 512, neck_depth: 128}
-        b24: {<<: *end, depth: 512, neck_depth: 128}
-        b31: {<<: *start, depth: 1024, neck_depth: 256}
-        b32: {<<: *mid, depth: 1024, neck_depth: 256}
-        b33: {<<: *mid, depth: 1024, neck_depth: 256}
-        b34: {<<: *mid, depth: 1024, neck_depth: 256}
-        b35: {<<: *mid, depth: 1024, neck_depth: 256}
-        b36: {<<: *end, depth: 1024, neck_depth: 256}
-        b41: {<<: *start, depth: 2048, neck_depth: 512}
-        b42: {<<: *mid, depth: 2048, neck_depth: 512}
-        # last bottleneck has stride=1
-        b43: {<<: *mid, depth: 2048, neck_depth: 512}
-        postnorm: {<<: *norm}
-        pool5: {type: average_pool, kernel_size: 10}
-        logits:
-            <<: *conv
-            kernel_size: 1
+            padding: 3
+        pool1:
+            type: max_pool
+            kernel_size: 3
+            stride: 2
+            padding: 1
+        _bottleneck: &bb
+            type: module
+            kwargs: {stride: null, depth: null, shortcut: null}
+            layers:
+                conv1:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: ^(stride)
+                    num_outputs: ^(depth)
+                conv2:
+                    <<: *conv
+                    kernel_size: 3
+                    stride: 1
+                    padding: same
+                    num_outputs: ^(depth)
+                conv3:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: 1
+                    num_outputs: &final_depth !arith 4 * ^(depth)
+                    activation_fn: null
+                conv_shortcut:
+                    <<: *conv
+                    kernel_size: 1
+                    stride: ^(stride)
+                    num_outputs: *final_depth
+                    activation_fn: null
+                identity_shortcut: {type: identity}
+                add: {type: add}
+                relu: {type: activation, mode: relu}
+            graph:
+                - {from: input, with: [conv1, conv2, conv3], to: residual}
+                - {from: input, with: ^(shortcut)_shortcut, to: shortcut}
+                - {from: [residual, shortcut], with: [add, relu], to: output}
+        b2a: {<<: *bb, stride: 1, depth: 64, shortcut: conv}
+        b2b: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
+        b2c: {<<: *bb, stride: 1, depth: 64, shortcut: identity}
+        b3a: {<<: *bb, stride: 2, depth: 128, shortcut: conv}
+        b3b: {<<: *bb, stride: 1, depth: 128, shortcut: identity}
+        b3c: {<<: *bb, stride: 1, depth: 128, shortcut: identity}
+        b3d: {<<: *bb, stride: 1, depth: 128, shortcut: identity}
+        b4a: {<<: *bb, stride: 2, depth: 256, shortcut: conv}
+        b4b: {<<: *bb, stride: 1, depth: 256, shortcut: identity}
+        b4c: {<<: *bb, stride: 1, depth: 256, shortcut: identity}
+        b4d: {<<: *bb, stride: 1, depth: 256, shortcut: identity}
+        b4e: {<<: *bb, stride: 1, depth: 256, shortcut: identity}
+        b4f: {<<: *bb, stride: 1, depth: 256, shortcut: identity}
+        b5a: {<<: *bb, stride: 2, depth: 512, shortcut: conv}
+        b5b: {<<: *bb, stride: 1, depth: 512, shortcut: identity}
+        b5c: {<<: *bb, stride: 1, depth: 512, shortcut: identity}
+        avg_pool: {type: average_pool, kernel_size: global}
+        flatten: {type: flatten}
+        fc:
+            <<: *common
+            type: fully_connected
             num_outputs: $(dataset.task.num_classes)
             activation_fn: null
             normalizer_fn: null
-        squeeze: {type: squeeze, axis: [1, 2]}
     graph:
         from: input
         with: [
             conv1, pool1,
-            b11, b12, b13,
-            b21, b22, b23, b24,
-            b31, b32, b33, b34, b35, b36,
-            b41, b42, b43,
-            postnorm, pool5, logits, squeeze]
+            b2a, b2b, b2c,
+            b3a, b3b, b3c, b3d,
+            b4a, b4b, b4c, b4d, b4e, b4f,
+            b5a, b5b, b5c,
+            avg_pool, flatten, fc]
         to: output

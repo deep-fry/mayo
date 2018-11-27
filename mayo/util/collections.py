@@ -1,7 +1,5 @@
 import collections
 
-import tensorflow as tf
-
 
 def unique(items):
     found = set()
@@ -23,6 +21,7 @@ def flatten(items, skip_none=False):
 
 
 def ensure_list(item_or_list):
+    import tensorflow as tf
     if isinstance(item_or_list, (str, collections.Mapping, tf.Tensor)):
         return [item_or_list]
     if isinstance(item_or_list, list):
@@ -50,8 +49,10 @@ def recursive_apply(obj, apply_funcs, skip_func=None):
         if skip_obj is not None:
             return skip_obj
     if isinstance(obj, collections.Mapping):
+        new_obj = {}
         for k, v in obj.items():
-            obj[k] = recursive_apply(v, apply_funcs, skip_func)
+            new_obj[k] = recursive_apply(v, apply_funcs, skip_func)
+        obj = new_obj
     elif isinstance(obj, (tuple, list, set, frozenset)):
         obj = obj.__class__(
             recursive_apply(v, apply_funcs, skip_func) for v in obj)
