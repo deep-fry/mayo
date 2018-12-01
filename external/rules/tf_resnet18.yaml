@@ -14,20 +14,25 @@
 ---
 permute:
     2: [{type: transpose, axes: [1, 0]}]
-    4: [{type: transpose, axes: [2, 3, 1, 0]}]
+    4: [{type: transpose, axes: [3, 2, 1, 0]}]
 rename:
-    / : \.
+    / : .
     resnet18: module
     biases: bias
     weights: weight
-    weights.DynamicNetworkSurgeryPruner.mask: mask
+    weight.DynamicNetworkSurgeryPruner.mask: mask
     conv(\d).BatchNorm: bn\1
+    b(\d)1.bn(\d): layer\1.0.bn\2
+    b(\d)2.bn(\d): layer\1.1.bn\2
     moving_mean: running_mean
-    moving_var: running_var
+    moving_variance: running_var
     gamma: weight
     beta: bias
-    resnet18/fc5: fc
-    b(\d)1: layer\1.0
-    b(\d)2: layer\1.1
+    fc5: fc
+    b(\d)1.conv(\d): layer\1.0.conv\2
+    b(\d)2.conv(\d): layer\1.1.conv\2
     downsample_shortcut: downsample.0
-    downsample_shortcut.BatchNorm: downsample.1
+    downsample.0.BatchNorm: downsample.1
+    b(\d)1.downsample: layer\1.0.downsample
+    b(\d)2.downsample: layer\1.1.downsample
+
