@@ -250,12 +250,15 @@ class CheckpointExporter(BaseExporter):
         saver.save(session, file, write_meta_graph=False)
 
 
-class PyTorchExporter(BaseImporter):
-    def _export(file):
+class PyTorchExporter(BaseExporter):
+    def _export(self, file):
         import torch
         state = {}
         for k, v in self.var_to_tensor.items():
-            state[key] = torch.nn.Parameter(v)
+            if v.dtype == np.bool_:
+                v = v.astype(int)
+            if isinstance(v, np.ndarray):
+                state[k] = torch.nn.Parameter(torch.Tensor(v))
         torch.save(state, file)
 
 
