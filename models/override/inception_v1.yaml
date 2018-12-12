@@ -1,0 +1,24 @@
+---
+_import: ../inception_v1.yaml
+model.layers:
+    prep:  {overrider: $(_overrider.prep)}
+    conv1: &conv {overrider: $(_overrider.conv)}
+    conv2b: {<<: *conv}
+    conv2c: {<<: *conv}
+    mixed3b: &mixed3b
+        layers:
+            b0: {<<: *conv}
+            b1a: {<<: *conv}
+            b1b: {<<: *conv}
+            b2a: {<<: *conv}
+            b2b: {<<: *conv}
+            b3b: {<<: *conv}
+    mixed3c: {<<: *mixed3b}
+    mixed4b: {<<: *mixed3b}
+    mixed4c: {<<: *mixed3b}
+    mixed4d: {<<: *mixed3b}
+    mixed4e: {<<: *mixed3b}
+    mixed4f: {<<: *mixed3b}
+    mixed5b: {<<: *mixed3b}
+    mixed5c: {<<: *mixed3b}
+    logits: {overrider: $(_overrider.logits)}
