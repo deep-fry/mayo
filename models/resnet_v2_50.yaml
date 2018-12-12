@@ -42,6 +42,8 @@ model:
                     <<: *normalizer_params
                     type: batch_normalization
                     activation_fn: *activator
+                    scale: True
+                    center: True
                 conv_shortcut:
                     <<: *conv
                     kernel_size: 1
