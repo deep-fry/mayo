@@ -4,18 +4,22 @@ dataset:
         background_class: {use: true}
         preprocess:
             shape:
-                height: 224
-                width: 224
+                height: 299
+                width: 299
                 channels: 3
-            validate: null
-            _final_cpu_imagenet:
-                - {type: subtract_channel_means}
-                - {type: linear_map, scale: 255.0}
-            _final_cpu:
+            validate: {type: central_crop, fraction: 0.875}
+            final_cpu:
+                - {type: resize, fill: false}
                 - {type: linear_map, scale: 2.0, shift: -1.0}
-            final_cpu: !arith >
-                $(dataset.task._final_cpu_imagenet)
-                if $(dataset.name) == 'imagenet' else '_final_cpu'
+            # validate: null
+            # _final_cpu_imagenet:
+            #     - {type: subtract_channel_means}
+            #     - {type: linear_map, scale: 255.0}
+            # _final_cpu:
+            #     - {type: linear_map, scale: 2.0, shift: -1.0}
+            # final_cpu: !arith >
+            #     $(dataset.task._final_cpu_imagenet)
+            #     if $(dataset.name) == 'imagenet' else '_final_cpu'
             # validate:
             #     - {type: central_crop, fraction: 0.875}
             # final_cpu:
