@@ -16,7 +16,8 @@ class Classify(ImageTaskBase):
 
     def transform(self, net, data, prediction, truth):
         truth = truth[0] + self.label_offset
-        return data['input'], prediction['output'], truth
+        # return data['input'], prediction['output'], truth
+        return tf.ones(data['input'].shape), prediction['output'], truth
 
     @staticmethod
     def _warn_ties(ties, num_ties, thresholds):

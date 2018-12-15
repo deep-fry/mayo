@@ -123,6 +123,11 @@ class Layers(TFNetBase, LayerEstimateMixin):
             return tensor
         return slim.avg_pool2d(tensor, **params)
 
+    def instantiate_reduce_mean(self, node, tensor, params):
+        params.pop('scope')
+        return tf.reduce_mean(tensor, **params)
+
+
     def instantiate_max_pool(self, node, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
         if self._should_pool_nothing(params):
