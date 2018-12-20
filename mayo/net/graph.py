@@ -146,6 +146,7 @@ class Graph(object):
         self._add_module(inputs, outputs, model['name'], model, [])
         self._optimize()
         self._validate()
+        # import pdb; pdb.set_trace()
 
     def add_edge(self, from_node, to_node):
         self.nx_graph.add_edge(from_node, to_node)
