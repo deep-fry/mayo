@@ -73,13 +73,15 @@ class Layers(TFNetBase, LayerEstimateMixin):
         output = tf.concat(output_slices, axis=-1)
 
         # add bias
-        biases_initializer = params.get(
-            'biases_initializer', tf.zeros_initializer())
-        biases_regularizer = params.get('biases_regularizer', None)
-        biases = tf.get_variable(
-            '{}/biases'.format(scope), out_channels,
-            initializer=biases_initializer, regularizer=biases_regularizer)
-        output = tf.nn.bias_add(output, biases)
+        use_bias = params.pop('use_bias', True)
+        if use_bias:
+            biases_initializer = params.get(
+                'biases_initializer', tf.zeros_initializer())
+            biases_regularizer = params.get('biases_regularizer', None)
+            biases = tf.get_variable(
+                '{}/biases'.format(scope), out_channels,
+                initializer=biases_initializer, regularizer=biases_regularizer)
+            output = tf.nn.bias_add(output, biases)
 
         # normalization & activation
         if normalizer_fn:
@@ -190,3 +192,9 @@ class Layers(TFNetBase, LayerEstimateMixin):
         if activation_fn:
             return activation_fn(tensors)
         return tensors
+
+    def instantiate_pad(self, node, tensors, params):
+        return tf.pad(tensor=tensors, **params)
+
+    def instantiate_crop(self, node, tensors, params):
+        return tf.keras.layers.Cropping2D(**params)(tensors)

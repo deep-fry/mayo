@@ -1,0 +1,263 @@
+---
+dataset:
+    task:
+        background_class: {use: true}
+        preprocess:
+            shape:
+                height: 299
+                width: 299
+                channels: 3
+            validate: {type: central_crop, fraction: 0.875}
+            final_cpu:
+                - {type: resize, fill: false}
+                - {type: linear_map, scale: 2.0, shift: -1.0}
+model:
+    name: nasnet
+    description:
+        nasnet mobile implementation references::
+            https://github.com/tensorflow/models/blob/master/research/slim/nets/nasnet/nasnet.py
+            https://github.com/veronikayurchuk/pretrained-models.pytorch/blob/master/pretrainedmodels/models/nasnet_mobile.py
+            https://github.com/johannesu/NASNet-keras/blob/master/nasnet.py
+    layers:
+        _init: &init
+            weights_initializer: &initializer
+                type: tensorflow.variance_scaling_initializer
+        _conv: &conv
+            <<: *init
+            type: convolution
+            weights_regularizer: &regularizer
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.0001
+            activation_fn: null
+            normalizer_fn: null
+        _norm: &norm
+            # normalizer_fn: tensorflow.contrib.slim.batch_norm
+            type: batch_normalization
+            activation_fn: null
+            normalizer_params: &normalizer_params
+                decay: 0.997
+                epsilon: 0.00001
+        _dsconv: &dsconv
+            type: module
+            kwargs: {stride: 1, num_outputs: null, kernel_size: 3}
+            layers:
+                depthwise:
+                    <<: *conv
+                    type: depthwise_convolution
+                    stride: ^(stride)
+                    kernel_size: [^(kernel_size), ^(kernel_size)]
+                    use_bias: False
+                pointwise:
+                    <<: *conv
+                    kernel_size: [1, 1]
+                    stride: 1
+                    num_outputs: ^(num_outputs)
+                    weights_regularizer: *regularizer
+                    use_bias: False
+            graph: {from: input, with: [depthwise, pointwise], to: output}
+        _branch_sep: &bsep
+            type: module
+            kwargs: {num_outputs: null, kernel_size: null, stride: null}
+            layers:
+                relu: &activator
+                    type: tensorflow.nn.relu
+                norm1: {<<: *norm, activation_fn: tensorflow.nn.relu}
+                norm2: {<<: *norm}
+                sep1:
+                    <<: *dsconv
+                    num_outputs: ^(num_outputs)
+                    kernel_size: ^(kernel_size)
+                sep2:
+                    <<: *dsconv
+                    num_outputs: ^(num_outputs)
+                    kernel_size: ^(kernel_size)
+            graph:
+                from: input
+                with: [relu, sep1, norm1, spe2, norm2]
+                to: output
+        _squeeze: &squeeze_conv
+            type: module
+            kwargs: {num_outputs: null}
+            layers:
+                relu: {<<: *activator}
+                norm1: {<<: *norm, activation_fn: tensorflow.nn.relu}
+                conv:
+                    <<: *conv
+                    kernel_size: [1, 1]
+                    stride: 1
+                    num_outputs: ^(num_outputs)
+                    weights_regularizer: *regularizer
+                    use_bias: False
+            graph:
+                from: input
+                with: [relu, conv, norm]
+                to: output
+        _fit_reduce: &fit_reduce
+            type: module
+            kwargs: {bypass: False, num_outputs: null}
+            layers:
+                relu: {<<: *activator}
+                pool0: {type: average_pool, kernel_size: 1, stride: 2, padding: valid}
+                conv0: &fit_conv
+                    <<: *conv
+                    kernel_size: 1
+                    padding: same
+                    num_outputs: ^(num_outputs)
+                    use_bias: False
+                padding:
+                    type: pad
+                    paddings: [[1, 0],[1, 0]]
+                slicing:
+                    type: slice
+                    begin: [[1, 0],[1, 0]]
+                    begin: [[1, 0],[1, 0]]
+                cropping:
+                    type: crop
+                    cropping: ((1, 0), (1, 0))
+                pool1: {type: average_pool, kernel_size: 1, stride: 2, padding: valid}
+                conv1: {<<: *fit_conv}
+                concat: &concat {type: concat, axis: 3}
+                norm: {<<: *norm}
+                squeeze: {<<: *squeeze_conv, num_outputs: ^(num_outputs)}
+            graph:
+                - {from: input, with: [relu, pool0, conv0], to: post_conv0}
+                - {from: input, with: [padding, cropping, pool1, conv1], to: post_conv1}
+                - {from: [post_conv0, post_conv1], with: concat, to: pre_norm}
+                - {from: pre_norm, with: norm, to: output}
+        _fit: &fit {<<: *squeeze_conv}
+        _normal_cell: &ncell
+            type: moudle
+            kwargs:
+                num_outputs: null
+                reduce: true
+            inputs: [in, prev]
+            layers:
+                squeeze: {<<: *squeeze_conv}
+                fit_reduce: {<<: *fit_reduce}
+                b0a: {<<: *bsep, kernel_size: 5, num_outputs: ^(num_outputs)}
+                b0b: {<<: *bsep, kernel_size: 3, num_outputs: ^(num_outputs)}
+                b1a: {<<: *bsep, kernel_size: 5, num_outputs: ^(num_outputs)}
+                b1b: {<<: *bsep, kernel_size: 3, num_outputs: ^(num_outputs)}
+                b2a: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
+                b2b: {type: identity}
+                b3a: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
+                b3b: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
+                b4a: {<<: *bsep, kernel_size: 3, stride: 1, padding: same}
+                b4b: {type: identity}
+                add: {type: add}
+                concat: {<<: *concat}
+            graph:
+                - {from: in, with: squeeze, to: sin}
+                - {from: prev, with: squeeze, to: hidden_squeeze}
+                - {from: prev, with: fit_reduce, to: hidden_reduce}
+                - from: !arith >
+                    'hidden_reduce' if ^(reduce) else 'hidden_squeeze'
+                  with: null
+                  to: hidden
+                - {from: sin, with: b0a, to: b0a_res}
+                - {from: hidden, with: b0b, to: b0b_res}
+                - {from: hidden, with: b1a, to: b1a_res}
+                - {from: hidden, with: b1b, to: b1b_res}
+                - {from: sin, with: b2a, to: b2a_res}
+                - {from: hidden, with: b2b, to: b2b_res}
+                - {from: hidden, with: b3a, to: b3a_res}
+                - {from: hidden, with: b3b, to: b3b_res}
+                - {from: sin, with: b4a, to: b4a_res}
+                - {from: sin, with: b4b, to: b4b_res}
+                - {from: [b0a_res, b0b_res], with: add, to: b0_res}
+                - {from: [b1a_res, b1b_res], with: add, to: b1_res}
+                - {from: [b2a_res, b2b_res], with: add, to: b2_res}
+                - {from: [b3a_res, b3b_res], with: add, to: b3_res}
+                - {from: [b4a_res, b4b_res], with: add, to: b4_res}
+                - from: [b0_res, b1_res, b2_res, b3_res, b4_res, hidden]
+                  with: concat
+                  to: output
+        _reduction_cell: &rcell
+            type: moudle
+            kwargs:
+                num_outputs: null
+                reduce: false
+                skip: false
+            inputs: [in, prev]
+            layers:
+                squeeze: {<<: *squeeze_conv}
+                fit_reduce: {<<: *fit_reduce}
+                b0a: {<<: *bsep, kernel_size: 5, stride: 2, num_outputs: ^(num_outputs)}
+                b0b: {<<: *bsep, kernel_size: 7, stride: 2, num_outputs: ^(num_outputs)}
+                b1a: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
+                b1b: {<<: *bsep, kernel_size: 7, stride: 2, num_outputs: ^(num_outputs)}
+                b2a: {type: average_pool, kernel_size: 3, stride: 2, padding: same}
+                b2b: {<<: *bsep, kernel_size: 5, stride: 2, num_outputs: ^(num_outputs)}
+                b3a: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
+                b3b: {type: identity}
+                b4a: {<<: *bsep, kernel_size: 3, stride: 1, num_outputs: ^(num_outputs)}
+                b4b: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
+                add: {type: add}
+                concat: {<<: *concat}
+            graph:
+                - {from: in, with: squeeze, to: sin}
+                - {from: prev, with: squeeze, to: hidden_squeeze}
+                - {from: prev, with: fit_reduce, to: hidden_reduce}
+                - from: !arith >
+                      'hidden_reduce' if ^(reduce) else 'hidden_squeeze'
+                  with: null
+                  to: hidden_tmp
+                - from: !arith >
+                      'prev' if ^(skip) else 'hidden_tmp'
+                  with: null
+                  to: hidden
+                - {from: sin, with: b0a, to: b0a_res}
+                - {from: hidden, with: b0b, to: b0b_res}
+                - {from: sin, with: b1a, to: b1a_res}
+                - {from: hidden, with: b1b, to: b1b_res}
+                - {from: sin, with: b2a, to: b2a_res}
+                - {from: hidden, with: b2b, to: b2b_res}
+                - {from: [b0a_res, b0b_res], with: add, to: b0_res}
+                - {from: [b1a_res, b1b_res], with: add, to: b1_res}
+                - {from: [b2a_res, b2b_res], with: add, to: b2_res}
+                - {from: b0_res, with: b3a, to: b3a_res}
+                - {from: [b3a_res, b1_res], with: add, to: b3_res}
+                - {from: b0_res, with: b4a, to: b4a_res}
+                - {from: sin, with: b4b, to: b4b_res}
+                - {from: [b4a_res, b1_res], with: add, to: b4_res}
+                - {from: [b1_res, b2_res, b3_res, b4_res], with: concat, to: output}
+        conv0:
+            <<: *conv
+            kernel_size: 3
+            stride: 2
+            padding: valid
+            num_outputs: 32
+        # two reduction cells
+        stem0: {<<: *rcell, num_outputs: 44, skip: True}
+        stem1: {<<: *rcell, num_outputs: 44, reduce: True}
+        cell0: {<<: *ncell, num_outputs: 44, reduce: True}
+        cell1: {<<: *ncell, num_outputs: 44}
+        cell2: {<<: *ncell, num_outputs: 44}
+        cell3: {<<: *ncell, num_outputs: 44}
+        rcell0: {<<: *rcell, num_outputs: 88}
+        cell4: {<<: *ncell, num_outputs: 88, reduce: True}
+        cell5: {<<: *ncell, num_outputs: 88}
+        cell6: {<<: *ncell, num_outputs: 88}
+        cell7: {<<: *ncell, num_outputs: 88}
+        rcell1: {<<: *rcell, num_outputs: 176}
+        cell8: {<<: *ncell, num_outputs: 176, reduce: True}
+        cell9: {<<: *ncell, num_outputs: 176}
+        cell10: {<<: *ncell, num_outputs: 176}
+        cell11: {<<: *ncell, num_outputs: 176}
+        relu12: {<<: *activator}
+        avgpool: {type: average_pool, kernel_size: 7}
+        dropout: {type: dropout, keep_prob: 0.5}
+        fc:
+            <<: *init
+            type: fully_connected
+            num_outputs: $(dataset.task.num_classes)
+            activation_fn: null
+    graph:
+        from: input
+        with: [
+            conv1, stem0, stem1,
+            cell0, cell1, cell2, cell3, rcell0,
+            cell4, cell5, cell6, cell7, rcell1,
+            cell8, cell9, cell10, cell11, cell1,
+            relu12, avgpool, dropout, fc]
+        to: output
