@@ -76,16 +76,16 @@ model:
                 to: output
         _squeeze: &squeeze_conv
             type: module
-            kwargs: {num_outputs: null}
+            kwargs:
+                channels: null
             layers:
                 relu: {<<: *activator}
                 norm: {<<: *norm, activation_fn: tensorflow.nn.relu}
                 conv:
                     <<: *conv
+                    num_outputs: ^(channels)
                     kernel_size: [1, 1]
                     stride: 1
-                    num_outputs: ^(num_outputs)
-                    weights_regularizer: *regularizer
             graph:
                 from: input
                 with: [relu, conv, norm]
@@ -127,8 +127,8 @@ model:
                 reduce: true
             inputs: [in, prev]
             layers:
-                squeeze_in: {<<: *squeeze_conv, num_outputs: ^(num_outputs)}
-                squeeze_hidden: {<<: *squeeze_conv, num_outputs: ^(num_outputs)}
+                squeeze_in: {<<: *squeeze_conv, channels: ^(num_outputs)}
+                squeeze_hidden: {<<: *squeeze_conv, channels: ^(num_outputs)}
                 fit_reduce: {<<: *fit_reduce}
                 b0a: {<<: *bsep, kernel_size: 5, num_outputs: ^(num_outputs)}
                 b0b: {<<: *bsep, kernel_size: 3, num_outputs: ^(num_outputs)}
@@ -180,18 +180,56 @@ model:
                 reduce: false
                 skip: false
             layers:
-                squeeze_in: {<<: *squeeze_conv, num_outputs: ^(num_outputs)}
-                squeeze_hidden: {<<: *squeeze_conv, num_outputs: ^(num_outputs)}
+                squeeze_in_relu: {<<: *activator}
+                squeeze_in_norm: {<<: *norm, activation_fn: tensorflow.nn.relu}
+                squeeze_in_conv:
+                    <<: *conv
+                    num_outputs: ^(num_outputs)
+                    kernel_size: [1, 1]
+                    stride: 1
+                squeeze_hidden_relu: {<<: *activator}
+                squeeze_hidden_norm: {<<: *norm, activation_fn: tensorflow.nn.relu}
+                squeeze_hidden_conv:
+                    <<: *conv
+                    num_outputs: ^(num_outputs)
+                    kernel_size: [1, 1]
+                    stride: 1
+                # squeeze_in:
+                #     <<: *squeeze_conv
+                #     channels: ^(channels)
+                # squeeze_hidden:
+                #     <<: *squeeze_conv
+                #     channels: ^(channels)
                 fit_reduce: {<<: *fit_reduce}
-                b0a: {<<: *bsep, kernel_size: 5, stride: 2, num_outputs: ^(num_outputs)}
-                b0b: {<<: *bsep, kernel_size: 7, stride: 2, num_outputs: ^(num_outputs)}
+                b0a:
+                    <<: *bsep
+                    kernel_size: 5
+                    stride: 2
+                    num_outputs: ^(num_outputs)
+                b0b:
+                    <<: *bsep
+                    kernel_size: 7
+                    stride: 2
+                    num_outputs: ^(num_outputs)
                 b1a: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
-                b1b: {<<: *bsep, kernel_size: 7, stride: 2, num_outputs: ^(num_outputs)}
+                b1b:
+                    <<: *bsep
+                    kernel_size: 7
+                    stride: 2
+                    num_outputs: ^(num_outputs)
                 b2a: {type: average_pool, kernel_size: 3, stride: 2, padding: same}
-                b2b: {<<: *bsep, kernel_size: 5, stride: 2, num_outputs: ^(num_outputs)}
+                b2b:
+                    <<: *bsep
+                    kernel_size: 5
+                    stride: 2
+                    num_outputs: ^(num_outputs)
                 b3a: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
                 b3b: {type: identity}
-                b4a: {<<: *bsep, kernel_size: 3, stride: 1, num_outputs: ^(num_outputs)}
+                b4a:
+                    <<: *bsep
+                    kernel_size: 3
+                    stride: 1
+                    num_outputs: ^(num_outputs)
                 b4b: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
                 add_b0: {type: add}
                 add_b1: {type: add}
@@ -200,9 +238,15 @@ model:
                 add_b4: {type: add}
                 concat: {<<: *concat}
             graph:
-                - {from: in, with: squeeze_in, to: sin}
-                - {from: prev, with: squeeze_hidden, to: hidden_squeeze}
-                - {from: prev, with: fit_reduce, to: hidden_reduce}
+                - from: in
+                  with: [squeeze_in_relu, squeeze_in_norm, squeeze_in_conv]
+                  to: sin
+                - from: prev
+                  with: [squeeze_hidden_relu, squeeze_hidden_norm, squeeze_hidden_conv]
+                  to: hidden_squeeze
+                - from: prev
+                  with: fit_reduce
+                  to: hidden_reduce
                 - from: !arith >
                       'hidden_reduce' if ^(reduce) else 'hidden_squeeze'
                   with: null

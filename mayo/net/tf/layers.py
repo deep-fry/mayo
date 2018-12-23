@@ -152,8 +152,9 @@ class Layers(TFNetBase, LayerEstimateMixin):
 
     def instantiate_batch_normalization(self, node, tensor, params):
         params['is_training'] = self.is_training
+        normalizer_params = params.pop('normalizer_params')
+        params.update(dict(normalizer_params))
         return slim.batch_norm(tensor, **params)
-        # return tf.contrib.layers.batch_norm(tensor, **params)
 
     def instantiate_squeeze(self, node, tensor, params):
         return tf.squeeze(tensor, **use_name_not_scope(params))
