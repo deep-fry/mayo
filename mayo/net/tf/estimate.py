@@ -180,15 +180,17 @@ class LayerEstimateMixin(object):
         return apply_sparsity(o, in_info, out_info, in_shape, out_shape)
 
     def estimate_concat(self, node, in_infos, input_shapes, out_shape, params):
-        masks = []
-        for info, shape in zip(in_infos, input_shapes):
-            hist = info.get('_mask') or np.ones(shape, dtype=bool)
-            masks.append(hist)
-        mask = []
-        for each in zip(*masks):
-            mask.append(np.concatenate(each, axis=-1))
-        density, active = mask_density(mask)
-        return {'_mask': mask, 'density': density, 'active': active}
+        # FIXME only works for FBS
+        return {}
+        # masks = []
+        # for info, shape in zip(in_infos, input_shapes):
+        #     hist = info.get('_mask') or np.ones(shape, dtype=bool)
+        #     masks.append(hist)
+        # mask = []
+        # for each in zip(*masks):
+        #     mask.append(np.concatenate(each, axis=-1))
+        # density, active = mask_density(mask)
+        # return {'_mask': mask, 'density': density, 'active': active}
 
     @staticmethod
     def _estimate_join(masks, reducer):
