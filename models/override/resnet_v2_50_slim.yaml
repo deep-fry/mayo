@@ -1,0 +1,27 @@
+---
+_import: ../resnet_v2_50_slim.yaml
+model:
+    name: resnet_v2_50_slim
+    layers:
+        _basic_block: &bb
+            layers:
+                conv1: &conv {overrider: $(_overrider.conv)}
+                conv2: {<<: *conv}
+        conv1: {<<: *conv}
+        b11: {<<: *bb}
+        b12: {<<: *bb}
+        b13: {<<: *bb}
+        b21: {<<: *bb}
+        b22: {<<: *bb}
+        b23: {<<: *bb}
+        b24: {<<: *bb}
+        b31: {<<: *bb}
+        b32: {<<: *bb}
+        b33: {<<: *bb}
+        b34: {<<: *bb}
+        b35: {<<: *bb}
+        b36: {<<: *bb}
+        b41: {<<: *bb}
+        b42: {<<: *bb}
+        b43: {<<: *bb}
+        fc: {overrider: $(_overrider.logits)}

@@ -27,7 +27,7 @@ dataset:
             #     - {type: linear_map, scale: 255.0}
             #     # - {type: normalize_channels}
 model:
-    name: resnet_v2_50
+    name: resnet_v2_50_slim
     description:
         ResNet50 implementation from::
             https://github.com/tensorflow/models/blob/master/research/slim/nets/resnet_v2.py
