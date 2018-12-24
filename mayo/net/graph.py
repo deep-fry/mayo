@@ -7,7 +7,7 @@ import collections
 import networkx as nx
 
 from mayo.util import ensure_list, recursive_apply
-from mayo.parse import ArithTag
+from mayo.parse import ArithTag, _DotDict
 
 
 def _replace_module_kwargs(params):
@@ -33,24 +33,30 @@ def _replace_module_kwargs(params):
     def replace_arith(value):
         return ArithTag(replace_str(value.content))
 
+    func_map = {str: replace_str, ArithTag: replace_arith}
+
     def skip_inner_module(value):
         if not isinstance(value, collections.Mapping):
             return None
         if value.get('type') != 'module':
             return None
-        return value
+        # recursively replace inner module kwargs
+        inner_kwargs = value.get('kwargs', {})
+        kwargs = {k: v for k, v in value.items() if k in inner_kwargs}
+        value = dict(value, **recursive_apply(kwargs, func_map))
+        return _replace_module_kwargs(value)
 
-    def replace(params, key):
-        p = params[key]
-        if isinstance(p, collections.Sequence):
-            p = [e.asdict(eval=False) for e in p]
+    def replace(p):
+        asdict = lambda d: \
+            d.asdict(eval=False) if isinstance(d, _DotDict) else d
+        if isinstance(p, (list, tuple)):
+            p = [asdict(e) for e in p]
         else:
-            p = p.asdict(eval=False)
-        func_map = {str: replace_str, ArithTag: replace_arith}
-        params[key] = recursive_apply(p, func_map, skip_inner_module)
+            p = asdict(p)
+        return recursive_apply(p, func_map, skip_inner_module)
 
-    replace(params, 'layers')
-    replace(params, 'graph')
+    params['layers'] = replace(params['layers'])
+    params['graph'] = replace(params['graph'])
     return params
 
 
