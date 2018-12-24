@@ -5,8 +5,10 @@ model:
     layers:
         _basic_block: &bb
             layers:
-                conv1: &conv {overrider: $(_overrider.conv)}
+                conv_shortcut: &conv {overrider: $(_overrider.conv)}
+                conv1: {<<: *conv}
                 conv2: {<<: *conv}
+                conv3: {<<: *conv}
         conv1: {<<: *conv}
         b11: {<<: *bb}
         b12: {<<: *bb}

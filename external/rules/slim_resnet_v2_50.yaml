@@ -5,6 +5,7 @@
 # into a checkpoint used by our mobilenet.yaml model.
 ---
 rename:
+    resnet_v2_50: resnet_v2_50_slim
     block(\d)/unit_(\d): b\1\2
     bottleneck_v2/: ''
     preact: norm
