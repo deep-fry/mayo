@@ -166,8 +166,11 @@ class LayerEstimateMixin(object):
             self, node, in_info, in_shape, out_shape, params):
         out_info = self._estimate_depthwise_convolution(out_shape, params)
         o = self._weight_overrider(node)
-        out_info = apply_sparsity(o, in_info, out_info, in_shape, out_shape)
-        return passthrough(in_info, out_info)
+        out_info = apply_sparsity(
+            o, in_info, out_info, in_shape, out_shape, depthwise=True)
+        return out_info
+        # FIXME only works for FBS
+        # return passthrough(in_info, out_info)
 
     def estimate_fully_connected(
             self, node, in_info, in_shape, out_shape, params):
@@ -210,10 +213,11 @@ class LayerEstimateMixin(object):
             in_infos, input_shapes, np.logical_and)
 
     def _passthrough(self, node, in_info, in_shape, out_shape, params):
+        # FIXME only works for FBS
         return passthrough(in_info, {})
 
-    estimate_dropout = _passthrough
-    estimate_identity = _passthrough
-    estimate_average_pool = _passthrough
-    estimate_max_pool = _passthrough
-    estimate_activation = _passthrough
+    # estimate_dropout = _passthrough
+    # estimate_identity = _passthrough
+    # estimate_average_pool = _passthrough
+    # estimate_max_pool = _passthrough
+    # estimate_activation = _passthrough

@@ -46,7 +46,7 @@ class Bits(int):
             suffix = ''
         base = math.floor(math.log(value, 1024))
         value = value / 1024 ** base
-        value = '{:.3g}{}{}'.format(value, ' KMGTP'[base], suffix)
+        value = '{:.2f}{}{}'.format(value, ' KMGTP'[base], suffix)
         return value.replace(' ', '')
 
     def __str__(self):
