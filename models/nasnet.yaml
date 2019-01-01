@@ -25,6 +25,7 @@ model:
         _conv: &conv
             <<: *init
             type: convolution
+            biases_initializer: null
             weights_regularizer: &regularizer
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.0001
@@ -32,12 +33,10 @@ model:
             normalizer_fn: null
             padding: same
         _norm: &norm
-            # normalizer_fn: tensorflow.contrib.slim.batch_norm
             type: batch_normalization
+            decay: 0.9997
+            epsilon: 0.001
             activation_fn: null
-            normalizer_params: &normalizer_params
-                decay: 0.997
-                epsilon: 0.00001
         _dsconv: &dsconv
             type: module
             kwargs: {stride: 1, num_outputs: null, kernel_size: 3}
@@ -96,26 +95,27 @@ model:
                 to: output
         _fit_reduce: &fit_reduce
             type: module
-            kwargs: {bypass: False, num_outputs: null}
+            kwargs: {bypass: false, num_outputs: null}
             layers:
                 relu: {<<: *activator}
-                pool0: {type: average_pool, kernel_size: 1, stride: 2, padding: valid}
-                conv0: &fit_conv
+                pool1: &fit_pool
+                    type: average_pool
+                    kernel_size: 1
+                    stride: 2
+                    padding: valid
+                conv1: &fit_conv
                     <<: *conv
                     kernel_size: 1
                     padding: same
                     num_outputs: ^(num_outputs)
-                padding:
+                pad:
                     type: pad
-                    paddings: [[0, 0], [1, 0], [1, 0], [0, 0]]
-                slicing:
-                    type: slice
-                    begin: [[1, 0],[1, 0]]
-                cropping:
+                    paddings: [[0, 1], [0, 1]]
+                crop:
                     type: crop
                     cropping: [[1, 0], [1, 0]]
-                pool1: {type: average_pool, kernel_size: 1, stride: 2, padding: valid}
-                conv1:
+                pool2: {<<: *fit_pool}
+                conv2:
                     <<: *conv
                     kernel_size: 1
                     padding: same
@@ -123,10 +123,11 @@ model:
                 concat: &concat {type: concat, axis: 3}
                 norm: {<<: *norm}
             graph:
-                - {from: input, with: [relu, pool0, conv0], to: post_conv0}
-                - {from: input, with: [padding, cropping, pool1, conv1], to: post_conv1}
-                - {from: [post_conv0, post_conv1], with: concat, to: pre_norm}
-                - {from: pre_norm, with: norm, to: output}
+                - {from: input, with: relu, to: act}
+                - {from: act, with: [pool1, conv1], to: post1}
+                - {from: act, with: [pad, crop, pool2, conv2], to: post2}
+                - {from: [post1, post2], with: concat, to: prenorm}
+                - {from: prenorm, with: norm, to: output}
         _normal_cell: &ncell
             type: module
             kwargs:
@@ -239,6 +240,7 @@ model:
             stride: 2
             padding: valid
             num_outputs: 32
+        norm0: {<<: *norm}
         # two reduction cells
         stem0: {<<: *rcell, num_outputs: 11, skip: true, reduce: false}
         stem1: {<<: *rcell, num_outputs: 22, reduce: true}

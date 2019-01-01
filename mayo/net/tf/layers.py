@@ -199,11 +199,9 @@ class Layers(TFNetBase, LayerEstimateMixin):
         return tensors
 
     def instantiate_pad(self, node, tensors, params):
-        params.pop('scope')
-        return tf.pad(tensor=tensors, **params)
+        return self.instantiate_numeric_padding(node, tensors, params)
 
     def instantiate_crop(self, node, tensors, params):
-        params.pop('scope')
         cropping = params.get('cropping')
-        cropping = tuple([tuple(item) for item in cropping])
+        #  cropping = tuple([tuple(item) for item in cropping])
         return tf.keras.layers.Cropping2D(cropping=cropping)(tensors)
