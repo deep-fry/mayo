@@ -4,12 +4,10 @@ from tensorflow.contrib import slim
 
 from mayo.net.tf.base import TFNetBase
 from mayo.net.tf.transform import use_name_not_scope
-from mayo.override.base import ChainOverrider
-from mayo.override.prune.base import PrunerBase
-from mayo.override.quantize.base import QuantizerBase
+from mayo.net.tf.estimate import LayerEstimateMixin
 
 
-class Layers(TFNetBase):
+class Layers(TFNetBase, LayerEstimateMixin):
     """ Create a TensorFlow graph from "config.model" model definition.  """
     def instantiate_convolution(self, node, tensor, params):
         scope = params.get('scope')
@@ -18,7 +16,10 @@ class Layers(TFNetBase):
         if groups == 1:
             force_biases = params.pop('force_biases', False)
             if not force_biases:
-                return slim.conv2d(tensor, **params)
+                try:
+                    return slim.conv2d(tensor, **params)
+                except:
+                    import ipdb; ipdb.set_trace()
             normalizer_fn = params.pop('normalizer_fn', None)
             activation_fn = params.pop('activation_fn', tf.nn.relu)
             params['activation_fn'] = None
@@ -75,13 +76,15 @@ class Layers(TFNetBase):
         output = tf.concat(output_slices, axis=-1)
 
         # add bias
-        biases_initializer = params.get(
-            'biases_initializer', tf.zeros_initializer())
-        biases_regularizer = params.get('biases_regularizer', None)
-        biases = tf.get_variable(
-            '{}/biases'.format(scope), out_channels,
-            initializer=biases_initializer, regularizer=biases_regularizer)
-        output = tf.nn.bias_add(output, biases)
+        use_bias = params.pop('use_bias', True)
+        if use_bias:
+            biases_initializer = params.get(
+                'biases_initializer', tf.zeros_initializer())
+            biases_regularizer = params.get('biases_regularizer', None)
+            biases = tf.get_variable(
+                '{}/biases'.format(scope), out_channels,
+                initializer=biases_initializer, regularizer=biases_regularizer)
+            output = tf.nn.bias_add(output, biases)
 
         # normalization & activation
         if normalizer_fn:
@@ -92,63 +95,10 @@ class Layers(TFNetBase):
             output = activation_fn(output)
         return output
 
-    def _estimate_depthwise_convolution(self, output_shape, params):
-        # kernel size K_h x K_w
-        kernel = self.estimator._kernel_size(params)
-        # weights, K_h x K_w x C_out
-        weights = [kernel, output_shape[-1]]
-        weights = self.estimator._multiply(weights)
-        # macs, K_h x K_w x H x W x C_out
-        macs = list(output_shape[1:])
-        macs.append(kernel)
-        macs = self.estimator._multiply(macs)
-        return {'weights': weights, 'macs': macs}
-
-    def _estimate_memory_bitops(self, node, info):
-        # FIXME use overrider.estimate
-        o = self.overriders.get(node, {}).get('weights')
-        if not o:
-            return info
-        num_elements = o.after.shape.num_elements()
-        if isinstance(o, ChainOverrider):
-            overriders = o
-        else:
-            overriders = [o]
-        bitwidth = 32
-        density = 1.0
-        for o in overriders:
-            if isinstance(o, PrunerBase):
-                density = o.info().density
-            if isinstance(o, QuantizerBase):
-                bitwidth = o.info().width
-        bits = density * bitwidth
-        info['memory'] = num_elements * bits
-        info['bitops'] = info['macs'] * bits
-        return info
-
-    def estimate_convolution(
-            self, node, info, input_shape, output_shape, params):
-        layer_info = self._estimate_depthwise_convolution(output_shape, params)
-        # input channel size C_in
-        in_channels = input_shape[-1]
-        out_channels = output_shape[-1]
-        layer_info['macs'] *= in_channels
-        layer_info['weights'] = int(
-            in_channels * layer_info['weights'] + out_channels)
-        layer_info = self._estimate_memory_bitops(node, layer_info)
-        return self.estimator._apply_input_sparsity(info, layer_info)
-
     def instantiate_depthwise_convolution(self, node, tensor, params):
         multiplier = params.pop('depth_multiplier', 1)
         return slim.separable_conv2d(
             tensor, num_outputs=None, depth_multiplier=multiplier, **params)
-
-    def estimate_depthwise_convolution(
-            self, node, info, input_shape, output_shape, params):
-        layer_info = self._estimate_depthwise_convolution(output_shape, params)
-        layer_info = self._estimate_memory_bitops(node, layer_info)
-        layer_info = self.estimator._apply_input_sparsity(info, layer_info)
-        return self.estimator._mask_passthrough(info, layer_info)
 
     @staticmethod
     def _reduce_kernel_size_for_small_input(params, tensor):
@@ -178,11 +128,10 @@ class Layers(TFNetBase):
             return tensor
         return slim.avg_pool2d(tensor, **params)
 
-    def _estimate_unary_elementwise(
-            self, node, info, input_shape, output_shape, params):
-        return self.estimator._mask_passthrough(info, {})
+    def instantiate_reduce_mean(self, node, tensor, params):
+        params.pop('scope')
+        return tf.reduce_mean(tensor, **params)
 
-    estimate_average_pool = _estimate_unary_elementwise
 
     def instantiate_max_pool(self, node, tensor, params):
         self._reduce_kernel_size_for_small_input(params, tensor)
@@ -190,15 +139,8 @@ class Layers(TFNetBase):
             return tensor
         return slim.max_pool2d(tensor, **params)
 
-    estimate_max_pool = _estimate_unary_elementwise
-
     def instantiate_fully_connected(self, node, tensor, params):
         return slim.fully_connected(tensor, **params)
-
-    def estimate_fully_connected(
-            self, node, info, input_shape, output_shape, params):
-        macs = input_shape[-1] * output_shape[-1]
-        return self._estimate_memory_bitops(node, {'macs': macs})
 
     def instantiate_softmax(self, node, tensor, params):
         return slim.softmax(tensor, **params)
@@ -213,6 +155,9 @@ class Layers(TFNetBase):
 
     def instantiate_batch_normalization(self, node, tensor, params):
         params['is_training'] = self.is_training
+        normalizer_params = params.pop('normalizer_params', None)
+        if normalizer_params:
+            params.update(dict(normalizer_params))
         return slim.batch_norm(tensor, **params)
 
     def instantiate_squeeze(self, node, tensor, params):
@@ -224,49 +169,17 @@ class Layers(TFNetBase):
     def instantiate_concat(self, node, tensors, params):
         return tf.concat(tensors, **use_name_not_scope(params))
 
-    def estimate_concat(self, node, infos, input_shapes, output_shape, params):
-        masks = []
-        for info, shape in zip(infos, input_shapes):
-            hist = info.get('_mask') or np.ones(shape, dtype=bool)
-            masks.append(hist)
-        mask = []
-        for each in zip(*masks):
-            mask.append(np.concatenate(each, axis=-1))
-        density, active = self.estimator._mask_density(mask)
-        return {'_mask': mask, 'density': density, 'active': active}
-
     def instantiate_space_to_depth(self, node, tensors, params):
         return tf.space_to_depth(tensors, **use_name_not_scope(params))
 
     def instantiate_add(self, node, tensors, params):
         return tf.add_n(tensors, name=params['scope'])
 
-    def _estimate_join(self, masks, reducer):
-        mask = self.estimator._mask_join(masks, reducer)
-        density, active = self.estimator._mask_density(mask)
-        return {'_mask': mask, 'density': density, 'active': active}
-
-    def _estimate_binary_elementwise(self, infos, input_shapes, reducer):
-        mask_shape = input_shapes[0]
-        masks = []
-        for i in infos:
-            hist = i.get('_mask') or np.ones(mask_shape, dtype=bool)
-            masks.append(hist)
-        return self._estimate_join(masks, reducer)
-
-    def estimate_add(self, node, infos, input_shapes, output_shape, params):
-        return self._estimate_binary_elementwise(
-            infos, input_shapes, np.logical_or)
-
     def instantiate_mul(self, node, tensors, params):
         if len(tensors) != 2:
             raise ValueError(
                 'The function `tf.multiply` expects exactly two inputs.')
         return tf.multiply(tensors[0], tensors[1], name=params['scope'])
-
-    def estimate_mul(self, node, infos, input_shapes, output_shape, params):
-        return self._estimate_binary_elementwise(
-            infos, input_shapes, np.logical_and)
 
     def instantiate_activation(self, node, tensors, params):
         supported_modes = [
@@ -279,10 +192,18 @@ class Layers(TFNetBase):
         func = getattr(tf.nn, mode)
         return func(tensors, name=params['scope'])
 
-    estimate_activation = _estimate_unary_elementwise
-
     def instantiate_identity(self, node, tensors, params):
         activation_fn = params.pop('activation_fn', None)
         if activation_fn:
             return activation_fn(tensors)
         return tensors
+
+    def instantiate_pad(self, node, tensors, params):
+        params.pop('scope')
+        return tf.pad(tensor=tensors, **params)
+
+    def instantiate_crop(self, node, tensors, params):
+        params.pop('scope')
+        cropping = params.get('cropping')
+        cropping = tuple([tuple(item) for item in cropping])
+        return tf.keras.layers.Cropping2D(cropping=cropping)(tensors)

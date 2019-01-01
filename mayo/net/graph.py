@@ -1,5 +1,4 @@
 import re
-import copy
 import pprint
 import weakref
 import itertools
@@ -8,7 +7,7 @@ import collections
 import networkx as nx
 
 from mayo.util import ensure_list, recursive_apply
-from mayo.parse import ArithTag
+from mayo.parse import ArithTag, _DotDict
 
 
 def _replace_module_kwargs(params):
@@ -34,20 +33,30 @@ def _replace_module_kwargs(params):
     def replace_arith(value):
         return ArithTag(replace_str(value.content))
 
+    func_map = {str: replace_str, ArithTag: replace_arith}
+
     def skip_inner_module(value):
         if not isinstance(value, collections.Mapping):
             return None
         if value.get('type') != 'module':
             return None
-        return value
+        # recursively replace inner module kwargs
+        inner_kwargs = value.get('kwargs', {})
+        kwargs = {k: v for k, v in value.items() if k in inner_kwargs}
+        value = dict(value, **recursive_apply(kwargs, func_map))
+        return _replace_module_kwargs(value)
 
-    def replace(params, key):
-        p = copy.deepcopy(params[key])
-        func_map = {str: replace_str, ArithTag: replace_arith}
-        params[key] = recursive_apply(p, func_map, skip_inner_module)
+    def replace(p):
+        asdict = lambda d: \
+            d.asdict(eval=False) if isinstance(d, _DotDict) else d
+        if isinstance(p, (list, tuple)):
+            p = [asdict(e) for e in p]
+        else:
+            p = asdict(p)
+        return recursive_apply(p, func_map, skip_inner_module)
 
-    replace(params, 'layers')
-    replace(params, 'graph')
+    params['layers'] = replace(params['layers'])
+    params['graph'] = replace(params['graph'])
     return params
 
 
@@ -138,11 +147,12 @@ class Graph(object):
     def __init__(self, model):
         super().__init__()
         self.nx_graph = nx.OrderedMultiDiGraph()
-        inputs = model.get('inputs', 'input')
-        outputs = model.get('outputs', 'output')
+        self._input_names = inputs = model.get('inputs', 'input')
+        self._output_names = outputs = model.get('outputs', 'output')
         self._add_module(inputs, outputs, model['name'], model, [])
         self._optimize()
         self._validate()
+        # import pdb; pdb.set_trace()
 
     def add_edge(self, from_node, to_node):
         self.nx_graph.add_edge(from_node, to_node)
@@ -154,16 +164,21 @@ class Graph(object):
                 .format(to_node))
 
     def input_nodes(self):
-        return self._filter_nodes(lambda n: not n.predecessors)
+        return self._filter_nodes(
+            lambda n: n.name in self._input_names and not n.module)
 
     def output_nodes(self):
-        return self._filter_nodes(lambda n: not n.successors)
+        return self._filter_nodes(
+            lambda n: n.name in self._output_names and not n.module)
 
     def nodes(self):
         return self.nx_graph.nodes()
 
     def edges(self):
         return self.nx_graph.edges()
+
+    def has_path(self, from_node, to_node):
+        return nx.has_path(self.nx_graph, from_node, to_node)
 
     def remove_node(self, node):
         return self.nx_graph.remove_node(node)
@@ -194,7 +209,7 @@ class Graph(object):
             submodule_path += [module_name]
         # add graph connections
         for connection in ensure_list(params['graph']):
-            with_layers = ensure_list(connection['with'])
+            with_layers = ensure_list(connection['with'] or [])
             edges = list(zip(
                 [connection['from']] + with_layers,
                 with_layers + [connection['to']],
@@ -278,6 +293,7 @@ class Graph(object):
 
     def _optimize_propagation(self):
         changed = False
+        # remove redundant tensor nodes from graph
         for node in list(self.nodes()):
             if not isinstance(node, TensorNode):
                 continue
@@ -289,6 +305,11 @@ class Graph(object):
             # remove current node as it is redundant
             self.remove_node(node)
             self.add_edge(preds[0], succs[0])
+        # remove nodes not connected to output
+        output_nodes = self.output_nodes()
+        for node in list(self.nodes()):
+            if not any(self.has_path(node, o) for o in output_nodes):
+                self.remove_node(node)
         return changed
 
     def _ensure_connection(self, from_nodes, to_nodes):

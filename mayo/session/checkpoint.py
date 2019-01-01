@@ -6,7 +6,7 @@ import yaml
 import tensorflow as tf
 
 from mayo.log import log
-from mayo.util import format_shape
+from mayo.util import format_shape, print_variables
 
 
 class CheckpointNotFoundError(FileNotFoundError):
@@ -101,6 +101,7 @@ class CheckpointHandler(object):
             return []
         reader = tf.train.NewCheckpointReader(path)
         var_shape_map = reader.get_variable_to_shape_map()
+        var_dtype_map = reader.get_variable_to_dtype_map()
         restore_vars = []
         missing_vars = []
         for v in self._global_variables():
@@ -111,11 +112,20 @@ class CheckpointHandler(object):
                 continue
             v_shape = v.shape.as_list()
             if shape != v_shape:
-                msg = ('Variable named {!r} has shape ({}) mismatch with the '
-                       'shape ({}) in checkpoint, not loading it.')
-                msg = msg.format(
-                    base_name, format_shape(v_shape), format_shape(shape))
-                log.warn(msg)
+                v_shape = format_shape(v_shape)
+                shape = format_shape(shape)
+                log.warn(
+                    'Variable named {!r} has shape ({}) mismatching '
+                    'the shape ({}) in checkpoint, not loading it.'
+                    .format(base_name, v_shape, shape))
+                continue
+            dtype = var_dtype_map.get(base_name, None).base_dtype
+            v_dtype = v.dtype.base_dtype
+            if dtype != v_dtype:
+                log.warn(
+                    'Variable named {!r} has dtype {!r} mismatching '
+                    'the dtype {!r} in checkpoint, not loading it.'
+                    .format(base_name, v_dtype.name, dtype.name))
                 continue
             restore_vars.append(v)
         # variable not restored
@@ -124,21 +134,15 @@ class CheckpointHandler(object):
         for v in var_shape_map:
             if v not in restore_var_names:
                 not_restore_vars.append(v)
-        if not_restore_vars:
-            log.debug(
-                'Variables in checkpoint but not restored:\n    {}'
-                .format('\n    '.join(not_restore_vars)))
+        desc = 'Variables in checkpoint but not restored'
+        print_variables(desc, not_restore_vars, 'warn')
         # variables missing
-        if missing_vars:
-            log.warn(
-                '{} variables missing in checkpoint.'
-                .format(len(missing_vars)))
-            log.debug(
-                'Missing variables:\n    {}'
-                .format('\n    '.join(missing_vars)))
-        log.debug(
-            'Checkpoint variables to restore:\n    {}'
-            .format('\n    '.join(v.name for v in restore_vars)))
+        desc = 'Variables to be restored but missing in checkpoint'
+        print_variables(desc, missing_vars, 'warn')
+        # variables to restore
+        desc = 'Checkpoint variables to restore'
+        print_variables(desc, (v.name for v in restore_vars), 'debug')
+        # restore
         restorer = tf.train.Saver(restore_vars)
         restorer.restore(self.tf_session, path)
         log.debug('Checkpoint restored.')

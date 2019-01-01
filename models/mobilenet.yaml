@@ -52,6 +52,7 @@ model:
                     num_outputs: ^(num_outputs)
                     weights_regularizer: *regularizer
             graph: {from: input, with: [depthwise, pointwise], to: output}
+        prep: {type: identity}
         conv0: {<<: *conv, num_outputs: 32}
         conv1: {<<: *dsconv, stride: 1, num_outputs: 64}
         conv2: {<<: *dsconv, stride: 2, num_outputs: 128}
@@ -79,6 +80,9 @@ model:
     graph:
         from: input
         with: [
-            conv0, conv1, conv2, conv3, conv4, conv5, conv6, conv7, conv8,
-            conv9, conv10, conv11, conv12, conv13, pool, dropout, fc, logits]
+            prep, conv0,
+            conv1, conv2, conv3, conv4, conv5,
+            conv6, conv7, conv8, conv9, conv10,
+            conv11, conv12, conv13,
+            pool, dropout, fc, logits]
         to: output

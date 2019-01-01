@@ -1,0 +1,205 @@
+---
+dataset:
+    task:
+        background_class: {use: true}
+        preprocess:
+            shape:
+                height: 224
+                width: 224
+                channels: 3
+            validate: {type: central_crop, fraction: 0.875}
+            final_cpu:
+                - {type: linear_map, scale: 2.0, shift: -1.0}
+                - {type: resize, fill: false}
+model:
+    name: inception_v1
+    description: |
+        This implementation is based on::
+          Rethinking the Inception Architecture for Computer Vision
+          https://arxiv.org/abs/1512.00567
+        We use the following reference models::
+          https://github.com/tensorflow/tensorflow/blob/master/tensorflow/contrib/slim/python/slim/nets/inception_v3.py
+    layers:
+        conv: &conv
+            type: convolution
+            kernel_size: 3
+            stride: 1
+            padding: SAME
+            normalizer_fn:
+                tensorflow.contrib.slim.batch_norm
+            normalizer_params:
+                decay: 0.9997
+                epsilon: 0.001
+            weights_initializer:
+                type: tensorflow.contrib.layers.variance_scaling_initializer
+            weights_regularizer:
+                type: tensorflow.contrib.layers.l2_regularizer
+                scale: 0.00004
+        concat: &concat {type: concat, axis: 3}
+        pool2: &max_pool {type: max_pool, kernel_size: 3, stride: 1, padding: SAME}
+        conv1: {<<: *conv, stride: 2, kernel_size: 7, num_outputs: 64}
+        pool2a: {<<: *max_pool, stride: 2}
+        conv2b: {<<: *conv, num_outputs: 64, kernel_size: 1}
+        conv2c: {<<: *conv, num_outputs: 192, kernel_size: 3}
+        # mixed 3a
+        pool3a: {<<: *max_pool, stride: 2}
+        # mixed 3b
+        mixed3b:
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 64}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 96}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 128}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 16}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 32}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 32}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        # mixed 3c
+        mixed3c:
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 128}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 128}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 192}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 32}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 96}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 64}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        # mixed 4a
+        pool4a: {<<: *max_pool, stride: 2}
+        mixed4b:
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 192}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 96}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 208}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 16}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 48}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 64}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        mixed4c:
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 160}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 112}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 224}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 24}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 64}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 64}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        mixed4d:
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 128}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 128}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 256}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 24}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 64}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 64}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        mixed4e:
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 112}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 144}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 288}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 32}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 64}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 64}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        mixed4f: &mix4f
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 256}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 160}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 320}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 32}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 128}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 128}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        pool5a: {<<: *max_pool, kernel_size: 2, stride: 2}
+        mixed5b: {<<: *mix4f}
+        mixed5c:
+            type: module
+            layers:
+                b0: {<<: *conv, kernel_size: 1, num_outputs: 384}
+                b1a: {<<: *conv, kernel_size: 1, num_outputs: 192}
+                b1b: {<<: *conv, kernel_size: 3, num_outputs: 384}
+                b2a: {<<: *conv, kernel_size: 1, num_outputs: 48}
+                b2b: {<<: *conv, kernel_size: 3, num_outputs: 128}
+                b3a: {<<: *max_pool}
+                b3b: {<<: *conv, kernel_size: 1, num_outputs: 128}
+                concat: *concat
+            graph:
+                - {from: input, with: [b0], to: b0_res}
+                - {from: input, with: [b1a, b1b], to: b1_res}
+                - {from: input, with: [b2a, b2b], to: b2_res}
+                - {from: input, with: [b3a, b3b], to: b3_res}
+                - {from: [b0_res, b1_res, b2_res, b3_res], with: concat, to: output}
+        pool: {type: average_pool, kernel_size: 7, stride: 1}
+        dropout: {type: dropout, keep_prob: 0.8}
+        logits:
+            <<: *conv
+            kernel_size: 1
+            num_outputs: $(dataset.task.num_classes)
+            activation_fn: null
+            normalizer_fn: null
+        squeeze: {type: squeeze, axis: [1, 2]}
+    graph:
+        from: input
+        with:
+            [conv1, pool2a, conv2b, conv2c,
+             pool3a, mixed3b, mixed3c,
+             pool4a, mixed4b, mixed4c, mixed4d, mixed4e, mixed4f,
+             pool5a, mixed5b, mixed5c,
+             pool, dropout, logits, squeeze]
+        to: output

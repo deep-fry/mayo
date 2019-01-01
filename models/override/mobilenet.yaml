@@ -1,6 +1,7 @@
 ---
 _import: ../mobilenet.yaml
 model.layers:
+    prep: {overrider: $(_overrider.prep)}
     conv0: {overrider: $(_overrider.conv)}
     conv1: &depsep
         layers:

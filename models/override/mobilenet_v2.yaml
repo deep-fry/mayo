@@ -1,0 +1,27 @@
+---
+_import: ../mobilenet_v2.yaml
+model.layers:
+    prep: {overrider: $(_overrider.prep)}
+    conv0: {overrider: $(_overrider.conv)}
+    ibn1: &depsep
+        layers:
+            expand: {overrider: $(_overrider.pointwise)}
+            depthwise: {overrider: $(_overrider.depthwise)}
+            project: {overrider: $(_overrider.pointwise)}
+    ibn2: {<<: *depsep}
+    ibn3: {<<: *depsep}
+    ibn4: {<<: *depsep}
+    ibn5: {<<: *depsep}
+    ibn6: {<<: *depsep}
+    ibn7: {<<: *depsep}
+    ibn8: {<<: *depsep}
+    ibn9: {<<: *depsep}
+    ibn10: {<<: *depsep}
+    ibn11: {<<: *depsep}
+    ibn12: {<<: *depsep}
+    ibn13: {<<: *depsep}
+    ibn14: {<<: *depsep}
+    ibn15: {<<: *depsep}
+    ibn16: {<<: *depsep}
+    conv1: {overrider: $(_overrider.conv)}
+    fc: {overrider: $(_overrider.logits)}

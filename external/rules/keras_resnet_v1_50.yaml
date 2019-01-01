@@ -1,8 +1,8 @@
-# This rules file converts pretrained ResNet v2 50 model from:
+# This rules file converts pretrained ResNet v1 50 model from:
 # https://github.com/keras-team/keras-applications/blob/master/keras_applications/resnet50.py
 # with checkpoint downloaded from:
 # https://github.com/fchollet/deep-learning-models/releases/download/v0.2/resnet50_weights_tf_dim_ordering_tf_kernels.h5
-# into a checkpoint used by our resnet50.yaml model with {version: 1}.
+# into a checkpoint used by our resnet50.yaml model.
 ---
 rename:
     :0$: ''

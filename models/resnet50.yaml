@@ -35,7 +35,6 @@ model:
             <<: *common
             type: convolution
             padding: valid
-            force_biases: true
         conv1:
             <<: *conv
             kernel_size: 7

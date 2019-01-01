@@ -101,7 +101,7 @@ class PyTorchImporter(BaseImporter):
     def _import(file, rules):
         import torch
         var_to_tensor = {}
-        for k, v in torch.load(file).items():
+        for k, v in torch.load(file, map_location='cpu').items():
             if isinstance(v, torch.nn.Parameter):
                 v = v.data
             var_to_tensor[k] = v.numpy()
@@ -225,6 +225,11 @@ class BaseExporter(object):
         raise NotImplementedError
 
 
+class PickleExporter(BaseExporter):
+    def _export(self, file):
+        pickle.dump(file, self.var_to_tensor)
+
+
 class NumpyExporter(BaseExporter):
     def _export(self, file):
         np.save(file, self.var_to_tensor)
@@ -245,6 +250,18 @@ class CheckpointExporter(BaseExporter):
         saver.save(session, file, write_meta_graph=False)
 
 
+class PyTorchExporter(BaseExporter):
+    def _export(self, file):
+        import torch
+        state = {}
+        for k, v in self.var_to_tensor.items():
+            if v.dtype == np.bool_:
+                v = v.astype(int)
+            if isinstance(v, np.ndarray):
+                state[k] = torch.nn.Parameter(torch.Tensor(v))
+        torch.save(state, file)
+
+
 _importers = {
     '': CheckpointImporter,
     '.ckpt': CheckpointImporter,
@@ -257,6 +274,8 @@ _importers = {
 _exporters = {
     '': CheckpointExporter,
     '.npy': NumpyExporter,
+    '.pkl': PickleExporter,
+    '.pth': PyTorchExporter,
 }
 
 

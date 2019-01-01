@@ -61,6 +61,7 @@ class ArithTag(YamlScalarTag):
         ast.USub: operator.neg,
         ast.Eq: operator.eq,
         ast.NotEq: operator.ne,
+        ast.And: lambda *args: all(args),
     }
 
     def value(self):
@@ -89,8 +90,8 @@ class ArithTag(YamlScalarTag):
             if len(ops) > 1 or len(rhs) > 1:
                 raise NotImplementedError(
                     'We support only one comparator for now.')
-            op = self._eval_expr_map[type(ops.pop())]
-            return op(self._eval(n.left), rhs.pop())
+            op = self._eval_expr_map[type(ops[0])]
+            return op(self._eval(n.left), self._eval(rhs[0]))
         if isinstance(n, ast.IfExp):
             if self._eval(n.test):
                 return self._eval(n.body)
@@ -100,11 +101,13 @@ class ArithTag(YamlScalarTag):
             return n.value
         if isinstance(n, ast.List):
             return [self._eval(e) for e in n.elts]
-        if not isinstance(n, (ast.UnaryOp, ast.BinOp)):
+        if not isinstance(n, (ast.UnaryOp, ast.BinOp, ast.BoolOp)):
             raise TypeError('Unrecognized operator node {}'.format(n))
         op = self._eval_expr_map[type(n.op)]
         if isinstance(n, ast.UnaryOp):
             return op(self._eval(n.operand))
+        if isinstance(n, ast.BoolOp):
+            return op(*(self._eval(e) for e in n.values))
         return op(self._eval(n.left), self._eval(n.right))
 
 
@@ -161,9 +164,10 @@ class _DotDict(collections.MutableMapping):
             return d._mapping
         return recursive_apply(value, {collections.Mapping: normalize_map})
 
-    def __deepcopy__(self, memo):
-        data = copy.deepcopy(self._mapping, memo)
-        return self.__class__(data, root=self._root, normalize=False)
+    def asdict(self, eval=True):
+        if not eval:
+            return self._mapping
+        return recursive_apply(self, {collections.Mapping: lambda m: dict(m)})
 
     @classmethod
     def _merge(cls, d, md):
@@ -231,13 +235,14 @@ class _DotDict(collections.MutableMapping):
             return value.__class__(self._eval(value.content, parent)).value()
 
         def eval_str(value):
-            regex = r'\$\((\.?[_a-zA-Z][_a-zA-Z0-9\.]*)\)'
+            regex = r'\$\((\.?[_a-zA-Z][_a-zA-Z0-9\.\s\n\t]*)\)'
             while True:
                 keys = re.findall(regex, value, re.MULTILINE)
                 if not keys:
                     break
                 for k in keys:
                     placeholder = '$({})'.format(k)
+                    k = k.replace(' ', '').replace('\n', '').replace('\t', '')
                     try:
                         if k.startswith('.'):  # relative path
                             v = parent[k[1:]]
@@ -247,7 +252,7 @@ class _DotDict(collections.MutableMapping):
                         raise KeyError(
                             'Attempting to resolve a non-existent key-path '
                             'with placeholder {!r}.'.format(placeholder))
-                    is_unique = not value.replace(placeholder, '')
+                    is_unique = not value.replace(placeholder, '').strip()
                     if is_unique:
                         return v
                     if isinstance(v, collections.Mapping):

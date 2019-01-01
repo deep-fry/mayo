@@ -1,0 +1,20 @@
+# This rules file converts pretrained ResNet v2 50 model from:
+# https://github.com/keras-team/keras-applications/blob/master/keras_applications/resnet_common.py
+# with checkpoint downloaded from:
+# https://github.com/keras-team/keras-applications/releases/download/resnet/resnet50v2_weights_tf_dim_ordering_tf_kernels.h5
+# into a checkpoint used by our resnet_v2_50.yaml model.
+---
+rename:
+    :0$: ''
+    ^/\w+/: __name__/
+    conv1_conv: conv1
+    conv(\d)_block(\d)_: b\1\2/
+    /preact_bn/: /preact/
+    /0_conv/: /conv_shortcut/
+    /(\d)_conv/: /conv\1/
+    /(\d)_bn/: /conv\1/BatchNorm/
+    /post_bn/: /postnorm/
+    /probs/: /fc/
+    /kernel: /weights
+    /bias: /biases
+    __name__: resnet_v2_50

@@ -3,7 +3,7 @@ train:
     learning_rate:
         type: tensorflow.train.exponential_decay
         _initial: 0.1
-        _default_batch_size: 128
+        _default_batch_size: 256
         decay_rate: 0.16
         learning_rate: !arith >
             $(train.learning_rate._initial) * math.sqrt(
