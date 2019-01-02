@@ -66,6 +66,31 @@ Furthermore, in network compression, we can use many fine- and coarse-grained pr
 
 **TODO** complete this section.
 
+## Cite us
+
+#### Mayo
+```bibtex
+@inproceedings{Zhao2018mayo,
+ author = {Zhao, Yiren and Gao, Xitong and Mullins, Robert and Xu, Chengzhong},
+ title = {Mayo: A Framework for Auto-generating Hardware Friendly Deep Neural Networks},
+ booktitle = {Proceedings of the 2Nd International Workshop on Embedded and Mobile Deep Learning},
+ series = {EMDL'18},
+ year = {2018},
+ url = {http://doi.acm.org/10.1145/3212725.3212726},
+}
+```
+
+#### Dynamic Channel Pruning
+```bibtex
+@inproceedings{
+gao2018dynamic,
+title={Dynamic Channel Pruning: Feature Boosting and Suppression},
+author={Xitong Gao and Yiren Zhao and Łukasz Dudziak and Robert Mullins and Cheng-zhong Xu},
+booktitle={International Conference on Learning Representations},
+year={2019},
+url={https://openreview.net/forum?id=BJxh2j0qYm},
+}
+```
 
 [fine]: models/override/prune/dns.yaml
 [slim]: models/override/prune/netslim.yaml

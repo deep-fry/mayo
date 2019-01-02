@@ -4,7 +4,7 @@ _overrider:
     weights:
         dns:
             type: mayo.override.DynamicNetworkSurgeryPruner
-            alpha: 0
+            alpha: -0.1
             should_update: true
             _priority: 100
     depthwise: null  # suppress mobilenet depthwise conv pruning

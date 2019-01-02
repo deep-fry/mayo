@@ -48,5 +48,4 @@ class DynamicNetworkSurgeryPruner(MeanStdPruner):
         on_mask = util.abs(var) > self.on_factor * threshold
         mask = util.logical_or(mask, on_mask)
         off_mask = util.abs(var) > self.off_factor * threshold
-        # import pdb; pdb.set_trace()
         return util.logical_and(mask, off_mask)
