@@ -15,8 +15,7 @@ dataset:
 model:
     name: nasnet
     description:
-        NasNet-Mobile
-        References::
+        NasNet-Mobile references::
             https://github.com/tensorflow/models/blob/master/research/slim/nets/nasnet/nasnet.py
             https://github.com/veronikayurchuk/pretrained-models.pytorch/blob/master/pretrainedmodels/models/nasnet_mobile.py
             https://github.com/johannesu/NASNet-keras/blob/master/nasnet.py
