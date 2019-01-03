@@ -1,15 +1,16 @@
 ---
 dataset:
     task:
-        background_class: {use: true}
+        background_class: {use: false}
         preprocess:
             shape:
                 height: 224
                 width: 224
                 channels: 3
-            validate: {type: central_crop, fraction: 0.875}
+            validate:
+                - {type: resize, height: 256, width: 256, fill: true}
+                - {type: crop_or_pad, height: 224, width: 224}
             final_cpu:
-                - {type: resize, fill: false}
                 - {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: nasnet
@@ -18,6 +19,7 @@ model:
             https://github.com/tensorflow/models/blob/master/research/slim/nets/nasnet/nasnet.py
             https://github.com/veronikayurchuk/pretrained-models.pytorch/blob/master/pretrainedmodels/models/nasnet_mobile.py
             https://github.com/johannesu/NASNet-keras/blob/master/nasnet.py
+            https://github.com/keras-team/keras-applications/blob/master/keras_applications/nasnet.py
     layers:
         _init: &init
             weights_initializer: &initializer
@@ -25,6 +27,7 @@ model:
         _conv: &conv
             <<: *init
             type: convolution
+            biases_initializer: null
             weights_regularizer: &regularizer
                 type: tensorflow.contrib.layers.l2_regularizer
                 scale: 0.0001
@@ -32,12 +35,11 @@ model:
             normalizer_fn: null
             padding: same
         _norm: &norm
-            # normalizer_fn: tensorflow.contrib.slim.batch_norm
             type: batch_normalization
+            scale: true
+            decay: 0.9997
+            epsilon: 0.001
             activation_fn: null
-            normalizer_params: &normalizer_params
-                decay: 0.997
-                epsilon: 0.00001
         _dsconv: &dsconv
             type: module
             kwargs: {stride: 1, num_outputs: null, kernel_size: 3}
@@ -54,237 +56,218 @@ model:
                     num_outputs: ^(num_outputs)
                     weights_regularizer: *regularizer
             graph: {from: input, with: [depthwise, pointwise], to: output}
-        _branch_sep: &bsep
+        _sep: &sep
             type: module
             kwargs: {num_outputs: null, kernel_size: null, stride: 1}
             layers:
-                relu: &activator
+                relu1: &activator
                     type: activation
                     mode: relu
-                norm1: {<<: *norm, activation_fn: tensorflow.nn.relu}
-                norm2: {<<: *norm}
                 sep1:
                     <<: *dsconv
                     num_outputs: ^(num_outputs)
                     kernel_size: ^(kernel_size)
                     stride: ^(stride)
+                norm1: {<<: *norm}
+                relu2: {<<: *activator}
                 sep2:
                     <<: *dsconv
                     num_outputs: ^(num_outputs)
                     kernel_size: ^(kernel_size)
                     stride: 1
+                norm2: {<<: *norm}
             graph:
                 from: input
-                with: [relu, sep1, norm1, sep2, norm2]
+                with: [relu1, sep1, norm1, relu2, sep2, norm2]
                 to: output
-        _squeeze: &squeeze_conv
+        _adjust: &adjust
             type: module
-            kwargs:
-                channels: null
+            kwargs: {mode: null, num_outputs: null}
             layers:
                 relu: {<<: *activator}
-                norm: {<<: *norm, activation_fn: tensorflow.nn.relu}
-                conv:
-                    <<: *conv
-                    num_outputs: ^(channels)
-                    kernel_size: [1, 1]
-                    stride: 1
+                pool1: &adjust_pool
+                    type: average_pool
+                    kernel_size: 1
+                    stride: 2
                     padding: valid
+                conv1: &adjust_conv
+                    <<: *conv
+                    kernel_size: 1
+                    padding: same
+                    num_outputs: !arith ^(num_outputs) // 2
+                pad:
+                    type: pad
+                    padding: [[0, 1], [0, 1]]
+                crop:
+                    type: crop
+                    cropping: [[1, 0], [1, 0]]
+                pool2: {<<: *adjust_pool}
+                conv2:
+                    <<: *conv
+                    kernel_size: 1
+                    padding: same
+                    num_outputs: !arith ^(num_outputs) // 2
+                conv: {<<: *adjust_conv, num_outputs: ^(num_outputs)}
+                concat: &concat {type: concat, axis: 3}
+                norm: {<<: *norm}
             graph:
                 from: input
                 with: [relu, conv, norm]
                 to: output
-        _fit_reduce: &fit_reduce
-            type: module
-            kwargs: {bypass: False, num_outputs: null}
-            layers:
-                relu: {<<: *activator}
-                pool0: {type: average_pool, kernel_size: 1, stride: 2, padding: valid}
-                conv0: &fit_conv
-                    <<: *conv
-                    kernel_size: 1
-                    padding: same
-                    num_outputs: ^(num_outputs)
-                padding:
-                    type: pad
-                    paddings: [[0, 0], [1, 0], [1, 0], [0, 0]]
-                slicing:
-                    type: slice
-                    begin: [[1, 0],[1, 0]]
-                cropping:
-                    type: crop
-                    cropping: [[1, 0], [1, 0]]
-                pool1: {type: average_pool, kernel_size: 1, stride: 2, padding: valid}
-                conv1:
-                    <<: *conv
-                    kernel_size: 1
-                    padding: same
-                    num_outputs: ^(num_outputs)
-                concat: &concat {type: concat, axis: 3}
-                norm: {<<: *norm}
             graph:
-                - {from: input, with: [relu, pool0, conv0], to: post_conv0}
-                - {from: input, with: [padding, cropping, pool1, conv1], to: post_conv1}
-                - {from: [post_conv0, post_conv1], with: concat, to: pre_norm}
-                - {from: pre_norm, with: norm, to: output}
+                - {from: input, with: relu, to: act}
+                # reduce
+                - {from: act, with: [pool1, conv1], to: post1}
+                - {from: act, with: [pad, crop, pool2, conv2], to: post2}
+                - {from: [post1, post2], with: concat, to: reduce}
+                # project
+                - {from: act, with: conv, to: project}
+                # final
+                - {from: ^(mode), with: norm, to: output}
         _normal_cell: &ncell
             type: module
-            kwargs:
-                num_outputs: null
-                reduce: false
-            inputs: [in, prev]
+            kwargs: {num_outputs: null, mode: project}
+            inputs: [x, p]
             layers:
-                squeeze_in: {<<: *squeeze_conv, channels: ^(num_outputs)}
-                squeeze_hidden: {<<: *squeeze_conv, channels: ^(num_outputs)}
-                fit_reduce: {<<: *fit_reduce, num_outputs: !arith ^(num_outputs) / 2}
-                b0a: {<<: *bsep, kernel_size: 5, num_outputs: ^(num_outputs)}
-                b0b: {<<: *bsep, kernel_size: 3, num_outputs: ^(num_outputs)}
-                b1a: {<<: *bsep, kernel_size: 5, num_outputs: ^(num_outputs)}
-                b1b: {<<: *bsep, kernel_size: 3, num_outputs: ^(num_outputs)}
-                b2a: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
-                b2b: {type: identity}
-                b3a: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
-                b3b: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
-                b4a: {<<: *bsep, kernel_size: 3, stride: 1, padding: same, num_outputs: ^(num_outputs)}
-                b4b: {type: identity}
-                add_b0: {type: add}
+                conv: {<<: *adjust, num_outputs: ^(num_outputs), mode: project}
+                adjust:
+                    {<<: *adjust, num_outputs: ^(num_outputs), mode: ^(mode)}
+                b1a: {<<: *sep, kernel_size: 5, num_outputs: ^(num_outputs)}
+                b1b: {<<: *sep, kernel_size: 3, num_outputs: ^(num_outputs)}
+                b2a: {<<: *sep, kernel_size: 5, num_outputs: ^(num_outputs)}
+                b2b: {<<: *sep, kernel_size: 3, num_outputs: ^(num_outputs)}
+                b3a: &npool
+                    type: average_pool
+                    kernel_size: 3
+                    stride: 1
+                    padding: same
+                b4a: {<<: *npool}
+                b4b: {<<: *npool}
+                b5a: {<<: *sep, kernel_size: 3, num_outputs: ^(num_outputs)}
                 add_b1: {type: add}
                 add_b2: {type: add}
                 add_b3: {type: add}
                 add_b4: {type: add}
+                add_b5: {type: add}
                 concat: {<<: *concat}
             graph:
-                - {from: in, with: squeeze_in, to: sin}
-                - {from: prev, with: squeeze_hidden, to: hidden_squeeze}
-                - {from: prev, with: fit_reduce, to: hidden_reduce}
-                - from: !arith >
-                    'hidden_reduce' if ^(reduce) else 'hidden_squeeze'
-                  with: null
-                  to: hidden
-                - {from: sin, with: b0a, to: b0a_res}
-                - {from: hidden, with: b0b, to: b0b_res}
-                - {from: hidden, with: b1a, to: b1a_res}
-                - {from: hidden, with: b1b, to: b1b_res}
-                - {from: sin, with: b2a, to: b2a_res}
-                - {from: hidden, with: b2b, to: b2b_res}
-                - {from: hidden, with: b3a, to: b3a_res}
-                - {from: hidden, with: b3b, to: b3b_res}
-                - {from: sin, with: b4a, to: b4a_res}
-                - {from: sin, with: b4b, to: b4b_res}
-                - {from: [b0a_res, b0b_res], with: add_b0, to: b0_res}
-                - {from: [b1a_res, b1b_res], with: add_b1, to: b1_res}
-                - {from: [b2a_res, b2b_res], with: add_b2, to: b2_res}
-                - {from: [b3a_res, b3b_res], with: add_b3, to: b3_res}
-                - {from: [b4a_res, b4b_res], with: add_b4, to: b4_res}
-                - from: [b0_res, b1_res, b2_res, b3_res, b4_res, hidden]
-                  with: concat
-                  to: output
+                - {from: p, with: adjust, to: p1}
+                - {from: x, with: conv, to: h}
+                - {from: h, with: b1a, to: b1a}
+                - {from: p1, with: b1b, to: b1b}
+                - {from: [b1a, b1b], with: add_b1, to: b1}
+                - {from: p1, with: b2a, to: b2a}
+                - {from: p1, with: b2b, to: b2b}
+                - {from: [b2a, b2b], with: add_b2, to: b2}
+                - {from: h, with: b3a, to: b3a}
+                - {from: [b3a, p1], with: add_b3, to: b3}
+                - {from: p1, with: b4a, to: b4a}
+                - {from: p1, with: b4b, to: b4b}
+                - {from: [b4a, b4b], with: add_b4, to: b4}
+                - {from: h, with: b5a, to: b5a}
+                - {from: [b5a, h], with: add_b5, to: b5}
+                - {from: [p1, b1, b2, b3, b4, b5], with: concat, to: output}
         _reduction_cell: &rcell
             type: module
-            inputs: [in, prev]
-            kwargs:
-                num_outputs: null
-                reduce: false
-                skip: false
+            inputs: [x, p]
+            kwargs: {num_outputs: null, mode: project, skip: false}
             layers:
-                squeeze_in: {<<: *squeeze_conv, channels: ^(num_outputs)}
-                squeeze_hidden: {<<: *squeeze_conv, channels: ^(num_outputs)}
-                fit_reduce: {<<: *fit_reduce, num_outputs: !arith ^(num_outputs) / 2}
-                b0a: {<<: *bsep, kernel_size: 5, stride: 2, num_outputs: ^(num_outputs)}
-                b0b: {<<: *bsep, kernel_size: 7, stride: 2, num_outputs: ^(num_outputs)}
-                b1a: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
-                b1b: {<<: *bsep, kernel_size: 7, stride: 2, num_outputs: ^(num_outputs)}
-                b2a: {type: average_pool, kernel_size: 3, stride: 2, padding: same}
-                b2b: {<<: *bsep, kernel_size: 5, stride: 2, num_outputs: ^(num_outputs)}
-                b3a: {type: average_pool, kernel_size: 3, stride: 1, padding: same}
-                b3b: {type: identity}
-                b4a: {<<: *bsep, kernel_size: 3, stride: 1, num_outputs: ^(num_outputs)}
-                b4b: {type: max_pool, kernel_size: 3, stride: 2, padding: same}
-                add_b0: {type: add}
+                conv: {<<: *adjust, num_outputs: ^(num_outputs), mode: project}
+                adjust:
+                    {<<: *adjust, num_outputs: ^(num_outputs), mode: ^(mode)}
+                _rsep: &rsep
+                    <<: *sep
+                    stride: 2
+                    num_outputs: ^(num_outputs)
+                b1a: {<<: *rsep, kernel_size: 5}
+                b1b: {<<: *rsep, kernel_size: 7}
+                b2a: &rpool
+                    type: max_pool
+                    kernel_size: 3
+                    stride: 2
+                    padding: same
+                b2b: {<<: *rsep, kernel_size: 7}
+                b3a: {<<: *rpool, type: average_pool}
+                b3b: {<<: *rsep, kernel_size: 5}
+                b4a: {<<: *rpool, type: average_pool, stride: 1}
+                b5a: {<<: *sep, kernel_size: 3, num_outputs: ^(num_outputs)}
+                b5b: {<<: *rpool}
                 add_b1: {type: add}
                 add_b2: {type: add}
                 add_b3: {type: add}
                 add_b4: {type: add}
+                add_b5: {type: add}
                 concat: {<<: *concat}
             graph:
-                - {from: in, with: squeeze_in, to: sin}
-                - {from: prev, with: squeeze_hidden, to: hidden_squeeze}
-                - {from: prev, with: fit_reduce, to: hidden_reduce}
-                - from: !arith >
-                      'hidden_reduce' if ^(reduce) else 'hidden_squeeze'
-                  with: null
-                  to: hidden_tmp
-                - from: !arith >
-                      'sin' if ^(skip) else 'hidden_tmp'
-                  with: null
-                  to: hidden
-                - {from: sin, with: b0a, to: b0a_res}
-                - {from: hidden, with: b0b, to: b0b_res}
-                - {from: sin, with: b1a, to: b1a_res}
-                - {from: hidden, with: b1b, to: b1b_res}
-                - {from: sin, with: b2a, to: b2a_res}
-                - {from: hidden, with: b2b, to: b2b_res}
-                - {from: [b0a_res, b0b_res], with: add_b0, to: b0_res}
-                - {from: [b1a_res, b1b_res], with: add_b1, to: b1_res}
-                - {from: [b2a_res, b2b_res], with: add_b2, to: b2_res}
-                - {from: b0_res, with: b3a, to: b3a_res}
-                - {from: [b3a_res, b1_res], with: add_b3, to: b3_res}
-                - {from: b0_res, with: b4a, to: b4a_res}
-                - {from: sin, with: b4b, to: b4b_res}
-                - {from: [b4a_res, b1_res], with: add_b4, to: b4_res}
-                - {from: [b1_res, b2_res, b3_res, b4_res], with: concat, to: output}
-        conv0:
+                - {from: p, with: adjust, to: p1}
+                - {from: x, with: conv, to: h}
+                - {from: !arith "'x' if ^(skip) else 'p1'", to: p2}
+                - {from: h, with: b1a, to: b1a}
+                - {from: p2, with: b1b, to: b1b}
+                - {from: [b1a, b1b], with: add_b1, to: b1}
+                - {from: h, with: b2a, to: b2a}
+                - {from: p2, with: b2b, to: b2b}
+                - {from: [b2a, b2b], with: add_b2, to: b2}
+                - {from: h, with: b3a, to: b3a}
+                - {from: p2, with: b3b, to: b3b}
+                - {from: [b3a, b3b], with: add_b3, to: b3}
+                - {from: b1, with: b4a, to: b4a}
+                - {from: [b2, b4a], with: add_b4, to: b4}
+                - {from: b1, with: b5a, to: b5a}
+                - {from: h, with: b5b, to: b5b}
+                - {from: [b5a, b5b], with: add_b5, to: b5}
+                - {from: [b2, b3, b4, b5], with: concat, to: output}
+        conv1:
             <<: *conv
             kernel_size: 3
             stride: 2
             padding: valid
             num_outputs: 32
+        norm1: {<<: *norm}
         # two reduction cells
-        stem0: {<<: *rcell, num_outputs: 11, skip: true, reduce: false}
-        stem1: {<<: *rcell, num_outputs: 22, reduce: true}
-        cell00: {<<: *ncell, num_outputs: 44, reduce: true}
-        cell01: {<<: *ncell, num_outputs: 44}
-        cell02: {<<: *ncell, num_outputs: 44}
-        cell03: {<<: *ncell, num_outputs: 44}
-        rcell0: {<<: *rcell, num_outputs: 88}
-        cell10: {<<: *ncell, num_outputs: 88, reduce: True}
-        cell11: {<<: *ncell, num_outputs: 88}
-        cell12: {<<: *ncell, num_outputs: 88}
-        cell13: {<<: *ncell, num_outputs: 88}
-        rcell1: {<<: *rcell, num_outputs: 176}
-        cell20: {<<: *ncell, num_outputs: 176, reduce: True}
-        cell21: {<<: *ncell, num_outputs: 176}
-        cell22: {<<: *ncell, num_outputs: 176}
-        cell23: {<<: *ncell, num_outputs: 176}
+        s1: {<<: *rcell, num_outputs: 11, skip: true, mode: project}
+        s2: {<<: *rcell, num_outputs: 22, mode: reduce}
+        n0: {<<: *ncell, num_outputs: 44, mode: reduce}
+        n1: {<<: *ncell, num_outputs: 44}
+        n2: {<<: *ncell, num_outputs: 44}
+        n3: {<<: *ncell, num_outputs: 44}
+        r4: {<<: *rcell, num_outputs: 88}
+        n5: {<<: *ncell, num_outputs: 88, mode: reduce}
+        n6: {<<: *ncell, num_outputs: 88}
+        n7: {<<: *ncell, num_outputs: 88}
+        n8: {<<: *ncell, num_outputs: 88}
+        r8: {<<: *rcell, num_outputs: 176}
+        n9: {<<: *ncell, num_outputs: 176, mode: reduce}
+        n10: {<<: *ncell, num_outputs: 176}
+        n11: {<<: *ncell, num_outputs: 176}
+        n12: {<<: *ncell, num_outputs: 176}
         relu: {<<: *activator}
-        avgpool: {type: average_pool, kernel_size: 7}
-        dropout: {type: dropout, keep_prob: 0.5}
+        avgpool: {type: average_pool, kernel_size: global}
+        # dropout: {type: dropout, keep_prob: 0.5}
         fc:
             <<: *init
             type: fully_connected
             num_outputs: $(dataset.task.num_classes)
             activation_fn: null
-        flatten: {type: flatten}
         squeeze: {type: squeeze, axis: [1, 2]}
     graph:
-        - {from: input, with: conv0, to: conv0_res}
-        - {from: [conv0_res, input], with: stem0, to: stem0_res}
-        - {from: [stem0_res, conv0_res], with: stem1, to: stem1_res}
-        - {from: [stem1_res, stem0_res], with: cell00, to: cell00_res}
-        - {from: [cell00_res, stem1_res], with: cell01, to: cell01_res}
-        - {from: [cell01_res, cell00_res], with: cell02, to: cell02_res}
-        - {from: [cell02_res, cell01_res], with: cell03, to: cell03_res}
-        - {from: [cell03_res, cell02_res], with: rcell0, to: rcell0_res}
-        - {from: [rcell0_res, cell03_res], with: cell10, to: cell10_res}
-        - {from: [cell10_res, rcell0_res], with: cell11, to: cell11_res}
-        - {from: [cell11_res, cell10_res], with: cell12, to: cell12_res}
-        - {from: [cell12_res, cell11_res], with: cell13, to: cell13_res}
-        - {from: [cell13_res, cell12_res], with: rcell1, to: rcell1_res}
-        - {from: [rcell1_res, cell13_res], with: cell20, to: cell20_res}
-        - {from: [cell20_res, rcell1_res], with: cell21, to: cell21_res}
-        - {from: [cell21_res, cell20_res], with: cell22, to: cell22_res}
-        - {from: [cell22_res, cell21_res], with: cell23, to: cell23_res}
-        - from: cell23_res
-          with: [
-            relu, avgpool, dropout, fc, squeeze]
+        - {from: input, with: [conv1, norm1], to: c1}
+        - {from: [c1, c1], with: s1, to: s1}
+        - {from: [s1, c1], with: s2, to: s2}
+        - {from: [s2, s1], with: n0, to: b0}
+        - {from: [n0, s2], with: n1, to: b1}
+        - {from: [n1, n0], with: n2, to: b2}
+        - {from: [n2, n1], with: n3, to: b3}
+        - {from: [n3, n2], with: r4, to: r4}
+        - {from: [r4, n3], with: n5, to: n5}
+        - {from: [n5, r4], with: n6, to: n6}
+        - {from: [n6, n5], with: n7, to: n7}
+        - {from: [n7, n6], with: n8, to: n8}
+        - {from: [n8, n7], with: r8, to: r8}
+        - {from: [r8, n8], with: n9, to: n9}
+        - {from: [n9, r8], with: n10, to: n10}
+        - {from: [n10, n9], with: n11, to: n11}
+        - {from: [n11, n10], with: n12, to: n12}
+        - from: n12
+          with: [relu, avgpool, squeeze, fc]
           to: output

@@ -44,6 +44,9 @@ class ParameterTransformer(object):
             if not any(key.endswith(s) for s in suffixes):
                 continue
             # regularizer and initializer
+            if p is None:
+                params[key] = None
+                continue
             cls, p = object_from_params(p)
             params[key] = cls(**p)
 
