@@ -209,7 +209,7 @@ class Graph(object):
             submodule_path += [module_name]
         # add graph connections
         for connection in ensure_list(params['graph']):
-            with_layers = ensure_list(connection['with'] or [])
+            with_layers = ensure_list(connection.get('with') or [])
             edges = list(zip(
                 [connection['from']] + with_layers,
                 with_layers + [connection['to']],

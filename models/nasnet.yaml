@@ -7,9 +7,10 @@ dataset:
                 height: 224
                 width: 224
                 channels: 3
-            validate: {type: central_crop, fraction: 0.875}
+            validate:
+                - {type: resize, height: 256, width: 256, fill: true}
+                - {type: crop_or_pad, height: 224, width: 224}
             final_cpu:
-                - {type: resize, fill: false}
                 - {type: linear_map, scale: 2.0, shift: -1.0}
 model:
     name: nasnet
@@ -18,6 +19,7 @@ model:
             https://github.com/tensorflow/models/blob/master/research/slim/nets/nasnet/nasnet.py
             https://github.com/veronikayurchuk/pretrained-models.pytorch/blob/master/pretrainedmodels/models/nasnet_mobile.py
             https://github.com/johannesu/NASNet-keras/blob/master/nasnet.py
+            https://github.com/keras-team/keras-applications/blob/master/keras_applications/nasnet.py
     layers:
         _init: &init
             weights_initializer: &initializer
@@ -199,7 +201,7 @@ model:
             graph:
                 - {from: p, with: adjust, to: p1}
                 - {from: x, with: conv, to: h}
-                - {from: !arith h if ^(skip) else 'p1', with: null, to: p2}
+                - {from: !arith "'x' if ^(skip) else 'p1'", to: p2}
                 - {from: h, with: b1a, to: b1a}
                 - {from: p2, with: b1b, to: b1b}
                 - {from: [b1a, b1b], with: add_b1, to: b1}

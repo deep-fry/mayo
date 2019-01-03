@@ -164,6 +164,9 @@ class Transformer(object):
                             'Unable to replace pattern {!r} in {!r} with {!r}.'
                             .format(pattern, nv, replacement))
             else:
+                if nv in vvmap.values():
+                    raise ValueError(
+                        'Name collision, {!r} already exists.'.format(nv))
                 vvmap[v] = nv
         return vvmap
 
