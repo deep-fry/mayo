@@ -1,0 +1,31 @@
+# This rules file converts pretrained NASNet-mobile model from:
+# https://github.com/keras-team/keras-applications/blob/master/keras_applications/nasnet.py
+# with checkpoint downloaded from:
+# https://github.com/titu1994/Keras-NASNet/releases/download/v1.2/NASNet-mobile.h5
+# into a checkpoint used by our nasnet.yaml model.
+---
+rename:
+    :0$: ''
+    ^/\w+/: __name__/
+    /reduction_A_block_stem_(\d)/: /s\1/
+    /reduction_A_block_reduce_(\d)/: /r\1/
+    /normal_A_block_(\d+)/: /n\1/
+    /block_(\d)/separable_conv_block_(normal|reduction)_(left|right)(\d+)(_reduce|_stem)?_(\d+)/: /b\1\3/
+    /b(\d)left/: /b\1a/
+    /b(\d)right/: /b\1b/
+    /separable_conv_(\d)(_bn)?_(normal|reduction)_(left|right)(\d+)(_reduce|_stem)?_(\d+)/: /sep\1\2/
+    /(normal|reduction)_(conv|bn)_1(_reduce|_stem)?_(\d+)/: /conv/\g<2>/
+    /adjust_block/: /adjust/
+    /adjust_(reduction|projection)_block(_reduce|_stem)?_(\d+)/: /
+    /adjust_(conv|bn)(_projection)?(_reduce|_stem)?_(\d+)/: /\1/
+    /adjust_conv_(\d)(_stem)?_(\d+)/: /conv\1/
+    /bn/: /norm/
+    /sep(\d)_bn/: /norm\1/
+    /stem_conv1/: /conv1/
+    /stem_bn1/: /norm1/
+    /predictions/: /fc/
+    /depthwise_kernel: /depthwise/depthwise_weights
+    /pointwise_kernel: /pointwise/weights
+    /kernel: /weights
+    /bias: /biases
+    __name__: nasnet

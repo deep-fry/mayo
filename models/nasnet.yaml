@@ -1,7 +1,7 @@
 ---
 dataset:
     task:
-        background_class: {use: true}
+        background_class: {use: false}
         preprocess:
             shape:
                 height: 224
@@ -34,6 +34,7 @@ model:
             padding: same
         _norm: &norm
             type: batch_normalization
+            scale: true
             decay: 0.9997
             epsilon: 0.001
             activation_fn: null
@@ -163,7 +164,7 @@ model:
                 - {from: [b4a, b4b], with: add_b4, to: b4}
                 - {from: h, with: b5a, to: b5a}
                 - {from: [b5a, h], with: add_b5, to: b5}
-                - {from: [b1, b2, b3, b4, b5], with: concat, to: output}
+                - {from: [p1, b1, b2, b3, b4, b5], with: concat, to: output}
         _reduction_cell: &rcell
             type: module
             inputs: [x, p]
@@ -222,7 +223,7 @@ model:
             num_outputs: 32
         norm1: {<<: *norm}
         # two reduction cells
-        s1: {<<: *rcell, num_outputs: 11}
+        s1: {<<: *rcell, num_outputs: 11, skip: true, mode: project}
         s2: {<<: *rcell, num_outputs: 22, mode: reduce}
         n0: {<<: *ncell, num_outputs: 44, mode: reduce}
         n1: {<<: *ncell, num_outputs: 44}
