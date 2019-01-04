@@ -63,10 +63,6 @@ In Mayo, we decouple the description of each neural network application into thr
 Furthermore, in network compression, we can use many fine- and coarse-grained pruning techniques in conjunction with a large range of quantization methods, even optionally on top of low-rank approximation of weight tensors, on a wide variety of neural networks, each could use different datasets and could be trained differently.  We now encounter a vast number of possible combinations of all of these above options, so by decoupling compression techniques from the neural network, from the dataset, from training methodologies, all possible combinations can be achieved by importing the respective YAML descriptions, without having to write a monolithic description file for each combination.
 
 
-## Results
-
-**TODO** complete this section.
-
 ## Cite us
 
 #### Mayo
@@ -74,22 +70,21 @@ Furthermore, in network compression, we can use many fine- and coarse-grained pr
 @inproceedings{Zhao2018mayo,
  author = {Zhao, Yiren and Gao, Xitong and Mullins, Robert and Xu, Chengzhong},
  title = {Mayo: A Framework for Auto-generating Hardware Friendly Deep Neural Networks},
- booktitle = {Proceedings of the 2Nd International Workshop on Embedded and Mobile Deep Learning},
+ booktitle = {Proceedings of the 2nd International Workshop on Embedded and Mobile Deep Learning},
  series = {EMDL'18},
  year = {2018},
  url = {http://doi.acm.org/10.1145/3212725.3212726},
 }
 ```
 
-#### Dynamic Channel Pruning
+#### Dynamic Channel Pruning: Feature Boosting and Suppression
 ```bibtex
-@inproceedings{
-gao2018dynamic,
-title={Dynamic Channel Pruning: Feature Boosting and Suppression},
-author={Xitong Gao and Yiren Zhao and Łukasz Dudziak and Robert Mullins and Cheng-zhong Xu},
-booktitle={International Conference on Learning Representations},
-year={2019},
-url={https://openreview.net/forum?id=BJxh2j0qYm},
+@inproceedings{gao2018dynamic,
+  title={Dynamic Channel Pruning: Feature Boosting and Suppression},
+  author={Xitong Gao and Yiren Zhao and Łukasz Dudziak and Robert Mullins and Cheng-zhong Xu},
+  booktitle={International Conference on Learning Representations},
+  year={2019},
+  url={https://openreview.net/forum?id=BJxh2j0qYm},
 }
 ```
 
