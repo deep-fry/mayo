@@ -2,12 +2,13 @@
 
 **Mayo** is a deep learning framework developed with hardware acceleration in mind. It enables rapid deep neural network model design, and common network compression work flows such as [fine][fine]- and coarse-grained pruning, [network slimming][slim], and [quantization methods with various arithmetics][quantize] can be easily used jointly by writing simple [YAML][yaml] model description files (exemplified by the links above).  Additionally, Mayo can also accelerate the hyperparameter exploration of these models with automated hyperparameter optimization.  With minimal manual intervention, our automated optimization results achieve state-of-the-art compression rates (refer to the results section).
 
+For testing and training [feature boosting and suppression][fbs], please follow the instructions [here](fbs.md).
 
 ## Installation
 
 ### Prerequisites
 
-Before setting up Mayo, you will need to have [Git][git], [Git-LFS][git-lfs], [Python 3.6.5 or above][python3] and [TensorFlow 1.8.0][tensorflow] installed.
+Before setting up Mayo, you will need to have [Git][git], [Git-LFS][git-lfs], [Python 3.6.5 or above][python3] and [TensorFlow 1.11 or above][tensorflow] installed.
 
 
 ### Setting up Mayo
@@ -95,6 +96,7 @@ url={https://openreview.net/forum?id=BJxh2j0qYm},
 [fine]: models/override/prune/dns.yaml
 [slim]: models/override/prune/netslim.yaml
 [quantize]: models/override/quantize/
+[fbs]: https://arxiv.org/abs/1810.05331
 [git]: https://git-scm.com
 [git-lfs]: https://git-lfs.github.com
 [python3]: https://www.python.org/downloads/
