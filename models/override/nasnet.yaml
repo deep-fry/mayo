@@ -1,0 +1,53 @@
+_import: ../nasnet.yaml
+model.layers:
+    _conv: &conv {overrider: $(_overrider.conv)}
+    _depth: &depth {overrider: $(_overrider.depthwise)}
+    _point: &point {overrider: $(_overrider.pointwise)}
+    _norm: &norm {overrider: $(_overrider.norm)}
+    _sep: &sep
+        layers:
+            sep1: &dsconv
+                layers:
+                    depthwise: {<<: *depth}
+                    pointwise: {<<: *point}
+            norm1: {<<: *norm}
+            sep2: {<<: *dsconv}
+            norm2: {<<: *norm}
+    _cell: &cell
+        layers:
+            conv: &adjust
+                layers:
+                    conv1: {<<: *conv}
+                    conv2: {<<: *conv}
+                    conv: {<<: *conv}
+                    norm: {<<: *norm}
+            adjust: {<<: *adjust}
+            b1a: {<<: *sep}
+            b1b: {<<: *sep}
+            b2a: {<<: *sep}
+            b2b: {<<: *sep}
+            b3a: {<<: *sep}
+            b3b: {<<: *sep}
+            b4a: {<<: *sep}
+            b4b: {<<: *sep}
+            b5a: {<<: *sep}
+            b5b: {<<: *sep}
+    conv1: {<<: *conv}
+    norm1: {<<: *norm}
+    s1: {<<: *cell}
+    s2: {<<: *cell}
+    n0: {<<: *cell}
+    n1: {<<: *cell}
+    n2: {<<: *cell}
+    n3: {<<: *cell}
+    r4: {<<: *cell}
+    n5: {<<: *cell}
+    n6: {<<: *cell}
+    n7: {<<: *cell}
+    n8: {<<: *cell}
+    r8: {<<: *cell}
+    n9: {<<: *cell}
+    n10: {<<: *cell}
+    n11: {<<: *cell}
+    n12: {<<: *cell}
+    fc: {overrider: $(_overrider.logits)}

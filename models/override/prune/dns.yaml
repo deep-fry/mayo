@@ -7,4 +7,6 @@ _overrider:
             alpha: -0.1
             should_update: true
             _priority: 100
-    depthwise: null  # suppress mobilenet depthwise conv pruning
+    # FIXME this shit can unintentionally disable all
+    # overriders on the same layer.
+    depthwise: null  # suppress depthwise conv pruning
