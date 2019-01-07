@@ -13,41 +13,47 @@ model.layers:
             norm1: {<<: *norm}
             sep2: {<<: *dsconv}
             norm2: {<<: *norm}
-    _cell: &cell
+    _cell_layers: &cell_layers
+        conv: &adjust
+            layers:
+                conv1: {<<: *conv}
+                conv2: {<<: *conv}
+                conv: {<<: *conv}
+                norm: {<<: *norm}
+        adjust: {<<: *adjust}
+    _ncell: &ncell
         layers:
-            conv: &adjust
-                layers:
-                    conv1: {<<: *conv}
-                    conv2: {<<: *conv}
-                    conv: {<<: *conv}
-                    norm: {<<: *norm}
-            adjust: {<<: *adjust}
+            <<: *cell_layers
             b1a: {<<: *sep}
             b1b: {<<: *sep}
             b2a: {<<: *sep}
             b2b: {<<: *sep}
-            b3a: {<<: *sep}
+            b5a: {<<: *sep}
+    _rcell: &rcell
+        layers:
+            <<: *cell_layers
+            b1a: {<<: *sep}
+            b1b: {<<: *sep}
+            b2b: {<<: *sep}
             b3b: {<<: *sep}
-            b4a: {<<: *sep}
             b4b: {<<: *sep}
             b5a: {<<: *sep}
-            b5b: {<<: *sep}
     conv1: {<<: *conv}
     norm1: {<<: *norm}
-    s1: {<<: *cell}
-    s2: {<<: *cell}
-    n0: {<<: *cell}
-    n1: {<<: *cell}
-    n2: {<<: *cell}
-    n3: {<<: *cell}
-    r4: {<<: *cell}
-    n5: {<<: *cell}
-    n6: {<<: *cell}
-    n7: {<<: *cell}
-    n8: {<<: *cell}
-    r8: {<<: *cell}
-    n9: {<<: *cell}
-    n10: {<<: *cell}
-    n11: {<<: *cell}
-    n12: {<<: *cell}
+    s1: {<<: *rcell}
+    s2: {<<: *rcell}
+    n0: {<<: *ncell}
+    n1: {<<: *ncell}
+    n2: {<<: *ncell}
+    n3: {<<: *ncell}
+    r4: {<<: *rcell}
+    n5: {<<: *ncell}
+    n6: {<<: *ncell}
+    n7: {<<: *ncell}
+    n8: {<<: *ncell}
+    r8: {<<: *rcell}
+    n9: {<<: *ncell}
+    n10: {<<: *ncell}
+    n11: {<<: *ncell}
+    n12: {<<: *ncell}
     fc: {overrider: $(_overrider.logits)}
