@@ -99,7 +99,8 @@ def apply_sparsity(
             if isinstance(o, PrunerBase):
                 weight_density = o.info().density
             if isinstance(o, QuantizerBase):
-                weight_bitwidth = o.info().real_width
+                if hasattr(o.info(), "real_width"):
+                    weight_bitwidth = o.info().real_width
     in_density = in_info.get('density', 1.0)
     in_bitwidth = in_info.get('bitwidth', 32)
     out_density = out_info.get('density', 1.0)
