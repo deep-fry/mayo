@@ -4,7 +4,9 @@ This is an example to showcase how `mayo` can handle multi-precision or even mul
 
 ```bash
 ./my \
-datasets/mnist.yaml \ models/examples/lenet5_multiprecision.yaml \ trainers/lenet5.yaml \
+datasets/mnist.yaml \
+models/examples/lenet5_multiprecision.yaml \
+trainers/lenet5.yaml \
 overriders-update info train interact
 ```
 
