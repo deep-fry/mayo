@@ -65,7 +65,7 @@ The major codebase for FBS resides in `mayo/tf/gate/layers.py`.
       models/gate/cifarnet.yaml
       datasets/cifar10.yaml \
       _gate.density=0.5 \
-      system.checkpoint.load=gate40 \
+      system.checkpoint.load=gate50 \
       eval info
   ```
 
