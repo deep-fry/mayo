@@ -2,12 +2,13 @@
 
 **Mayo** is a deep learning framework developed with hardware acceleration in mind. It enables rapid deep neural network model design, and common network compression work flows such as [fine][fine]- and coarse-grained pruning, [network slimming][slim], and [quantization methods with various arithmetics][quantize] can be easily used jointly by writing simple [YAML][yaml] model description files (exemplified by the links above).  Additionally, Mayo can also accelerate the hyperparameter exploration of these models with automated hyperparameter optimization.  With minimal manual intervention, our automated optimization results achieve state-of-the-art compression rates (refer to the results section).
 
+For testing and training [**Dynamic Channel Pruning: Feature Boosting and Suppression**][fbs], please follow the instructions [here](fbs.md).
 
 ## Installation
 
 ### Prerequisites
 
-Before setting up Mayo, you will need to have [Git][git], [Git-LFS][git-lfs], [Python 3.6.5 or above][python3] and [TensorFlow 1.8.0][tensorflow] installed.
+Before setting up Mayo, you will need to have [Git][git], [Git-LFS][git-lfs], [Python 3.6.5 or above][python3] and [TensorFlow 1.11 or above][tensorflow] installed.
 
 
 ### Setting up Mayo
@@ -62,10 +63,6 @@ In Mayo, we decouple the description of each neural network application into thr
 Furthermore, in network compression, we can use many fine- and coarse-grained pruning techniques in conjunction with a large range of quantization methods, even optionally on top of low-rank approximation of weight tensors, on a wide variety of neural networks, each could use different datasets and could be trained differently.  We now encounter a vast number of possible combinations of all of these above options, so by decoupling compression techniques from the neural network, from the dataset, from training methodologies, all possible combinations can be achieved by importing the respective YAML descriptions, without having to write a monolithic description file for each combination.
 
 
-## Results
-
-**TODO** complete this section.
-
 ## Cite us
 
 #### Mayo
@@ -73,28 +70,28 @@ Furthermore, in network compression, we can use many fine- and coarse-grained pr
 @inproceedings{Zhao2018mayo,
  author = {Zhao, Yiren and Gao, Xitong and Mullins, Robert and Xu, Chengzhong},
  title = {Mayo: A Framework for Auto-generating Hardware Friendly Deep Neural Networks},
- booktitle = {Proceedings of the 2Nd International Workshop on Embedded and Mobile Deep Learning},
+ booktitle = {Proceedings of the 2nd International Workshop on Embedded and Mobile Deep Learning},
  series = {EMDL'18},
  year = {2018},
  url = {http://doi.acm.org/10.1145/3212725.3212726},
 }
 ```
 
-#### Dynamic Channel Pruning
+#### Dynamic Channel Pruning: Feature Boosting and Suppression
 ```bibtex
-@inproceedings{
-gao2018dynamic,
-title={Dynamic Channel Pruning: Feature Boosting and Suppression},
-author={Xitong Gao and Yiren Zhao and Łukasz Dudziak and Robert Mullins and Cheng-zhong Xu},
-booktitle={International Conference on Learning Representations},
-year={2019},
-url={https://openreview.net/forum?id=BJxh2j0qYm},
+@inproceedings{gao2018dynamic,
+  title={Dynamic Channel Pruning: Feature Boosting and Suppression},
+  author={Xitong Gao and Yiren Zhao and Łukasz Dudziak and Robert Mullins and Cheng-zhong Xu},
+  booktitle={International Conference on Learning Representations},
+  year={2019},
+  url={https://openreview.net/forum?id=BJxh2j0qYm},
 }
 ```
 
 [fine]: models/override/prune/dns.yaml
 [slim]: models/override/prune/netslim.yaml
 [quantize]: models/override/quantize/
+[fbs]: https://arxiv.org/abs/1810.05331
 [git]: https://git-scm.com
 [git-lfs]: https://git-lfs.github.com
 [python3]: https://www.python.org/downloads/

@@ -1,0 +1,41 @@
+---
+_import: ../lenet5.yaml
+_overrider:
+    weights_high: &high
+        fixed:
+            type: mayo.override.FixedPointQuantizer
+            width: 8
+            point: 2
+            should_update: true
+            stochastic: false
+            _priority: 100
+    weights_low: &low
+        fixed:
+            type: mayo.override.FixedPointQuantizer
+            width: 4
+            point: 2
+            should_update: true
+            stochastic: false
+            _priority: 100
+    biases: {<<: *high}
+    activation:
+        fixed:
+            type: mayo.override.FixedPointQuantizer
+            width: 8
+            point: 4
+            should_update: true
+            stochastic: false
+            _priority: 100
+model.layers:
+    conv0:
+      overrider:
+        weights:
+          <<: *high
+        activation: $(_overrider.activation)
+    conv1: &conv1
+      overrider:
+        weights:
+          <<: *low
+        activation: $(_overrider.activation)
+    fc1: {<<: *conv1}
+    logits: {<<: *conv1}
