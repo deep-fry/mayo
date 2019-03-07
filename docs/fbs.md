@@ -7,91 +7,131 @@ Feature Boosting and Suppression (FBS) is a method
 that exploits run-time dynamic information flow in CNNs to
 dynamically prune channel-wise parameters.
 
-![pdf not found](fbs.png)
+![fbs](fbs.png)
 
-Intuitively, we can imagine that the flow of information of
-each output channel can be amplified or restricted under
-the control of a “valve”.
-This allows salient information to
-flow freely while we stop all information
-from unimportant channels and skip their computation.
-Unlike pruning statically, the valves use features from the previous layer
+Intuitively,
+we can imagine that
+the flow of information of each output channel
+can be amplified or restricted
+under the control of a “valve”.
+This allows salient information
+to flow freely
+while we stop all information
+from unimportant channels
+and skip their computation.
+Unlike static pruning,
+the valves use features
+from the previous layer
 to predict the saliency of output channels.
-FBS introduces tiny auxiliary connections to existing convolutional layers.
-The minimal overhead added to the existing model is thus negligible when
-compared to the potential speed up provided by the dynamic sparsity.
+FBS introduces tiny auxiliary connections
+to existing convolutional layers.
+The minimal overhead added
+to the existing model is thus negligible
+when compared to the potential speed up
+provided by the dynamic sparsity.
 
 ## To Run
 
-The major codebase for FBS resides in `mayo/tf/gate/layers.py`.
+### Running with FBS in Mayo
 
-* Training with FBS in Mayo
+Please read [`README.md`](../README.md) first.
+We provide a set of models
+in [`models/gate/`](../models/gate/)
+where each one imports
+the corresponding base model in [`models/`](../models/).
+These can serve as reference YAML files
+for you to implement your own models.
+The example models used below can be downloaded
+from [here](https://universityofcambridgecloud-my.sharepoint.com/:f:/g/personal/yaz21_cam_ac_uk/Es4FrWNmJe1ImBgR_T1PyoUB24rlUrSVtOrA1NAaDrYxXg?e=2uZEO6).
+ResNet-18 models will soon follow.
 
-  Please read on docs regarding the mayo command line interface before
-  training your model.
-  We provide a set of models in `models/gate`
-  and trainers in `trainers`.
-  These can serve as reference YAML files for you to implement your
-  own models.
+### Example 1: FBS on MCifarNet + CIFAR-10
 
-  ```bash
-  $ ./my \
-      your_model.yaml \
-      datasets/imagenet.yaml \
-      your_trainar.yaml \
-      train
-  ```
+As a toy example,
+[here](../models/cifarnet.yaml)
+is a simple CIFAR-10 classifier
+that we wish to prune dynamically.
+First, we can estimate the number
+of multiply-accumulate operations (MACs)
+in a dense pretrained model
+using the following command:
+```bash
+$ ./my \
+    models/cifarnet.yaml
+    datasets/cifar10.yaml \
+    system.checkpoint.load=pretrained \
+    eval info
+```
+This evaluates the pretrained model,
+`eval` gives a result of `top1 91.37%, top5: 99.68%`,
+and `info` further shows it uses 174M MACs.
 
-* Example 1: FBS on CifarNet (Imagenet)
+```bash
+$ ./my \
+    models/gate/cifarnet.yaml
+    datasets/cifar10.yaml \
+    _gate.density=0.5 \
+    system.checkpoint.load=gate50 \
+    eval info
+```
+Here is the same model with FBS enabled
+with a density of 50%,
+it means that at run time
+we disable half of the channels
+in feature maps.
+This model achieves 90.54% top-1
+and 99.75% top-5 accuracies using 57M MACs,
+giving us a 3x reduction in MACs
+and within 1% loss of accuracy.
 
-  We show the effectiveness of FBS on CifarNet.
+### Example 2: FBS on slimed VGG16 (Imagenet)
 
-  First, we estimate the Multiply-Accumulates (MACs) in a dense pretrained
-  model.
+FBS can provide further speed-up
+on top of traditional channel-wise pruning,
+we demonstrate this
+with an FBS-augmented VGG-16 model
+that has already been statically pruned
+using [Network Slimming](https://arxiv.org/abs/1708.06519).
 
-  ```bash
-  $ ./my \
-      models/cifarnet.yaml
-      datasets/cifar10.yaml \
-      system.checkpoint.load=pretrained \
-      eval info
-  ```
+```bash
+$ ./my \
+    models/gate/vgg16_compact.yaml \
+    datasets/imagenet.yaml \
+    _gate.density=0.6 \
+    system.checkpoint.load=slimed_gate_60 \
+    eval info
+```
 
-  This generates us a model with `top1 91.37%, top5: 99.68%` using
-  174M MACs.
+This model reports 69.59% top-1
+and 89.39% top-5 accuracies
+using 3.38G MACs.
 
-  ```bash
-  $ ./my \
-      models/gate/cifarnet.yaml
-      datasets/cifar10.yaml \
-      _gate.density=0.5 \
-      system.checkpoint.load=gate50 \
-      eval info
-  ```
+## Training Your Own Model
 
-  We then estimate the FBS generated model with a gating probability of 0.4.
-  The model achieves `top1: 90.54%, top5: 99.75%` using 57M MACs, giving
-  us a 3x reduction in MACs and within 1% loss of accuracy.
+We suggest first
+fine-tune a pretrained model with 100% density,
+and gradually decrease the density
+and fine-tune the resulting model
+for minimal accuracy drops.
+The command is as follows:
+```bash
+$ ./my \
+    models/gate/{model}.yaml \
+    datasets/{dataset}.yaml \
+    trainers/mobilenet.yaml \
+    _gate.density={density} \
+    system.checkpoint.load={pretrained_model} \
+    train.learning_rate._initial={initial_lr} \ # this adjusts the initial learning rate
+    reset-num-epochs train
+```
 
-* Example 2: FBS on slimed VGG16 (Imagenet)
+## Changing the Implementation
 
-  FBS can act on top of traditional channel-wise pruning, we demonstrate this
-  by providing an FBSed Vgg16 model that has also been slimed using
-  [Network Slimming](https://arxiv.org/abs/1708.06519).
-
-  ```bash
-  $ ./my \
-      models/gate/vgg16_compact.yaml \
-      datasets/imagenet.yaml \
-      _gate.density=0.6 \
-      system.checkpoint.load=slimed_gate_60 \
-      eval info
-  ```
-
-  The model reports `top1: 69.59%, top5: 89.39%`, and an estimated
-  mac count of 3,379,002,273.
-
-  The example models can be downloaded [here](https://universityofcambridgecloud-my.sharepoint.com/:f:/g/personal/yaz21_cam_ac_uk/Es4FrWNmJe1ImBgR_T1PyoUB24rlUrSVtOrA1NAaDrYxXg?e=2uZEO6).
+Please look into [`mayo/net/tf/gate/`](../mayo/net/tf/gate),
+especially [`mayo/net/tf/gate/base.py`](../mayo/net/tf/gate/base.py)
+and [`mayo/net/tf/gate/parametric.py`](../mayo/net/tf/gate/parametric.py),
+if you wish to change its behavior
+beyond the supported parameters.
 
 ## Citation
 
