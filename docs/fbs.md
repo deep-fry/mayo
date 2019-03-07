@@ -43,7 +43,7 @@ These can serve as reference YAML files
 for you to implement your own models.
 The example models used below can be downloaded
 from [here](https://universityofcambridgecloud-my.sharepoint.com/:f:/g/personal/yaz21_cam_ac_uk/Es4FrWNmJe1ImBgR_T1PyoUB24rlUrSVtOrA1NAaDrYxXg?e=2uZEO6).
-ResNet-18 models will soon follow.
+More models will soon follow.
 
 ### Example 1: FBS on MCifarNet + CIFAR-10
 
