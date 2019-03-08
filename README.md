@@ -2,7 +2,9 @@
 
 **Mayo** is a deep learning framework developed with hardware acceleration in mind. It enables rapid deep neural network model design, and common network compression work flows such as [fine][fine]- and coarse-grained pruning, [network slimming][slim], and [quantization methods with various arithmetics][quantize] can be easily used jointly by writing simple [YAML][yaml] model description files (exemplified by the links above).  Additionally, Mayo can also accelerate the hyperparameter exploration of these models with automated hyperparameter optimization.  With minimal manual intervention, our automated optimization results achieve state-of-the-art compression rates (refer to the results section).
 
-For testing and training [**Dynamic Channel Pruning: Feature Boosting and Suppression**][fbs], please follow the instructions [here](docs/fbs.md).
+For testing and training our open-source research, please follow the relevant instructions:
+* **Dynamic Channel Pruning: Feature Boosting and Suppression** (ICLR 2019) [[arXiv]][fbs] [[cite]](#dynamic-channel-pruning-feature-boosting-and-suppression) [[Instructions]](docs/fbs.md)
+* **Efficient and Effective Quantization for Sparse DNNs** (Preprint) [[arXiv]][focus] [Instructions (coming soon)]
 
 ## Installation
 
@@ -65,7 +67,18 @@ Furthermore, in network compression, we can use many fine- and coarse-grained pr
 
 ## Cite us
 
-#### Mayo
+### Dynamic Channel Pruning: Feature Boosting and Suppression
+```bibtex
+@inproceedings{gao2018dynamic,
+  title={Dynamic Channel Pruning: Feature Boosting and Suppression},
+  author={Xitong Gao and Yiren Zhao and Łukasz Dudziak and Robert Mullins and Cheng-zhong Xu},
+  booktitle={International Conference on Learning Representations},
+  year={2019},
+  url={https://openreview.net/forum?id=BJxh2j0qYm},
+}
+```
+
+### Mayo
 ```bibtex
 @inproceedings{Zhao2018mayo,
  author = {Zhao, Yiren and Gao, Xitong and Mullins, Robert and Xu, Chengzhong},
@@ -77,21 +90,11 @@ Furthermore, in network compression, we can use many fine- and coarse-grained pr
 }
 ```
 
-#### Dynamic Channel Pruning: Feature Boosting and Suppression
-```bibtex
-@inproceedings{gao2018dynamic,
-  title={Dynamic Channel Pruning: Feature Boosting and Suppression},
-  author={Xitong Gao and Yiren Zhao and Łukasz Dudziak and Robert Mullins and Cheng-zhong Xu},
-  booktitle={International Conference on Learning Representations},
-  year={2019},
-  url={https://openreview.net/forum?id=BJxh2j0qYm},
-}
-```
-
 [fine]: models/override/prune/dns.yaml
 [slim]: models/override/prune/netslim.yaml
 [quantize]: models/override/quantize/
 [fbs]: https://arxiv.org/abs/1810.05331
+[focus]: https://arxiv.org/abs/1903.03046
 [git]: https://git-scm.com
 [git-lfs]: https://git-lfs.github.com
 [python3]: https://www.python.org/downloads/
