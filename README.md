@@ -103,4 +103,4 @@ Furthermore, in network compression, we can use many fine- and coarse-grained pr
 [yaml]: http://yaml.org
 [imagenet]: http://www.image-net.org
 [coco]: http://cocodataset.org
-[mayo-yaml]: https://github.com/admk/mayo/wiki/Writing-YAMLs
+[mayo-yaml]: https://github.com/deep-fry/mayo/wiki/Writing-YAMLs

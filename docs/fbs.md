@@ -42,7 +42,8 @@ the corresponding base model in [`models/`](../models/).
 These can serve as reference YAML files
 for you to implement your own models.
 The example models used below can be downloaded
-from [here](https://universityofcambridgecloud-my.sharepoint.com/:f:/g/personal/yaz21_cam_ac_uk/Es4FrWNmJe1ImBgR_T1PyoUB24rlUrSVtOrA1NAaDrYxXg?e=2uZEO6).
+from [here](
+https://universityofcambridgecloud-my.sharepoint.com/:f:/g/personal/yaz21_cam_ac_uk/Es4FrWNmJe1ImBgR_T1PyoUBB1-D_UCmmeo6KCT_RHDsyQ?e=BzpTzk).
 Make sure you place
 the downloaded models
 in the `checkpoints/{model_name}/{dataset_name}/` directory
