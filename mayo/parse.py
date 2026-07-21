@@ -3,6 +3,7 @@ import os
 import ast
 import copy
 import operator
+import collections.abc
 import collections
 
 import yaml
@@ -144,9 +145,9 @@ ExecTag.register()
 EvalTag.register()
 
 
-class _DotDict(collections.MutableMapping):
+class _DotDict(collections.abc.MutableMapping):
     def __init__(self, data, root=None, normalize=True):
-        if not isinstance(data, collections.Mapping):
+        if not isinstance(data, collections.abc.Mapping):
             raise TypeError(
                 'Cannot construct {!r} from data of type {!r}'.format(
                     self.__class__, type(data)))
@@ -162,19 +163,19 @@ class _DotDict(collections.MutableMapping):
             for key, value in mapping.items():
                 d[key] = value
             return d._mapping
-        return recursive_apply(value, {collections.Mapping: normalize_map})
+        return recursive_apply(value, {collections.abc.Mapping: normalize_map})
 
     def asdict(self, eval=True):
         if not eval:
             return self._mapping
-        return recursive_apply(self, {collections.Mapping: lambda m: dict(m)})
+        return recursive_apply(self, {collections.abc.Mapping: lambda m: dict(m)})
 
     @classmethod
     def _merge(cls, d, md):
         for k, md_k in md.items():
             d_k = d.get(k)
-            d_map = isinstance(d_k, collections.Mapping)
-            md_map = isinstance(md_k, collections.Mapping)
+            d_map = isinstance(d_k, collections.abc.Mapping)
+            md_map = isinstance(md_k, collections.abc.Mapping)
             if d_map and md_map:
                 cls._merge(d_k, md_k)
             else:
@@ -208,7 +209,7 @@ class _DotDict(collections.MutableMapping):
             try:
                 if isinstance(keyable, (tuple, list)):
                     value = keyable[int(key)]
-                elif isinstance(keyable, collections.Mapping):
+                elif isinstance(keyable, collections.abc.Mapping):
                     if setdefault:
                         try:
                             next_key = dot_path[index + 1]
@@ -226,7 +227,7 @@ class _DotDict(collections.MutableMapping):
             keyable = value
         if isinstance(keyable, (tuple, list)):
             final_key = int(final_key)
-        elif not isinstance(keyable, collections.Mapping):
+        elif not isinstance(keyable, collections.abc.Mapping):
             type_error(keyable, final_key)
         return keyable, final_key
 
@@ -255,7 +256,7 @@ class _DotDict(collections.MutableMapping):
                     is_unique = not value.replace(placeholder, '').strip()
                     if is_unique:
                         return v
-                    if isinstance(v, collections.Mapping):
+                    if isinstance(v, collections.abc.Mapping):
                         if not is_unique:
                             raise ValueError(
                                 'Do not know how to replace {!r} where {!r} '
@@ -267,7 +268,7 @@ class _DotDict(collections.MutableMapping):
             return value
 
         def skip_map(value):
-            if not isinstance(value, collections.Mapping):
+            if not isinstance(value, collections.abc.Mapping):
                 return None
             if not isinstance(value, _DotDict):
                 return _DotDict(value, self._root, False)
